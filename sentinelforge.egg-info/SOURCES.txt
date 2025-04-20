@@ -1,0 +1,7 @@
+pyproject.toml
+sentinelforge.egg-info/PKG-INFO
+sentinelforge.egg-info/SOURCES.txt
+sentinelforge.egg-info/dependency_links.txt
+sentinelforge.egg-info/top_level.txt
+sentinelforge/ingestion/__init__.py
+tests/test_ingestion.py

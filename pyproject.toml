@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinelforge"
+version = "0.0.1"
+description = "AI‑powered threat‑intel aggregator"
+authors = [{name = "Collin", email = "collinsorizu@gmail.com"}]
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.3.3",
+  "black>=24.3.0",
+  "pre-commit>=3.6",
+]
