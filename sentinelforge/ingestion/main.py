@@ -1,4 +1,6 @@
 import datetime
+import hashlib
+import logging
 
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
@@ -9,15 +11,25 @@ from .abuse_ch_ingestor import AbuseChIngestor
 # Import the normalization function
 from .normalize import normalize_indicators
 
+# Get logger instance
+logger = logging.getLogger(__name__)
+
 
 def run_ingestion_pipeline():
     """Runs the ingestion pipeline for configured feeds."""
+    # deduplication cache & counter
+    seen_hashes: set[str] = set()
+    duplicate_count = 0
+
     # Directly instantiate ingestors
     ingestors = [
         DummyIngestor(),
         URLHausIngestor(),
         AbuseChIngestor(),
     ]
+
+    total_processed = 0
+    total_normalized_unique = 0
 
     # Loop over instantiated ingestors
     for ingestor in ingestors:
@@ -32,22 +44,61 @@ def run_ingestion_pipeline():
         try:
             # Fetch raw indicators
             raw_indicators = ingestor.get_indicators()
-            # Normalize and deduplicate
-            normalized_indicators = normalize_indicators(raw_indicators)
+            initial_raw_count = len(raw_indicators)
+            total_processed += initial_raw_count
+
+            # --- Deduplication based on raw type:value hash ---
+            deduplicated_raw_indicators = []
+            feed_duplicates_skipped = 0
+            for ind in raw_indicators:
+                # Ensure type and value keys exist before creating hash
+                ind_type = ind.get("type")
+                ind_value = ind.get("value")
+
+                if ind_type is None or ind_value is None:
+                    logger.debug(f"Skipping indicator missing type/value before hashing: {ind}")
+                    continue  # Skip if essential keys are missing
+
+                # build a unique key per IOC
+                key = f"{ind_type}:{ind_value}"  # Use the fetched type/value
+                h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+                if h in seen_hashes:
+                    duplicate_count += 1
+                    feed_duplicates_skipped += 1
+                    # Use logger instead of print for internal info
+                    logger.info(f"Skipping duplicate IOC {key} (hash: {h[:8]}...) from {feed_name}")
+                    continue
+                seen_hashes.add(h)
+                deduplicated_raw_indicators.append(ind)  # Add the non-duplicate raw item
+            # --- End Deduplication ---
+
+            # Normalize and deduplicate further (based on normalized values)
+            normalized_indicators = normalize_indicators(deduplicated_raw_indicators)
+            final_unique_count = len(normalized_indicators)
+            total_normalized_unique += final_unique_count
 
             timestamp = datetime.datetime.now().isoformat()
-            # Log the count of *normalized* indicators
+            # Update log message
             print(
-                f"[{timestamp}] {feed_name}: fetched {len(normalized_indicators)} unique IOCs (from {len(raw_indicators)} raw)"
+                f"[{timestamp}] {feed_name}: fetched {final_unique_count} unique IOCs "
+                f"(from {len(deduplicated_raw_indicators)} pre-deduped / {initial_raw_count} raw, "
+                f"{feed_duplicates_skipped} duplicates skipped)"
             )
-        # Removed ValueError catch as we no longer use the factory
-        # except ValueError as e:
-        #     print(f"Error getting ingestor for {feed_name}: {e}")
         except Exception as e:
             # Catch potential issues during get_indicators or normalization
             timestamp = datetime.datetime.now().isoformat()
             print(f"[{timestamp}] {feed_name}: failed to process feed - {e}")
 
+    # Optional: Print summary after loop
+    print("---")
+    print(f"Total Raw IOCs Processed: {total_processed}")
+    print(f"Total Duplicates Skipped (by hash): {duplicate_count}")
+    print(f"Total Normalized Unique IOCs: {total_normalized_unique}")
+    # Add logger info call for duplicate count
+    logger.info(f"Skipped {duplicate_count} duplicate IOC(s) across all feeds.")
+
 
 if __name__ == "__main__":
+    # Configure basic logging if running as script
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     run_ingestion_pipeline()
