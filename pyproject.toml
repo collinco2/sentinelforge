@@ -8,6 +8,9 @@ version = "0.0.1"
 description = "AI‑powered threat‑intel aggregator"
 authors = [{name = "Collin", email = "collinsorizu@gmail.com"}]
 requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.20",
+]
 
 [project.optional-dependencies]
 dev = [
