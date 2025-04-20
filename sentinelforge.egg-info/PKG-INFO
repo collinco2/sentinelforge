@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: sentinelforge
+Version: 0.0.1
+Summary: AI‑powered threat‑intel aggregator
+Author-email: Collin <collinsorizu@gmail.com>
+Requires-Python: >=3.9
