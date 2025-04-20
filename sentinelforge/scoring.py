@@ -23,7 +23,11 @@ except FileNotFoundError:
             "threshold": 999,
             "points": 0,
         },  # High threshold effectively disables bonus
-        "tiers": {"high": 999, "medium": 998, "low": 0},  # Ensure 'low' is always possible
+        "tiers": {
+            "high": 999,
+            "medium": 998,
+            "low": 0,
+        },  # Ensure 'low' is always possible
     }
 except yaml.YAMLError as e:
     logger.error(

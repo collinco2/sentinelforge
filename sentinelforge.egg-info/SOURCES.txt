@@ -1,4 +1,6 @@
+README.md
 pyproject.toml
+sentinelforge/storage.py
 sentinelforge.egg-info/PKG-INFO
 sentinelforge.egg-info/SOURCES.txt
 sentinelforge.egg-info/dependency_links.txt

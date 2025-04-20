@@ -3,7 +3,10 @@ from typing import List, Dict, Any
 
 # Import TAXII and STIX clients (ensure taxii2-client and stix2 are installed)
 try:
-    from taxii2client.v20 import Server, Collection  # Added Collection for type hint maybe?
+    from taxii2client.v20 import (
+        Server,
+        Collection,
+    )  # Added Collection for type hint maybe?
     from stix2 import parse
     from taxii2client.exceptions import TAXIIClientError
 except ImportError:
