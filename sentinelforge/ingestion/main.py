@@ -8,6 +8,9 @@ from sentinelforge.storage import init_db, SessionLocal, IOC
 # Added scoring imports
 from sentinelforge.scoring import score_ioc, categorize
 
+# Added enrichment import
+from sentinelforge.enrichment.whois_geoip import WhoisGeoIPEnricher
+
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
 from .dummy_ingestor import DummyIngestor
@@ -20,6 +23,11 @@ from .normalize import normalize_indicators
 # Get logger instance
 logger = logging.getLogger(__name__)
 
+# --- Configuration ---
+# IMPORTANT: Replace this with the actual path to your GeoLite2-City.mmdb file
+GEOIP_DB_PATH = "/path/to/GeoLite2-City.mmdb"  # Example placeholder
+# --- End Configuration ---
+
 
 def run_ingestion_pipeline():
     """Runs the ingestion pipeline for configured feeds."""
@@ -29,6 +37,15 @@ def run_ingestion_pipeline():
     # Create a DB session
     db = SessionLocal()
     logger.info("Database session created.")
+
+    # --- Initialize Enricher ---
+    try:
+        enricher = WhoisGeoIPEnricher(GEOIP_DB_PATH)
+        logger.info(f"WhoisGeoIPEnricher initialized with DB: {GEOIP_DB_PATH}")
+    except Exception as enricher_init_err:
+        logger.error(f"Failed to initialize WhoisGeoIPEnricher: {enricher_init_err}")
+        enricher = None  # Set enricher to None if init fails
+    # --- End Enricher Init ---
 
     # deduplication cache & counter
     seen_hashes: set[str] = set()
@@ -100,6 +117,19 @@ def run_ingestion_pipeline():
                     logger.warning(f"Skipping normalized indicator missing type/value: {norm}")
                     continue
 
+                # --- Perform Enrichment ---
+                enrichment_data = {}
+                if enricher and norm_type in ["domain", "ip"]:
+                    try:
+                        enrichment_data = enricher.enrich({"type": norm_type, "value": norm_value})
+                        if enrichment_data:
+                            logger.debug(f"Enriched {norm_type}:{norm_value} -> {enrichment_data}")
+                    except Exception as enrich_err:
+                        logger.warning(
+                            f"Enrichment failed for {norm_type}:{norm_value} - {enrich_err}"
+                        )
+                # --- End Enrichment ---
+
                 # Calculate Score and Category
                 # TODO: Enhance feeds_seen if merging duplicates across feeds in the future
                 feeds_seen = [feed_name]
@@ -115,6 +145,9 @@ def run_ingestion_pipeline():
                     # last_seen=datetime.datetime.utcnow(),  # Use DB default
                     score=ioc_score,  # Add calculated score
                     category=ioc_cat,  # Add calculated category
+                    enrichment_data=(
+                        enrichment_data if enrichment_data else None
+                    ),  # Store enrichment
                 )
                 try:
                     db.merge(record)
