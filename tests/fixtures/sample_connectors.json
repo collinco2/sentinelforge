@@ -1,0 +1,33 @@
+[
+  {
+    "type": "ip",
+    "value": "8.8.8.8",
+    "source": "dns_feed",
+    "timestamp": "2023-02-01T10:00:00Z"
+  },
+  {
+    "indicator_type": "domain", 
+    "indicator": "malicious.example.org", 
+    "reporter": "blocklist_X", 
+    "first_seen": "2023-02-02T11:00:00Z"
+  },
+  {
+    "type": "url",
+    "value": "https://phishing.site/login",
+    "source": "phish_tank"
+  },
+  {
+    "type": "hash",
+    "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "timestamp": "2023-02-03T12:00:00+01:00"
+  },
+  "this is not a dictionary",
+  {
+    "value": "9.9.9.9",
+    "source": "another_feed"
+  },
+  {
+    "type": "ip"
+  },
+  {}
+] 
