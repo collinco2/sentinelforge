@@ -4,3 +4,15 @@ Version: 0.0.1
 Summary: AI‑powered threat‑intel aggregator
 Author-email: Collin <collinsorizu@gmail.com>
 Requires-Python: >=3.9
+Requires-Dist: requests>=2.20
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: pyyaml>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-mock>=3.10; extra == "dev"
+Requires-Dist: requests-mock>=1.9; extra == "dev"
+Requires-Dist: ruff>=0.3.3; extra == "dev"
+Requires-Dist: black>=24.3.0; extra == "dev"
+Requires-Dist: pre-commit>=3.6; extra == "dev"
+Requires-Dist: taxii2-client>=2.3.0; extra == "dev"
+Requires-Dist: stix2>=3.0.0; extra == "dev"
