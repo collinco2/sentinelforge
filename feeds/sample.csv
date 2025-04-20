@@ -1,8 +1,0 @@
-type,value,source,timestamp
-ip,192.168.1.1,InternalScan,2024-01-01T10:00:00Z
-domain,evil.example.com,PhishingReport,2024-01-01T11:00:00Z
-hash,abcdef123456,MalwareAnalysis,2024-01-01T12:00:00Z
-ip,10.0.0.1,AnotherScan,
-malformed_row_no_commas
-domain,,MissingValueSource,2024-01-02T09:30:00Z
-url,http://badsite.info/malware.exe,Blocklist,2024-01-03T15:00:00Z 
