@@ -1,5 +1,5 @@
 """
-Temporary skeleton for Epic 1 ingestion layer.
+Temporary skeleton for Epic 1 ingestion layer.
 Feel free to delete once real ingestion code arrives.
 """
 
