@@ -15,7 +15,9 @@ try:
     _rules = yaml.safe_load(RULES_FILE_PATH.read_text())
     logger.info(f"Scoring rules loaded successfully from {RULES_FILE_PATH}")
 except FileNotFoundError:
-    logger.error(f"Scoring rules file not found at {RULES_FILE_PATH}. Scoring will default to 0.")
+    logger.error(
+        f"Scoring rules file not found at {RULES_FILE_PATH}. Scoring will default to 0."
+    )
     # Provide default structure to prevent KeyErrors later
     _rules = {
         "feed_scores": {},

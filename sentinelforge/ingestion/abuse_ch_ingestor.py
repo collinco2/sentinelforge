@@ -23,7 +23,11 @@ class AbuseChIngestor(ThreatIntelIngestor):
             text_content = r.text
 
         # Filter out comment lines starting with '#'
-        lines = [line for line in text_content.splitlines() if not line.strip().startswith("#")]
+        lines = [
+            line
+            for line in text_content.splitlines()
+            if not line.strip().startswith("#")
+        ]
 
         if not lines:
             return []  # Return empty list if no data lines found
@@ -34,7 +38,9 @@ class AbuseChIngestor(ThreatIntelIngestor):
         try:
             # Use the first data line to detect dialect (delimiter, quoting)
             dialect = sniffer.sniff(first_data_line)
-            has_header = sniffer.has_header(text_content)  # Sniff header from the whole text
+            has_header = sniffer.has_header(
+                text_content
+            )  # Sniff header from the whole text
         except csv.Error:
             # Handle cases where sniffing fails (e.g., single column, no clear delimiter)
             dialect = csv.excel  # Fallback to default dialect
@@ -51,7 +57,9 @@ class AbuseChIngestor(ThreatIntelIngestor):
                 # Basic validation: check if the first column looks like an IP address
                 # This is a simple check and might need refinement for robustness
                 ip_candidate = row[0].strip()
-                if "." in ip_candidate or ":" in ip_candidate:  # Basic check for IPv4 or IPv6
+                if (
+                    "." in ip_candidate or ":" in ip_candidate
+                ):  # Basic check for IPv4 or IPv6
                     indicators.append({"ip": ip_candidate})
                 # else: Log or handle non-IP data if necessary
 

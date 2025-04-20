@@ -13,7 +13,9 @@ def enricher(tmp_path):
     try:
         return WhoisGeoIPEnricher(str(db))
     except Exception as e:
-        pytest.skip(f"Skipping WhoisGeoIPEnricher tests: Could not initialize with dummy DB ({e})")
+        pytest.skip(
+            f"Skipping WhoisGeoIPEnricher tests: Could not initialize with dummy DB ({e})"
+        )
 
 
 def test_enrich_domain(monkeypatch, enricher):
@@ -23,7 +25,9 @@ def test_enrich_domain(monkeypatch, enricher):
         expiration_date = "2025-01-01"
 
     # Mock the whois.whois function call within the module
-    monkeypatch.setattr("sentinelforge.enrichment.whois_geoip.whois.whois", lambda d: DummyWhois())
+    monkeypatch.setattr(
+        "sentinelforge.enrichment.whois_geoip.whois.whois", lambda d: DummyWhois()
+    )
     out = enricher.enrich({"type": "domain", "value": "example.com"})
     assert out["registrar"] == "Example Registrar"
     assert "creation_date" in out
@@ -51,6 +55,8 @@ def test_enrichment_handles_errors(enricher, monkeypatch):
     def raise_exception(*args, **kwargs):
         raise Exception("Lookup failed")
 
-    monkeypatch.setattr("sentinelforge.enrichment.whois_geoip.whois.whois", raise_exception)
+    monkeypatch.setattr(
+        "sentinelforge.enrichment.whois_geoip.whois.whois", raise_exception
+    )
     out = enricher.enrich({"type": "domain", "value": "fail.example.com"})
     assert out == {}

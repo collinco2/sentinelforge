@@ -9,7 +9,9 @@ from urllib.parse import urlparse
 from .threat_intel_ingestor import ThreatIntelIngestor
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 class CSVIngestor(ThreatIntelIngestor):
@@ -73,14 +75,18 @@ class CSVIngestor(ThreatIntelIngestor):
                 type_idx = header.index("type")
                 value_idx = header.index("value")
             except ValueError:
-                logging.error(f"CSV source {source_url} must contain 'type' and 'value' columns.")
+                logging.error(
+                    f"CSV source {source_url} must contain 'type' and 'value' columns."
+                )
                 return []
 
             source_idx = header.index("source") if "source" in header else -1
             timestamp_idx = header.index("timestamp") if "timestamp" in header else -1
 
         except (csv.Error, StopIteration) as e:
-            logging.error(f"Failed to parse CSV header or detect dialect in {source_url}: {e}")
+            logging.error(
+                f"Failed to parse CSV header or detect dialect in {source_url}: {e}"
+            )
             return []
 
         # Start enumerate at 2 to get 1-based row number (incl. header)
@@ -98,7 +104,9 @@ class CSVIngestor(ThreatIntelIngestor):
                 indicator_value = row[value_idx].strip()
 
                 if not indicator_type or not indicator_value:
-                    logging.warning(f"Skipping row {i} in {source_url}: Missing type or value.")
+                    logging.warning(
+                        f"Skipping row {i} in {source_url}: Missing type or value."
+                    )
                     continue
 
                 item = {
@@ -106,10 +114,18 @@ class CSVIngestor(ThreatIntelIngestor):
                     "value": indicator_value,
                 }
 
-                if source_idx != -1 and len(row) > source_idx and row[source_idx].strip():
+                if (
+                    source_idx != -1
+                    and len(row) > source_idx
+                    and row[source_idx].strip()
+                ):
                     item["source"] = row[source_idx].strip()
 
-                if timestamp_idx != -1 and len(row) > timestamp_idx and row[timestamp_idx].strip():
+                if (
+                    timestamp_idx != -1
+                    and len(row) > timestamp_idx
+                    and row[timestamp_idx].strip()
+                ):
                     try:
                         # Attempt to parse timestamp (ISO format preferred)
                         # Add more formats if needed
@@ -126,10 +142,14 @@ class CSVIngestor(ThreatIntelIngestor):
 
             except IndexError:
                 # Use i directly for logging row number
-                logging.warning(f"Skipping malformed row {i} in {source_url}: Index out of bounds.")
+                logging.warning(
+                    f"Skipping malformed row {i} in {source_url}: Index out of bounds."
+                )
             except Exception as e:
                 # Use i directly for logging row number
-                logging.warning(f"Skipping row {i} in {source_url} due to unexpected error: {e}")
+                logging.warning(
+                    f"Skipping row {i} in {source_url} due to unexpected error: {e}"
+                )
 
         return indicators
 

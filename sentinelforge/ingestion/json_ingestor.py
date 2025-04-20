@@ -56,7 +56,9 @@ class JSONIngestor(ThreatIntelIngestor):
                 if isinstance(item, dict) and "value" in item and "type" in item:
                     valid_items.append(item)
                 else:
-                    logger.debug(f"Skipping item missing 'type' or 'value', or not a dict: {item}")
+                    logger.debug(
+                        f"Skipping item missing 'type' or 'value', or not a dict: {item}"
+                    )
             return valid_items
 
         except requests.exceptions.RequestException as e:
@@ -66,13 +68,17 @@ class JSONIngestor(ThreatIntelIngestor):
             logger.warning(f"JSONIngestor invalid JSON from {fetch_url}: {e}")
             return []
         except Exception as e:
-            logger.error(f"JSONIngestor unexpected error for {fetch_url}: {e}", exc_info=True)
+            logger.error(
+                f"JSONIngestor unexpected error for {fetch_url}: {e}", exc_info=True
+            )
             return []
 
 
 # Keep the example block, but adjust it for the new __init__ style
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.info("Running JSONIngestor example...")
 
     # Instantiate with a specific URL
@@ -84,7 +90,9 @@ if __name__ == "__main__":
     indicators_from_url = ingestor.get_indicators(source_url=sample_url)
 
     if indicators_from_url:
-        print(f"Successfully extracted {len(indicators_from_url)} indicators (showing first 5):")
+        print(
+            f"Successfully extracted {len(indicators_from_url)} indicators (showing first 5):"
+        )
         for ind in indicators_from_url[:5]:
             print(ind)
         if len(indicators_from_url) > 5:

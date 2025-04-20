@@ -59,7 +59,9 @@ def test_csv_ingestor_reads_file(csv_fixture_path, caplog):
     indicators = ingestor.get_indicators(str(csv_fixture_path))
 
     assert isinstance(indicators, list)
-    assert len(indicators) == 5  # 4 valid + 1 with invalid timestamp (but still has type/value)
+    assert (
+        len(indicators) == 5
+    )  # 4 valid + 1 with invalid timestamp (but still has type/value)
 
     # Check schema for all returned indicators
     for ind in indicators:
@@ -231,7 +233,9 @@ def test_taxii_ingestor_reads_collection(MockServer, MockCollection, caplog):
     # Provide required args to __init__
     test_server_url = "http://taxii.test/api1/"
     test_collection_id = "collection-123"
-    ingestor = TAXIIIngestor(server_url=test_server_url, collection_id=test_collection_id)
+    ingestor = TAXIIIngestor(
+        server_url=test_server_url, collection_id=test_collection_id
+    )
 
     caplog.set_level(logging.DEBUG)  # Use DEBUG to see pattern skipping logs
 
@@ -249,11 +253,16 @@ def test_taxii_ingestor_reads_collection(MockServer, MockCollection, caplog):
     assert (
         indicators[0]["value"] == "[ipv4-addr:value = '10.10.10.10']"
     )  # New logic returns raw pattern
-    assert indicators[0].get("timestamp") is None  # Timestamp not extracted by new logic
+    assert (
+        indicators[0].get("timestamp") is None
+    )  # Timestamp not extracted by new logic
     assert indicators[1]["type"] == "stix"
     assert indicators[1]["value"] == "[domain-name:value = 'stolen-creds.example.net']"
     assert indicators[2]["type"] == "stix"
-    assert indicators[2]["value"] == "[file:hashes.'MD5' = 'cccccccccccccccccccccccccccccccc']"
+    assert (
+        indicators[2]["value"]
+        == "[file:hashes.'MD5' = 'cccccccccccccccccccccccccccccccc']"
+    )
 
     # Check that Server and Collection were called correctly
     MockServer.assert_called_once_with(test_server_url)
@@ -265,11 +274,14 @@ def test_taxii_ingestor_reads_collection(MockServer, MockCollection, caplog):
     assert "Processing 5 STIX objects" in caplog.text  # Check processing count
     # Check log for skipped parse (no longer parsing patterns explicitly)
     assert (
-        "Failed to parse STIX object indicator--a7a9f5ae-d5b1-4a7e-a9a9-01f9e7e3923c" in caplog.text
+        "Failed to parse STIX object indicator--a7a9f5ae-d5b1-4a7e-a9a9-01f9e7e3923c"
+        in caplog.text
     )
 
 
-@patch("sentinelforge.ingestion.taxii_ingestor.Server")  # Just mock Server for client error test
+@patch(
+    "sentinelforge.ingestion.taxii_ingestor.Server"
+)  # Just mock Server for client error test
 def test_taxii_ingestor_handles_client_error(MockServer, caplog):
     from sentinelforge.ingestion.taxii_ingestor import (
         TAXIIClientError,
@@ -280,7 +292,9 @@ def test_taxii_ingestor_handles_client_error(MockServer, caplog):
     # Provide required args to __init__
     test_server_url = "http://taxii.test/api1/"
     test_collection_id = "collection-123"
-    ingestor = TAXIIIngestor(server_url=test_server_url, collection_id=test_collection_id)
+    ingestor = TAXIIIngestor(
+        server_url=test_server_url, collection_id=test_collection_id
+    )
 
     caplog.set_level(logging.ERROR)
 

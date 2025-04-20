@@ -11,7 +11,9 @@ try:
     from taxii2client.exceptions import TAXIIClientError
 except ImportError:
     print("Error: taxii2-client and stix2 libraries are required for TAXIIIngestor.")
-    print("Install them using: pip install -e .[dev]")  # Updated install command suggestion
+    print(
+        "Install them using: pip install -e .[dev]"
+    )  # Updated install command suggestion
 
     # Define dummy classes to avoid runtime errors if imports fail
     class Server:
@@ -77,7 +79,9 @@ class TAXIIIngestor(ThreatIntelIngestor):
                     # Found the collection, now create Collection object if necessary
                     # The taxii2client API might differ slightly based on version
                     # Assuming we need a Collection object to call get_objects
-                    collection = Collection(coll_info.url, server=server, **self.conn_kwargs)
+                    collection = Collection(
+                        coll_info.url, server=server, **self.conn_kwargs
+                    )
                     break
 
             if not collection:
@@ -126,13 +130,17 @@ class TAXIIIngestor(ThreatIntelIngestor):
                 exc_info=True,
             )
 
-        logger.info(f"Finished processing TAXII feed. Extracted {len(results)} indicators.")
+        logger.info(
+            f"Finished processing TAXII feed. Extracted {len(results)} indicators."
+        )
         return results
 
 
 # Example usage: python -m sentinelforge.ingestion.taxii_ingestor
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger.info("Running TAXIIIngestor example...")
 
     # Example server/collection (adjust as needed, requires live server)
