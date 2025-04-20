@@ -2,6 +2,9 @@ import datetime
 import hashlib
 import logging
 
+# Added storage imports
+from sentinelforge.storage import init_db, SessionLocal, IOC
+
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
 from .dummy_ingestor import DummyIngestor
@@ -17,6 +20,13 @@ logger = logging.getLogger(__name__)
 
 def run_ingestion_pipeline():
     """Runs the ingestion pipeline for configured feeds."""
+    # Initialize DB schema if needed
+    logger.info("Initializing database...")
+    init_db()
+    # Create a DB session
+    db = SessionLocal()
+    logger.info("Database session created.")
+
     # deduplication cache & counter
     seen_hashes: set[str] = set()
     duplicate_count = 0
@@ -77,8 +87,42 @@ def run_ingestion_pipeline():
             final_unique_count = len(normalized_indicators)
             total_normalized_unique += final_unique_count
 
+            # --- Store normalized indicators in DB ---
+            stored_count = 0
+            for norm in normalized_indicators:
+                # Basic check for required fields after normalization
+                norm_type = norm.get("type")
+                norm_value = norm.get("value")
+                if not norm_type or not norm_value:
+                    logger.warning(f"Skipping normalized indicator missing type/value: {norm}")
+                    continue
+
+                # store normalized IOC into DB (upsert)
+                # Note: first_seen/last_seen default to now on creation.
+                # Merge will update existing records based on PK (type, value)
+                # but won't automatically update last_seen unless handled explicitly.
+                # For simplicity here, we let the default handle first_seen
+                # and rely on a separate process or trigger for last_seen updates if needed.
+                record = IOC(
+                    ioc_type=norm_type,
+                    ioc_value=norm_value,
+                    source_feed=feed_name,
+                    # first_seen=datetime.datetime.utcnow(), # Use DB default
+                    # last_seen=datetime.datetime.utcnow(),  # Use DB default
+                )
+                try:
+                    db.merge(record)
+                    stored_count += 1
+                except Exception as db_err:
+                    logger.error(f"Failed to merge IOC to DB: {norm} - Error: {db_err}")
+                    db.rollback()  # Rollback on error for this record
+                    continue  # Continue processing other indicators
+
+            logger.info(f"Processed {stored_count} IOCs for feed {feed_name} (pending commit).")
+            # --- End DB Storage ---
+
             timestamp = datetime.datetime.now().isoformat()
-            # Update log message
+            # Update log message (add stored count?)
             print(
                 f"[{timestamp}] {feed_name}: fetched {final_unique_count} unique IOCs "
                 f"(from {len(deduplicated_raw_indicators)} pre-deduped / {initial_raw_count} raw, "
@@ -87,6 +131,7 @@ def run_ingestion_pipeline():
         except Exception as e:
             # Catch potential issues during get_indicators or normalization
             timestamp = datetime.datetime.now().isoformat()
+            db.rollback()  # Rollback on feed processing error
             print(f"[{timestamp}] {feed_name}: failed to process feed - {e}")
 
     # Optional: Print summary after loop
@@ -96,6 +141,17 @@ def run_ingestion_pipeline():
     print(f"Total Normalized Unique IOCs: {total_normalized_unique}")
     # Add logger info call for duplicate count
     logger.info(f"Skipped {duplicate_count} duplicate IOC(s) across all feeds.")
+    # ADD final commit before closing
+    try:
+        logger.info("Committing final transaction...")
+        db.commit()
+        logger.info("Commit successful.")
+    except Exception as final_commit_err:
+        logger.error(f"Final commit failed: {final_commit_err}")
+        db.rollback()
+
+    db.close()  # Close the session when done
+    logger.info("Database session closed.")
 
 
 if __name__ == "__main__":
