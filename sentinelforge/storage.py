@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import create_engine, Column, String, DateTime
+from sqlalchemy import create_engine, Column, String, DateTime, Integer
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = "sqlite:///./ioc_store.db"
@@ -16,6 +16,8 @@ class IOC(Base):
     source_feed = Column(String, nullable=False)
     first_seen = Column(DateTime, default=datetime.datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.datetime.utcnow)
+    score = Column(Integer, nullable=False, default=0)
+    category = Column(String, nullable=False, default="low")
 
 
 def init_db():

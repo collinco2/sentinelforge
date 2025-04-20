@@ -5,6 +5,9 @@ import logging
 # Added storage imports
 from sentinelforge.storage import init_db, SessionLocal, IOC
 
+# Added scoring imports
+from sentinelforge.scoring import score_ioc, categorize
+
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
 from .dummy_ingestor import DummyIngestor
@@ -97,18 +100,21 @@ def run_ingestion_pipeline():
                     logger.warning(f"Skipping normalized indicator missing type/value: {norm}")
                     continue
 
+                # Calculate Score and Category
+                # TODO: Enhance feeds_seen if merging duplicates across feeds in the future
+                feeds_seen = [feed_name]
+                ioc_score = score_ioc(norm_value, feeds_seen)
+                ioc_cat = categorize(ioc_score)
+
                 # store normalized IOC into DB (upsert)
-                # Note: first_seen/last_seen default to now on creation.
-                # Merge will update existing records based on PK (type, value)
-                # but won't automatically update last_seen unless handled explicitly.
-                # For simplicity here, we let the default handle first_seen
-                # and rely on a separate process or trigger for last_seen updates if needed.
                 record = IOC(
                     ioc_type=norm_type,
                     ioc_value=norm_value,
                     source_feed=feed_name,
                     # first_seen=datetime.datetime.utcnow(), # Use DB default
                     # last_seen=datetime.datetime.utcnow(),  # Use DB default
+                    score=ioc_score,  # Add calculated score
+                    category=ioc_cat,  # Add calculated category
                 )
                 try:
                     db.merge(record)
