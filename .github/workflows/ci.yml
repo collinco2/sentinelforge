@@ -19,7 +19,7 @@ jobs:
           pip install -e '.[dev]'
       - name: Lint & format
         run: |
-          ruff .
-          black --check .
+          ruff format . --check
+          ruff check .
       - name: Run tests
         run: pytest -q
