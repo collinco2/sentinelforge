@@ -29,8 +29,12 @@ def top(
     ioc_type: Optional[str] = typer.Option(
         None, "--type", "-t", help="Filter by IOC type: ip, domain, hash, etc."
     ),
-    since: Optional[str] = typer.Option(None, "--since", "-s", help="Start date (YYYY-MM-DD)"),
-    until: Optional[str] = typer.Option(None, "--until", "-u", help="End date (YYYY-MM-DD)"),
+    since: Optional[str] = typer.Option(
+        None, "--since", "-s", help="Start date (YYYY-MM-DD)"
+    ),
+    until: Optional[str] = typer.Option(
+        None, "--until", "-u", help="End date (YYYY-MM-DD)"
+    ),
 ):
     """
     Show top-scoring IOCs from the database.
@@ -71,7 +75,9 @@ def top(
         # Basic stats using thresholds from scoring_rules
         total = q.count()
         high = q.filter(IOC.score >= high_threshold).count()
-        medium = q.filter(IOC.score.between(medium_threshold, high_threshold - 1)).count()
+        medium = q.filter(
+            IOC.score.between(medium_threshold, high_threshold - 1)
+        ).count()
         low = q.filter(IOC.score < medium_threshold).count()
 
         console.print(

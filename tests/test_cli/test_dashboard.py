@@ -50,7 +50,9 @@ def test_dashboard_no_db(monkeypatch):
     monkeypatch.setattr(mod, "SessionLocal", lambda: mock_session)
 
     # Mock the _rules import as well to provide default tiers
-    monkeypatch.setattr(mod, "scoring_rules", {"tiers": {"high": 50, "medium": 20, "low": 0}})
+    monkeypatch.setattr(
+        mod, "scoring_rules", {"tiers": {"high": 50, "medium": 20, "low": 0}}
+    )
 
     result = runner.invoke(app, ["dashboard", "top"])
     print(result.stdout)
