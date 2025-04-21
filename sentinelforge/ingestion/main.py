@@ -11,6 +11,9 @@ from sentinelforge.scoring import score_ioc, categorize
 # Added enrichment import
 from sentinelforge.enrichment.whois_geoip import WhoisGeoIPEnricher
 
+# Added summarizer import
+from sentinelforge.enrichment.nlp_summarizer import NLPSummarizer
+
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
 from .dummy_ingestor import DummyIngestor
@@ -46,6 +49,15 @@ def run_ingestion_pipeline():
         logger.error(f"Failed to initialize WhoisGeoIPEnricher: {enricher_init_err}")
         enricher = None  # Set enricher to None if init fails
     # --- End Enricher Init ---
+
+    # --- Initialize Summarizer ---
+    try:
+        summarizer = NLPSummarizer()  # Use default config path
+        logger.info("NLPSummarizer initialized.")
+    except Exception as summarizer_init_err:
+        logger.error(f"Failed to initialize NLPSummarizer: {summarizer_init_err}")
+        summarizer = None  # Set to None if init fails
+    # --- End Summarizer Init ---
 
     # deduplication cache & counter
     seen_hashes: set[str] = set()
@@ -86,9 +98,7 @@ def run_ingestion_pipeline():
                 ind_value = ind.get("value")
 
                 if ind_type is None or ind_value is None:
-                    logger.debug(
-                        f"Skipping indicator missing type/value before hashing: {ind}"
-                    )
+                    logger.debug(f"Skipping indicator missing type/value before hashing: {ind}")
                     continue  # Skip if essential keys are missing
 
                 # build a unique key per IOC
@@ -98,14 +108,10 @@ def run_ingestion_pipeline():
                     duplicate_count += 1
                     feed_duplicates_skipped += 1
                     # Use logger instead of print for internal info
-                    logger.info(
-                        f"Skipping duplicate IOC {key} (hash: {h[:8]}...) from {feed_name}"
-                    )
+                    logger.info(f"Skipping duplicate IOC {key} (hash: {h[:8]}...) from {feed_name}")
                     continue
                 seen_hashes.add(h)
-                deduplicated_raw_indicators.append(
-                    ind
-                )  # Add the non-duplicate raw item
+                deduplicated_raw_indicators.append(ind)  # Add the non-duplicate raw item
             # --- End Deduplication ---
 
             # Normalize and deduplicate further (based on normalized values)
@@ -120,27 +126,41 @@ def run_ingestion_pipeline():
                 norm_type = norm.get("type")
                 norm_value = norm.get("value")
                 if not norm_type or not norm_value:
-                    logger.warning(
-                        f"Skipping normalized indicator missing type/value: {norm}"
-                    )
+                    logger.warning(f"Skipping normalized indicator missing type/value: {norm}")
                     continue
 
                 # --- Perform Enrichment ---
                 enrichment_data = {}
                 if enricher and norm_type in ["domain", "ip"]:
                     try:
-                        enrichment_data = enricher.enrich(
-                            {"type": norm_type, "value": norm_value}
-                        )
+                        enrichment_data = enricher.enrich({"type": norm_type, "value": norm_value})
                         if enrichment_data:
-                            logger.debug(
-                                f"Enriched {norm_type}:{norm_value} -> {enrichment_data}"
-                            )
+                            logger.debug(f"Enriched {norm_type}:{norm_value} -> {enrichment_data}")
                     except Exception as enrich_err:
                         logger.warning(
                             f"Enrichment failed for {norm_type}:{norm_value} - {enrich_err}"
                         )
                 # --- End Enrichment ---
+
+                # --- Perform Summarization ---
+                summary = ""
+                if summarizer:
+                    # Attempt to find a description field (adjust key if needed)
+                    description = norm.get("description", "")
+                    if description and isinstance(description, str):
+                        try:
+                            summary = summarizer.summarize(description)
+                            if summary:
+                                logger.debug(f"Summarized description for {norm_type}:{norm_value}")
+                        except Exception as summary_err:
+                            logger.warning(
+                                f"Summarization failed for {norm_type}:{norm_value} - {summary_err}"
+                            )
+                    else:
+                        logger.debug(
+                            f"No description found or not string for {norm_type}:{norm_value}"
+                        )
+                # --- End Summarization ---
 
                 # Calculate Score and Category
                 # TODO: Enhance feeds_seen if merging duplicates across feeds in the future
@@ -160,6 +180,7 @@ def run_ingestion_pipeline():
                     enrichment_data=(
                         enrichment_data if enrichment_data else None
                     ),  # Store enrichment
+                    summary=summary if summary else None,  # Store summary
                 )
                 try:
                     db.merge(record)
@@ -169,9 +190,7 @@ def run_ingestion_pipeline():
                     db.rollback()  # Rollback on error for this record
                     continue  # Continue processing other indicators
 
-            logger.info(
-                f"Processed {stored_count} IOCs for feed {feed_name} (pending commit)."
-            )
+            logger.info(f"Processed {stored_count} IOCs for feed {feed_name} (pending commit).")
             # --- End DB Storage ---
 
             timestamp = datetime.datetime.now().isoformat()
