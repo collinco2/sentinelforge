@@ -1,7 +1,11 @@
 import yaml
-from pathlib import Path
+
+# from pathlib import Path # No longer needed directly
 import logging
 from typing import List, Dict, Any
+
+# Import centralized settings
+from sentinelforge.settings import settings
 
 # Import ML scoring functions
 from sentinelforge.ml.scoring_model import extract_features, predict_score
@@ -9,15 +13,17 @@ from sentinelforge.ml.scoring_model import extract_features, predict_score
 logger = logging.getLogger(__name__)
 
 # Define path to rules file relative to this file's directory or project root?
-# Assuming project root for now.
-RULES_FILE_PATH = Path("scoring_rules.yaml")
+# RULES_FILE_PATH = Path("scoring_rules.yaml") # Use path from settings
+RULES_FILE_PATH = settings.scoring_rules_path
 
 # load rules once
 _rules: Dict[str, Any] = {}
 try:
+    # Use Path object from settings
     _rules = yaml.safe_load(RULES_FILE_PATH.read_text())
     logger.info(f"Scoring rules loaded successfully from {RULES_FILE_PATH}")
 except FileNotFoundError:
+    # Use path from settings in error message
     logger.error(
         f"Scoring rules file not found at {RULES_FILE_PATH}. Scoring will default to 0."
     )
@@ -35,6 +41,7 @@ except FileNotFoundError:
         },  # Ensure 'low' is always possible
     }
 except yaml.YAMLError as e:
+    # Use path from settings in error message
     logger.error(
         f"Error parsing scoring rules file {RULES_FILE_PATH}: {e}. Scoring will default to 0."
     )
@@ -45,6 +52,7 @@ except yaml.YAMLError as e:
         "tiers": {"high": 999, "medium": 998, "low": 0},
     }
 except Exception as e:
+    # Use path from settings in error message
     logger.error(
         f"Unexpected error loading scoring rules {RULES_FILE_PATH}: {e}. Scoring will default to 0."
     )

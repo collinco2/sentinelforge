@@ -2,9 +2,13 @@ import datetime
 from sqlalchemy import create_engine, Column, String, DateTime, Integer, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "sqlite:///./ioc_store.db"
+# Import settings
+from sentinelforge.settings import settings
 
-engine = create_engine(DATABASE_URL, echo=False, future=True)
+# DATABASE_URL = "sqlite:///./ioc_store.db" # Use settings
+
+# Use URL from settings
+engine = create_engine(settings.database_url, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()
 
@@ -23,4 +27,5 @@ class IOC(Base):
 
 
 def init_db():
-    Base.metadata.create_all(engine)
+    # Pass engine explicitly if Base.metadata needs it
+    Base.metadata.create_all(bind=engine)

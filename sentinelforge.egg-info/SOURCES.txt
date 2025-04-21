@@ -1,11 +1,13 @@
 README.md
 pyproject.toml
 sentinelforge/__main__.py
+sentinelforge/config.py
 sentinelforge/scoring.py
 sentinelforge/storage.py
 sentinelforge.egg-info/PKG-INFO
 sentinelforge.egg-info/SOURCES.txt
 sentinelforge.egg-info/dependency_links.txt
+sentinelforge.egg-info/entry_points.txt
 sentinelforge.egg-info/requires.txt
 sentinelforge.egg-info/top_level.txt
 sentinelforge/api/__init__.py
@@ -27,6 +29,11 @@ sentinelforge/ingestion/normalize.py
 sentinelforge/ingestion/taxii_ingestor.py
 sentinelforge/ingestion/threat_intel_ingestor.py
 sentinelforge/ingestion/urlhaus_ingestor.py
+sentinelforge/ml/__init__.py
+sentinelforge/ml/scoring_model.py
+sentinelforge/notifications/email_digest.py
+sentinelforge/notifications/slack_notifier.py
 tests/test_export.py
 tests/test_ingestion.py
+tests/test_slack_notifier.py
 tests/test_taxii.py
