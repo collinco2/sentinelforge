@@ -116,5 +116,7 @@ def export_csv(
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="sentinelforge_iocs.csv"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="sentinelforge_iocs.csv"'
+        },
     )

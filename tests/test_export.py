@@ -84,7 +84,9 @@ def test_export_json_ok(monkeypatch):
     ]
 
     # Mock the helper function that fetches IOCs
-    monkeypatch.setattr("sentinelforge.api.export.fetch_iocs", lambda db, score: mock_iocs)
+    monkeypatch.setattr(
+        "sentinelforge.api.export.fetch_iocs", lambda db, score: mock_iocs
+    )
 
     # No need for headers now because auth is overridden
     response = client.get("/export/json")
@@ -117,13 +119,16 @@ def test_export_csv_ok(monkeypatch):
             summary="Test summary",
         ),
     ]
-    monkeypatch.setattr("sentinelforge.api.export.fetch_iocs", lambda db, score: mock_iocs)
+    monkeypatch.setattr(
+        "sentinelforge.api.export.fetch_iocs", lambda db, score: mock_iocs
+    )
 
     response = client.get("/export/csv")
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
     assert (
-        'attachment; filename="sentinelforge_iocs.csv"' in response.headers["content-disposition"]
+        'attachment; filename="sentinelforge_iocs.csv"'
+        in response.headers["content-disposition"]
     )
     # Check CSV content
     assert (

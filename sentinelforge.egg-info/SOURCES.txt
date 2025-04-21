@@ -8,6 +8,10 @@ sentinelforge.egg-info/SOURCES.txt
 sentinelforge.egg-info/dependency_links.txt
 sentinelforge.egg-info/requires.txt
 sentinelforge.egg-info/top_level.txt
+sentinelforge/api/__init__.py
+sentinelforge/api/auth.py
+sentinelforge/api/export.py
+sentinelforge/api/taxii.py
 sentinelforge/cli/dashboard.py
 sentinelforge/enrichment/nlp_summarizer.py
 sentinelforge/enrichment/whois_geoip.py
@@ -23,4 +27,6 @@ sentinelforge/ingestion/normalize.py
 sentinelforge/ingestion/taxii_ingestor.py
 sentinelforge/ingestion/threat_intel_ingestor.py
 sentinelforge/ingestion/urlhaus_ingestor.py
+tests/test_export.py
 tests/test_ingestion.py
+tests/test_taxii.py
