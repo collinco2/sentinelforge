@@ -17,6 +17,8 @@ dependencies = [
     "uvicorn[standard]>=0.22.0",
     "stix2>=3.0.0",
     "medallion>=3.0.0",
+    "slack-sdk>=3.20.0",
+    "scikit-learn>=1.0",
 ]
 
 [project.optional-dependencies]
