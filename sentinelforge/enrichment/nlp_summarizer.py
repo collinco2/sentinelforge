@@ -4,7 +4,9 @@ from transformers import pipeline
 
 
 class NLPSummarizer:
-    def __init__(self, config_path: Path = Path("sentinelforge/config/nlp_summarizer.json")):
+    def __init__(
+        self, config_path: Path = Path("sentinelforge/config/nlp_summarizer.json")
+    ):
         cfg = json.loads(config_path.read_text())
         self._summarizer = pipeline(
             "summarization",
