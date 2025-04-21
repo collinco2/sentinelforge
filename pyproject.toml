@@ -27,6 +27,8 @@ dev = [
   "stix2>=3.0.0",
   "python-whois>=0.7.3",
   "geoip2>=4.6.0",
+  "typer>=0.15.0",
+  "rich>=13.0",
 ]
 
 # Added tool.setuptools section for package finding
