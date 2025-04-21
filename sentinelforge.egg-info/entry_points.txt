@@ -1,0 +1,4 @@
+[console_scripts]
+sentinel-api = sentinelforge.api.taxii:start_api_server
+sentinel-dashboard = sentinelforge.cli.dashboard:app
+sentinel-ingest = sentinelforge.ingestion.main:run_ingestion_pipeline

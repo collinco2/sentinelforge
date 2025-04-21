@@ -1,0 +1,5 @@
+# Data files (e.g., GeoIP DBs)
+data/ 
+
+# Environment variables
+.env 

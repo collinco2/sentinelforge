@@ -1,4 +1,7 @@
 # sentinelforge/__main__.py
+# This file is intentionally left blank.
+# Use the installed scripts (sentinel-ingest, sentinel-dashboard, sentinel-api)
+# defined in pyproject.toml to run different parts of the application.
 
 # Comment out Typer CLI imports/setup
 # import typer

@@ -14,6 +14,9 @@ from sentinelforge.enrichment.whois_geoip import WhoisGeoIPEnricher
 # Added summarizer import
 from sentinelforge.enrichment.nlp_summarizer import NLPSummarizer
 
+# Added notifications import
+from sentinelforge.notifications.slack_notifier import send_high_severity_alert
+
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
 from .dummy_ingestor import DummyIngestor
@@ -23,12 +26,15 @@ from .abuse_ch_ingestor import AbuseChIngestor
 # Import the normalization function
 from .normalize import normalize_indicators
 
+# Import centralized settings
+from sentinelforge.settings import settings
+
 # Get logger instance
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-# IMPORTANT: Replace this with the actual path to your GeoLite2-City.mmdb file
-GEOIP_DB_PATH = "/path/to/GeoLite2-City.mmdb"  # Example placeholder
+# Use settings instead of constant
+# GEOIP_DB_PATH = "data/GeoLite2-City.mmdb" # Updated path
 # --- End Configuration ---
 
 
@@ -42,12 +48,22 @@ def run_ingestion_pipeline():
     logger.info("Database session created.")
 
     # --- Initialize Enricher ---
-    try:
-        enricher = WhoisGeoIPEnricher(GEOIP_DB_PATH)
-        logger.info(f"WhoisGeoIPEnricher initialized with DB: {GEOIP_DB_PATH}")
-    except Exception as enricher_init_err:
-        logger.error(f"Failed to initialize WhoisGeoIPEnricher: {enricher_init_err}")
-        enricher = None  # Set enricher to None if init fails
+    # Check if path is set in settings
+    if settings.geoip_db_path:
+        try:
+            # Use path from settings
+            enricher = WhoisGeoIPEnricher(str(settings.geoip_db_path))
+            logger.info(
+                f"WhoisGeoIPEnricher initialized with DB: {settings.geoip_db_path}"
+            )
+        except Exception as enricher_init_err:
+            logger.error(
+                f"Failed to initialize WhoisGeoIPEnricher from {settings.geoip_db_path}: {enricher_init_err}"
+            )
+            enricher = None
+    else:
+        logger.warning("GEOIP_DB_PATH not set in settings. GeoIP enrichment disabled.")
+        enricher = None
     # --- End Enricher Init ---
 
     # --- Initialize Summarizer ---
@@ -199,6 +215,21 @@ def run_ingestion_pipeline():
                 try:
                     db.merge(record)
                     stored_count += 1
+
+                    # --- Send Slack Alert if score meets threshold ---
+                    # Use threshold from settings
+                    if ioc_score >= settings.slack_alert_threshold:
+                        # Construct a simple link (adjust URL structure as needed)
+                        # Using type/value as identifier, ensure URL encoding if necessary
+                        dashboard_url = f"http://localhost:8080/dashboard/ioc/{norm_type}/{norm_value}"  # Placeholder URL
+                        logger.info(
+                            f"Score {ioc_score} >= {settings.slack_alert_threshold}, sending Slack alert for {norm_type}:{norm_value}"
+                        )
+                        send_high_severity_alert(
+                            norm_value, norm_type, ioc_score, dashboard_url
+                        )
+                    # --- End Slack Alert ---
+
                 except Exception as db_err:
                     logger.error(f"Failed to merge IOC to DB: {norm} - Error: {db_err}")
                     db.rollback()  # Rollback on error for this record

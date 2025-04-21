@@ -6,6 +6,11 @@ fastapi>=0.95.0
 uvicorn[standard]>=0.22.0
 stix2>=3.0.0
 medallion>=3.0.0
+slack-sdk>=3.20.0
+scikit-learn>=1.0
+torch>=2.0.0
+pydantic>=2.0
+pydantic-settings>=2.0
 
 [dev]
 pytest>=8.0
@@ -20,3 +25,4 @@ python-whois>=0.7.3
 geoip2>=4.6.0
 typer>=0.15.0
 rich>=13.0
+slack-sdk>=3.20.0

@@ -196,14 +196,25 @@ def get_objects_from_collection(
 # @app.get("/taxii/collections/", tags=["TAXII2-like"])
 # def get_collections(): ...
 
+
 # --- Run with Uvicorn ---
-# Example: uvicorn sentinelforge.api.taxii:app --reload
-if __name__ == "__main__":
-    # This block is for direct execution, usually run via uvicorn
+def start_api_server():
+    """Starts the Uvicorn server for the TAXII API."""
     import uvicorn
 
     logger.info("Starting Uvicorn server for TAXII API...")
-    # Ensure DB exists before starting server if running directly
+    # Ensure DB exists before starting server
     # Note: In production, use Alembic or similar for migrations
-    Base.metadata.create_all(bind=engine)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables verified/created.")
+    except Exception as db_init_err:
+        logger.error(
+            f"Failed to verify/create database tables: {db_init_err}", exc_info=True
+        )
+        # Decide if you want to exit or continue without DB potentially
+        # For now, we proceed but Uvicorn might fail later if DB is needed immediately
+
+    uvicorn.run(
+        app, host="0.0.0.0", port=8000, reload=False
+    )  # reload=False for production/entrypoint

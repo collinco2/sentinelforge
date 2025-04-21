@@ -1,16 +1,18 @@
 import logging
 from slack_sdk.webhook import WebhookClient
 
-from sentinelforge.config import SLACK_WEBHOOK_URL
+from sentinelforge.settings import settings
 
 logger = logging.getLogger(__name__)
 webhook = None
 
-if SLACK_WEBHOOK_URL:
-    webhook = WebhookClient(SLACK_WEBHOOK_URL)
+if settings.slack_webhook_url:
+    webhook = WebhookClient(str(settings.slack_webhook_url))
     logger.info("Slack webhook client initialized.")
 else:
-    logger.warning("SLACK_WEBHOOK_URL not set. Slack notifications disabled.")
+    logger.warning(
+        "SLACK_WEBHOOK_URL not set in settings. Slack notifications disabled."
+    )
 
 
 def send_high_severity_alert(ioc_value: str, ioc_type: str, score: int, link: str = ""):
@@ -61,4 +63,6 @@ if __name__ == "__main__":
         )
         print("Test notification sent (check Slack).")
     else:
-        print("Skipping Slack test notification as webhook is not configured.")
+        print(
+            "Skipping Slack test notification as webhook is not configured in settings."
+        )

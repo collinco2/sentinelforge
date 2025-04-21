@@ -2,6 +2,14 @@
 
 AI‑powered threat‑intel aggregator.
 
+## Running SentinelForge
+
+After installing (`pip install -e .`), you can use the following commands:
+
+*   **`sentinel-ingest`**: Runs the full ingestion pipeline (fetches feeds, normalizes, scores, enriches, stores, notifies).
+*   **`sentinel-dashboard top [OPTIONS]`**: Shows top-scoring IOCs from the database (use `--help` for options like `--limit`, `--type`, `--since`).
+*   **`sentinel-api`**: Starts the FastAPI server (on `http://0.0.0.0:8000` by default) providing TAXII-like and export endpoints.
+
 ## Storage Schema
 
 We persist normalized IOCs into SQLite via SQLAlchemy.  
