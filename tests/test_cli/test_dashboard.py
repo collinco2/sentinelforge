@@ -49,11 +49,14 @@ def test_dashboard_no_db(monkeypatch):
     mock_session.query.return_value = FakeQuery()
     mock_session.close.return_value = None
     # Need to patch SessionLocal where it's used: in sentinelforge.cli.dashboard
-    monkeypatch.setattr("sentinelforge.cli.dashboard.SessionLocal", lambda: mock_session)
+    monkeypatch.setattr(
+        "sentinelforge.cli.dashboard.SessionLocal", lambda: mock_session
+    )
 
     # Mock the _rules import as well to provide default tiers
     monkeypatch.setattr(
-        "sentinelforge.cli.dashboard.scoring_rules", {"tiers": {"high": 50, "medium": 20, "low": 0}}
+        "sentinelforge.cli.dashboard.scoring_rules",
+        {"tiers": {"high": 50, "medium": 20, "low": 0}},
     )
 
     # Invoke the dashboard app directly. Command is defined within the app.

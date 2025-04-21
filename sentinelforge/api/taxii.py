@@ -86,7 +86,9 @@ def create_stix_pattern(ioc_type: str, ioc_value: str) -> Optional[str]:
     }
     stix_type = stix_type_map.get(ioc_type.lower())
     if not stix_type:
-        logger.warning(f"Unsupported ioc_type '{ioc_type}' for STIX pattern generation.")
+        logger.warning(
+            f"Unsupported ioc_type '{ioc_type}' for STIX pattern generation."
+        )
         return None
     # Basic value escaping (replace single quotes, could be more robust)
     escaped_value = ioc_value.replace("'", "\\'")
@@ -140,7 +142,9 @@ def ioc_to_stix_indicator(ioc: IOC) -> Optional[Indicator]:
 )
 def get_objects_from_collection(
     collection_id: str,
-    min_score: int = Query(DEFAULT_MIN_SCORE, description="Minimum score for IOCs to include"),
+    min_score: int = Query(
+        DEFAULT_MIN_SCORE, description="Minimum score for IOCs to include"
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -150,7 +154,9 @@ def get_objects_from_collection(
     if collection_id != COLLECTION_ID:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    logger.info(f"Fetching IOCs for collection '{collection_id}' with min_score >= {min_score}")
+    logger.info(
+        f"Fetching IOCs for collection '{collection_id}' with min_score >= {min_score}"
+    )
     try:
         # Query DB for IOCs meeting the score threshold
         db_iocs = db.query(IOC).filter(IOC.score >= min_score).all()
@@ -162,7 +168,9 @@ def get_objects_from_collection(
             if stix_indicator:
                 stix_indicators.append(stix_indicator)
             else:
-                logger.warning(f"Could not convert DB IOC to STIX: {ioc.ioc_type}:{ioc.ioc_value}")
+                logger.warning(
+                    f"Could not convert DB IOC to STIX: {ioc.ioc_type}:{ioc.ioc_value}"
+                )
 
         # Include the Org Identity in the bundle
         bundle_objects = [ORG_IDENTITY] + stix_indicators
@@ -175,7 +183,9 @@ def get_objects_from_collection(
 
     except Exception as e:
         logger.error(f"Error generating STIX bundle: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error generating STIX bundle")
+        raise HTTPException(
+            status_code=500, detail="Internal server error generating STIX bundle"
+        )
 
 
 # --- Optional: Add basic discovery/collection endpoints if needed ---
