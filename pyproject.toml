@@ -33,6 +33,7 @@ dev = [
   "geoip2>=4.6.0",
   "typer>=0.15.0",
   "rich>=13.0",
+  "slack-sdk>=3.20.0",
 ]
 
 # Added tool.setuptools section for package finding
