@@ -13,6 +13,10 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pyyaml>=6.0",
     "transformers>=4.0.0",
+    "fastapi>=0.95.0",
+    "uvicorn[standard]>=0.22.0",
+    "stix2>=3.0.0",
+    "medallion>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -24,7 +28,6 @@ dev = [
   "black>=24.3.0",
   "pre-commit>=3.6",
   "taxii2-client>=2.3.0",
-  "stix2>=3.0.0",
   "python-whois>=0.7.3",
   "geoip2>=4.6.0",
   "typer>=0.15.0",

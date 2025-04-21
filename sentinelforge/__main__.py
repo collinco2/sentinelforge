@@ -1,15 +1,19 @@
 # sentinelforge/__main__.py
-import typer
-from sentinelforge.cli.dashboard import app as dashboard_app
 
-# Create the main application instance
-app = typer.Typer()
+# Comment out Typer CLI imports/setup
+# import typer
+# from sentinelforge.cli.dashboard import app as dashboard_app
+# app = typer.Typer()
+# app.add_typer(dashboard_app, name="dashboard")
 
-# Add the dashboard commands under the name "dashboard"
-app.add_typer(dashboard_app, name="dashboard")
-
-# TODO: Add other command groups here (e.g., ingestion, enrichment)
-# app.add_typer(ingestion_app, name="ingest")
+# Add Uvicorn import
+import uvicorn
 
 if __name__ == "__main__":
-    app()
+    # Run the FastAPI app using uvicorn
+    uvicorn.run(
+        "sentinelforge.api.taxii:app",  # Point to the FastAPI app instance
+        host="0.0.0.0",  # Listen on all interfaces
+        port=8080,  # Use port 8080
+        reload=True,  # Enable auto-reload for development
+    )
