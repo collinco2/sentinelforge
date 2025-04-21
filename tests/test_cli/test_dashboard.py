@@ -2,14 +2,15 @@ from typer.testing import CliRunner
 from unittest.mock import MagicMock  # Import MagicMock for db query mocking
 from datetime import datetime, timezone
 
-from sentinelforge.__main__ import app
+# Import the dashboard app directly, not from __main__
+# from sentinelforge.__main__ import app
+from sentinelforge.cli.dashboard import app as dashboard_cli_app
 
 runner = CliRunner()
 
 
 def test_dashboard_no_db(monkeypatch):
     # stub out the DB session and query to return no IOCs
-    import sentinelforge.cli.dashboard as mod
 
     # datetime is now imported at top level
     # from datetime import datetime # Import for dummy data
@@ -47,14 +48,16 @@ def test_dashboard_no_db(monkeypatch):
     mock_session = MagicMock()
     mock_session.query.return_value = FakeQuery()
     mock_session.close.return_value = None
-    monkeypatch.setattr(mod, "SessionLocal", lambda: mock_session)
+    # Need to patch SessionLocal where it's used: in sentinelforge.cli.dashboard
+    monkeypatch.setattr("sentinelforge.cli.dashboard.SessionLocal", lambda: mock_session)
 
     # Mock the _rules import as well to provide default tiers
     monkeypatch.setattr(
-        mod, "scoring_rules", {"tiers": {"high": 50, "medium": 20, "low": 0}}
+        "sentinelforge.cli.dashboard.scoring_rules", {"tiers": {"high": 50, "medium": 20, "low": 0}}
     )
 
-    result = runner.invoke(app, ["dashboard", "top"])
+    # Invoke the dashboard app directly. Command is defined within the app.
+    result = runner.invoke(dashboard_cli_app)
     print(result.stdout)
     print(result.exception)
     assert result.exit_code == 0
