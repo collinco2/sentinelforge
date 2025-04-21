@@ -19,6 +19,7 @@ class IOC(Base):
     score = Column(Integer, nullable=False, default=0)
     category = Column(String, nullable=False, default="low")
     enrichment_data = Column(JSON, nullable=True)
+    summary = Column(String, nullable=True)
 
 
 def init_db():

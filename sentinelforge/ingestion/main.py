@@ -11,6 +11,9 @@ from sentinelforge.scoring import score_ioc, categorize
 # Added enrichment import
 from sentinelforge.enrichment.whois_geoip import WhoisGeoIPEnricher
 
+# Added summarizer import
+from sentinelforge.enrichment.nlp_summarizer import NLPSummarizer
+
 # Removed factory import, added direct imports
 # from .factory import get_ingestor
 from .dummy_ingestor import DummyIngestor
@@ -46,6 +49,15 @@ def run_ingestion_pipeline():
         logger.error(f"Failed to initialize WhoisGeoIPEnricher: {enricher_init_err}")
         enricher = None  # Set enricher to None if init fails
     # --- End Enricher Init ---
+
+    # --- Initialize Summarizer ---
+    try:
+        summarizer = NLPSummarizer()  # Use default config path
+        logger.info("NLPSummarizer initialized.")
+    except Exception as summarizer_init_err:
+        logger.error(f"Failed to initialize NLPSummarizer: {summarizer_init_err}")
+        summarizer = None  # Set to None if init fails
+    # --- End Summarizer Init ---
 
     # deduplication cache & counter
     seen_hashes: set[str] = set()
@@ -142,6 +154,28 @@ def run_ingestion_pipeline():
                         )
                 # --- End Enrichment ---
 
+                # --- Perform Summarization ---
+                summary = ""
+                if summarizer:
+                    # Attempt to find a description field (adjust key if needed)
+                    description = norm.get("description", "")
+                    if description and isinstance(description, str):
+                        try:
+                            summary = summarizer.summarize(description)
+                            if summary:
+                                logger.debug(
+                                    f"Summarized description for {norm_type}:{norm_value}"
+                                )
+                        except Exception as summary_err:
+                            logger.warning(
+                                f"Summarization failed for {norm_type}:{norm_value} - {summary_err}"
+                            )
+                    else:
+                        logger.debug(
+                            f"No description found or not string for {norm_type}:{norm_value}"
+                        )
+                # --- End Summarization ---
+
                 # Calculate Score and Category
                 # TODO: Enhance feeds_seen if merging duplicates across feeds in the future
                 feeds_seen = [feed_name]
@@ -160,6 +194,7 @@ def run_ingestion_pipeline():
                     enrichment_data=(
                         enrichment_data if enrichment_data else None
                     ),  # Store enrichment
+                    summary=summary if summary else None,  # Store summary
                 )
                 try:
                     db.merge(record)
