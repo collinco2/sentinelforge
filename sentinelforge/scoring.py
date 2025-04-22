@@ -64,11 +64,12 @@ except Exception as e:
     }
 
 
-def score_ioc(ioc_value: str, source_feeds: List[str]) -> int:
+def score_ioc(ioc_value: str, ioc_type: str, source_feeds: List[str]) -> int:
     """
     Compute a score based on feeds and multi-feed bonuses.
     Also computes (but doesn't yet use) an ML-based score.
     :param ioc_value: the indicator value
+    :param ioc_type: the indicator type (e.g., 'ip', 'domain')
     :param source_feeds: list of feed names where the IOC appeared
     :return: integer score (currently rule-based)
     """
@@ -99,10 +100,8 @@ def score_ioc(ioc_value: str, source_feeds: List[str]) -> int:
     logger.debug(f"  - Rule-based score for '{ioc_value}': {rule_score}")
 
     # --- ML-Based Score (Placeholder Integration) ---
-    # TODO: Pass more comprehensive ioc_data if needed by extract_features
-    # For now, just passing basic info.
-    ioc_data_for_ml = {"value": ioc_value, "type": "unknown"}  # Need type info here!
-    features = extract_features(ioc_data_for_ml, source_feeds)
+    # Pass correct arguments to extract_features
+    features = extract_features(ioc_type, source_feeds)
     ml_score_prob = predict_score(features)  # Score is likely 0.0-1.0
     # TODO: Decide how to use ml_score_prob:
     # 1. Combine with rule_score (e.g., weighted average)?

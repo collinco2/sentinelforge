@@ -195,7 +195,7 @@ def run_ingestion_pipeline():
                 # Calculate Score and Category
                 # TODO: Enhance feeds_seen if merging duplicates across feeds in the future
                 feeds_seen = [feed_name]
-                ioc_score = score_ioc(norm_value, feeds_seen)
+                ioc_score = score_ioc(norm_value, norm_type, feeds_seen)
                 ioc_cat = categorize(ioc_score)
 
                 # store normalized IOC into DB (upsert)
