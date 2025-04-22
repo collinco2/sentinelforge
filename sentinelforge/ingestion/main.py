@@ -137,19 +137,27 @@ def run_ingestion_pipeline():
             # --- End Deduplication ---
 
             # Normalize and deduplicate further (based on normalized values)
-            normalized_indicators = normalize_indicators(deduplicated_raw_indicators)
-            final_unique_count = len(normalized_indicators)
+            # Returns list of dicts like {'norm_type': str, 'norm_value': str, 'original': dict}
+            normalized_indicators_data = normalize_indicators(
+                deduplicated_raw_indicators
+            )
+            final_unique_count = len(normalized_indicators_data)
             total_normalized_unique += final_unique_count
 
             # --- Store normalized indicators in DB ---
             stored_count = 0
-            for norm in normalized_indicators:
-                # Basic check for required fields after normalization
-                norm_type = norm.get("type")
-                norm_value = norm.get("value")
+            # Iterate through the enhanced data structure
+            for norm_data in normalized_indicators_data:
+                # Extract normalized type/value and original item
+                norm_type = norm_data["norm_type"]
+                norm_value = norm_data["norm_value"]
+                original_item = norm_data["original"]
+
+                # Basic check (already done in normalize, but good practice)
                 if not norm_type or not norm_value:
+                    # This ideally shouldn't happen if normalize_indicators filters correctly
                     logger.warning(
-                        f"Skipping normalized indicator missing type/value: {norm}"
+                        f"Skipping indicator missing normalized type/value: {norm_data}"
                     )
                     continue
 
@@ -157,9 +165,16 @@ def run_ingestion_pipeline():
                 enrichment_data = {}
                 if enricher and norm_type in ["domain", "ip"]:
                     try:
-                        enrichment_data = enricher.enrich(
+                        raw_enrichment = enricher.enrich(
                             {"type": norm_type, "value": norm_value}
                         )
+                        # Convert datetime objects in enrichment to ISO strings for JSON storage
+                        enrichment_data = {
+                            k: (
+                                v.isoformat() if isinstance(v, datetime.datetime) else v
+                            )
+                            for k, v in raw_enrichment.items()
+                        }
                         if enrichment_data:
                             logger.debug(
                                 f"Enriched {norm_type}:{norm_value} -> {enrichment_data}"
@@ -173,8 +188,8 @@ def run_ingestion_pipeline():
                 # --- Perform Summarization ---
                 summary = ""
                 if summarizer:
-                    # Attempt to find a description field (adjust key if needed)
-                    description = norm.get("description", "")
+                    # Attempt to find description in the *original* item data
+                    description = original_item.get("description", "")
                     if description and isinstance(description, str):
                         try:
                             summary = summarizer.summarize(description)
@@ -192,35 +207,28 @@ def run_ingestion_pipeline():
                         )
                 # --- End Summarization ---
 
-                # Calculate Score and Category
-                # TODO: Enhance feeds_seen if merging duplicates across feeds in the future
-                feeds_seen = [feed_name]
+                # Calculate Score and Category using normalized type/value
+                feeds_seen = [feed_name]  # Still using current feed, TODO remains
                 ioc_score = score_ioc(norm_value, norm_type, feeds_seen)
                 ioc_cat = categorize(ioc_score)
 
-                # store normalized IOC into DB (upsert)
+                # store normalized IOC into DB (upsert) using normalized type/value
                 record = IOC(
-                    ioc_type=norm_type,
-                    ioc_value=norm_value,
+                    ioc_type=norm_type,  # Use normalized type
+                    ioc_value=norm_value,  # Use normalized value
                     source_feed=feed_name,
-                    # first_seen=datetime.datetime.utcnow(), # Use DB default
-                    # last_seen=datetime.datetime.utcnow(),  # Use DB default
-                    score=ioc_score,  # Add calculated score
-                    category=ioc_cat,  # Add calculated category
-                    enrichment_data=(
-                        enrichment_data if enrichment_data else None
-                    ),  # Store enrichment
-                    summary=summary if summary else None,  # Store summary
+                    score=ioc_score,
+                    category=ioc_cat,
+                    enrichment_data=enrichment_data if enrichment_data else None,
+                    summary=summary if summary else None,
                 )
                 try:
                     db.merge(record)
                     stored_count += 1
 
                     # --- Send Slack Alert if score meets threshold ---
-                    # Use threshold from settings
+                    # Use normalized type/value for logging/links
                     if ioc_score >= settings.slack_alert_threshold:
-                        # Construct a simple link (adjust URL structure as needed)
-                        # Using type/value as identifier, ensure URL encoding if necessary
                         dashboard_url = f"http://localhost:8080/dashboard/ioc/{norm_type}/{norm_value}"  # Placeholder URL
                         logger.info(
                             f"Score {ioc_score} >= {settings.slack_alert_threshold}, sending Slack alert for {norm_type}:{norm_value}"
@@ -231,7 +239,10 @@ def run_ingestion_pipeline():
                     # --- End Slack Alert ---
 
                 except Exception as db_err:
-                    logger.error(f"Failed to merge IOC to DB: {norm} - Error: {db_err}")
+                    # Use normalized type/value in error message
+                    logger.error(
+                        f"Failed to merge IOC to DB: {norm_type}:{norm_value} - Error: {db_err}"
+                    )
                     db.rollback()  # Rollback on error for this record
                     continue  # Continue processing other indicators
 

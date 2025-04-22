@@ -41,27 +41,25 @@ def normalize_indicators(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     - Deduplicate indicators based on their primary value and type.
     - Standardize values (strip http(s)://, lowercase, trim whitespace).
-    - Return list of unique, normalized indicator dicts.
+    - Return list of unique indicator dicts, potentially adding normalized keys.
+      (Original implementation returned original dicts)
     """
     seen = set()
-    result = []
+    result = []  # This will now store modified dicts or tuples
     for item in raw:
         value_type = _get_value_and_type(item)
         if value_type is None:
-            # Optionally log items that couldn't be normalized
-            # print(f"Skipping unnormalizable item: {item}")
             continue
 
         value, type_ = value_type
 
-        # Standardize
+        # Standardize value
         normalized_value = value.strip().lower()
         if type_ in ["domain", "url"]:
             if normalized_value.startswith("https://"):
                 normalized_value = normalized_value[8:]
             elif normalized_value.startswith("http://"):
                 normalized_value = normalized_value[7:]
-            # Remove trailing slash for domains/URLs if present
             if normalized_value.endswith("/"):
                 normalized_value = normalized_value[:-1]
 
@@ -70,9 +68,16 @@ def normalize_indicators(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         if key not in seen:
             seen.add(key)
-            # Store the original item, or potentially a modified one
-            # if you want to store the normalized value back into it.
-            # For now, appending the original item that passed deduplication.
-            result.append(item)
+            # Create a new dictionary or update the original item
+            # Let's create a new one with consistent keys
+            normalized_item = {
+                "original": item,  # Keep original for reference if needed
+                "norm_type": type_,  # Use the type identified by _get_value_and_type
+                "norm_value": normalized_value,  # Use the processed value
+                # Copy other potentially useful fields if needed
+                # "description": item.get("description"),
+                # "timestamp": item.get("timestamp")
+            }
+            result.append(normalized_item)
 
     return result
