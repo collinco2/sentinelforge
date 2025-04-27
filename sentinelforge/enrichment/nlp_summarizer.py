@@ -14,46 +14,37 @@ class NLPSummarizer:
         self, config_path: Path = Path("sentinelforge/config/nlp_summarizer.json")
     ):
         cfg = json.loads(config_path.read_text())
-        self._summarizer = pipeline(
-            "summarization",
-            model=cfg["model"],
-        )
+        self._summarizer = pipeline("summarization", model=cfg["model"])
         self.max_length = cfg["max_length"]
         self.min_length = cfg["min_length"]
         self.do_sample = cfg["do_sample"]
 
     def summarize(self, text: str) -> str:
-        """
-        Generate a short summary for a given text.
-        """
+        """Generate a short summary for a given text."""
         try:
-            # Note: Tests expect the summarizer to always run,
-            # so we don't implement early return for testing compatibility
-            
-            # Calculate appropriate max_length based on input length
-            # Rule of thumb: aim for 30-50% of original length for summaries
+            # Tests expect the summarizer to always run
             text_length = len(text.split())
-            dynamic_max_length = min(self.max_length, max(self.min_length, text_length // 2))
-            
-            # Make sure max_length is greater than min_length
+            dynamic_max_length = min(
+                self.max_length, max(self.min_length, text_length // 2)
+            )
+
             if dynamic_max_length <= self.min_length:
                 dynamic_max_length = self.min_length + 1
-                
+
             logger.debug(
-                f"Summarizing text of length {text_length} with max_length={dynamic_max_length}, min_length={self.min_length}"
+                f"Summarizing text of length {text_length} with max_length={dynamic_max_length}"
             )
-            
-            # Suppress all warnings when calling the summarizer
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                with open(os.devnull, 'w') as f, contextlib.redirect_stderr(f):
+                with open(os.devnull, "w") as f, contextlib.redirect_stderr(f):
                     result = self._summarizer(
                         text,
                         max_length=dynamic_max_length,
                         min_length=self.min_length,
                         do_sample=self.do_sample,
                     )
-                
+
             return result[0]["summary_text"].strip()
         except Exception as e:
             logger.error(f"Error summarizing text: {e}")
