@@ -112,7 +112,7 @@ def run_ingestion_pipeline():
                 # First check if our item already has explicit type and value fields
                 ind_type = ind.get("type")
                 ind_value = None
-                
+
                 # If the item has a value field, use it
                 if "value" in ind:
                     ind_value = ind.get("value")
@@ -125,9 +125,11 @@ def run_ingestion_pipeline():
                     ind_value = ind.get("domain")
                 elif ind_type == "hash" and "hash" in ind:
                     ind_value = ind.get("hash")
-                
+
                 # Debug print to understand what's being processed
-                logger.debug(f"Processing indicator - type: {ind_type}, value: {ind_value}, full: {ind}")
+                logger.debug(
+                    f"Processing indicator - type: {ind_type}, value: {ind_value}, full: {ind}"
+                )
 
                 if ind_type is None or ind_value is None:
                     logger.debug(
@@ -226,11 +228,11 @@ def run_ingestion_pipeline():
                 # Calculate Score and Category using normalized type/value
                 feeds_seen = [feed_name]  # Still using current feed, TODO remains
                 ioc_score = score_ioc(
-                    norm_value, 
-                    norm_type, 
+                    norm_value,
+                    norm_type,
                     feeds_seen,
                     enrichment_data=enrichment_data,
-                    summary=summary
+                    summary=summary,
                 )
                 ioc_cat = categorize(ioc_score)
 
@@ -308,5 +310,7 @@ def run_ingestion_pipeline():
 
 if __name__ == "__main__":
     # Configure basic logging if running as script
-    logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s"
+    )
     run_ingestion_pipeline()

@@ -6,10 +6,10 @@ logger = logging.getLogger(__name__)
 
 def _get_value_and_type(item: Dict[str, Any]) -> Optional[tuple[str, str]]:
     """Extracts the primary value and its type from an indicator dict."""
-    
+
     # Debug logging
     logger.debug(f"Normalizing item: {item}")
-    
+
     if "ip" in item:
         logger.debug(f"Extracted IP: {item['ip']}")
         return str(item["ip"]), "ip"
@@ -44,10 +44,10 @@ def _get_value_and_type(item: Dict[str, Any]) -> Optional[tuple[str, str]]:
             if "SHA-256" in hashes:
                 return str(hashes["SHA-256"]), "hash"
             # Fallback if only file type is known but no hash
-            logger.debug(f"Cannot extract hash value from file type")
+            logger.debug("Cannot extract hash value from file type")
             return None  # Cannot uniquely identify without a value
         return value, type_
-        
+
     logger.debug(f"Failed to extract value and type from item: {item}")
     return None  # Indicate item couldn't be processed
 
@@ -60,11 +60,11 @@ def normalize_indicators(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
       (Original implementation returned original dicts)
     """
     logger.info(f"Normalizing {len(raw)} raw indicators")
-    
+
     seen = set()
     result = []  # This will now store modified dicts or tuples
     skipped = 0
-    
+
     for item in raw:
         value_type = _get_value_and_type(item)
         if value_type is None:
@@ -99,6 +99,6 @@ def normalize_indicators(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 # "timestamp": item.get("timestamp")
             }
             result.append(normalized_item)
-    
+
     logger.info(f"Normalized {len(result)} indicators, skipped {skipped}")
     return result
