@@ -6,6 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 ENV PIP_NO_CACHE_DIR=off
 ENV PIP_DISABLE_PIP_VERSION_CHECK=on
+# Add WORKDIR to PYTHONPATH
+ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 # Create and set the working directory
 WORKDIR /app
@@ -33,11 +35,11 @@ COPY sentinelforge/notifications/templates ./sentinelforge/notifications/templat
 RUN mkdir -p /app/data
 RUN mkdir -p /app/models
 
-# Expose the port the API server runs on (default defined in taxii.py was 8000)
+# Expose the port the API server runs on
 EXPOSE 8000 
 # Note: The __main__.py runs on 8080, but the entrypoint runs taxii:app which defaults to 8000 unless configured
 # Consider unifying the ports or making the API port configurable via settings.py
 
-# Define the command to run the application using the entry point
-# This assumes the API server should run by default
-CMD ["sentinel-api"] 
+# Define the command to run the application using uvicorn directly
+# This ensures the module path is correctly handled by Python
+CMD ["uvicorn", "sentinelforge.api.taxii:app", "--host", "0.0.0.0", "--port", "8000"] 

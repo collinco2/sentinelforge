@@ -35,7 +35,8 @@ class Settings(BaseSettings):
     # --- Email Digest Settings ---
     # IMPORTANT: Set SENDGRID_API_KEY, DIGEST_RECIPIENTS, DIGEST_FROM in .env or environment
     sendgrid_api_key: Optional[str] = None
-    digest_recipients: List[EmailStr] = []  # Validates emails
+    # Set a default list directly - can still be overridden by env var if needed
+    digest_recipients: List[EmailStr] = ["placeholder@example.com"]
     digest_from: EmailStr = "no-reply@example.com"
 
 
