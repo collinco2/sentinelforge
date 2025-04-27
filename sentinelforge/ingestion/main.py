@@ -109,9 +109,25 @@ def run_ingestion_pipeline():
             deduplicated_raw_indicators = []
             feed_duplicates_skipped = 0
             for ind in raw_indicators:
-                # Ensure type and value keys exist before creating hash
+                # First check if our item already has explicit type and value fields
                 ind_type = ind.get("type")
-                ind_value = ind.get("value")
+                ind_value = None
+                
+                # If the item has a value field, use it
+                if "value" in ind:
+                    ind_value = ind.get("value")
+                # Otherwise, try to extract value from type-specific fields (ip, url, etc.)
+                elif ind_type == "ip" and "ip" in ind:
+                    ind_value = ind.get("ip")
+                elif ind_type == "url" and "url" in ind:
+                    ind_value = ind.get("url")
+                elif ind_type == "domain" and "domain" in ind:
+                    ind_value = ind.get("domain")
+                elif ind_type == "hash" and "hash" in ind:
+                    ind_value = ind.get("hash")
+                
+                # Debug print to understand what's being processed
+                logger.debug(f"Processing indicator - type: {ind_type}, value: {ind_value}, full: {ind}")
 
                 if ind_type is None or ind_value is None:
                     logger.debug(
@@ -209,7 +225,13 @@ def run_ingestion_pipeline():
 
                 # Calculate Score and Category using normalized type/value
                 feeds_seen = [feed_name]  # Still using current feed, TODO remains
-                ioc_score = score_ioc(norm_value, norm_type, feeds_seen)
+                ioc_score = score_ioc(
+                    norm_value, 
+                    norm_type, 
+                    feeds_seen,
+                    enrichment_data=enrichment_data,
+                    summary=summary
+                )
                 ioc_cat = categorize(ioc_score)
 
                 # store normalized IOC into DB (upsert) using normalized type/value
@@ -286,5 +308,5 @@ def run_ingestion_pipeline():
 
 if __name__ == "__main__":
     # Configure basic logging if running as script
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(message)s")
     run_ingestion_pipeline()
