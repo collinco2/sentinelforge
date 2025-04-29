@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelForge ML Explainability Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-shield-lock"></i> SentinelForge
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#"><i class="bi bi-graph-up"></i> Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#ioc-explorer"><i class="bi bi-search"></i> IOC Explorer</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#model-insights"><i class="bi bi-lightbulb"></i> Model Insights</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5><i class="bi bi-filter"></i> Filters</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="filter-form">
+                            <div class="mb-3">
+                                <label for="ioc-type" class="form-label">IOC Type</label>
+                                <select class="form-select" id="ioc-type">
+                                    <option value="">All Types</option>
+                                    <option value="ip">IP</option>
+                                    <option value="domain">Domain</option>
+                                    <option value="url">URL</option>
+                                    <option value="hash">Hash</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="min-score" class="form-label">Min Score</label>
+                                <input type="range" class="form-range" id="min-score" min="0" max="100" value="0">
+                                <span id="min-score-value">0</span>
+                            </div>
+                            <div class="mb-3">
+                                <label for="max-score" class="form-label">Max Score</label>
+                                <input type="range" class="form-range" id="max-score" min="0" max="100" value="100">
+                                <span id="max-score-value">100</span>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header bg-info text-white">
+                        <h5><i class="bi bi-pie-chart"></i> Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="stats-container">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-9">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-database"></i> Total IOCs</h5>
+                                <h2 id="total-iocs">-</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-success text-white">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-graph-up"></i> Avg Score</h5>
+                                <h2 id="avg-score">-</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-warning text-dark">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="bi bi-exclamation-triangle"></i> High Risk</h5>
+                                <h2 id="high-risk-count">-</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4" id="ioc-explorer">
+                    <div class="card-header bg-secondary text-white">
+                        <h5><i class="bi bi-table"></i> IOC Explorer</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover" id="ioc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Value</th>
+                                        <th>Type</th>
+                                        <th>Category</th>
+                                        <th>Score</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ioc-table-body">
+                                    <tr>
+                                        <td colspan="5" class="text-center">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <nav>
+                                <ul class="pagination justify-content-center" id="pagination">
+                                    <!-- Pagination will be generated dynamically -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4" id="model-insights">
+                    <div class="card-header bg-dark text-white">
+                        <h5><i class="bi bi-lightbulb"></i> Model Insights</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="explanation-container" class="d-none">
+                            <h4 id="explanation-ioc-value"></h4>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card mb-3">
+                                        <div class="card-header">Score Breakdown</div>
+                                        <div class="card-body">
+                                            <canvas id="score-chart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card mb-3">
+                                        <div class="card-header">Feature Importance</div>
+                                        <div class="card-body">
+                                            <div id="feature-importance"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="no-ioc-selected" class="text-center py-5">
+                            <i class="bi bi-info-circle" style="font-size: 3rem;"></i>
+                            <h4 class="mt-3">Select an IOC from the table to view its ML explanation</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for IOC Details -->
+    <div class="modal fade" id="ioc-detail-modal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">IOC Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="ioc-detail-content">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 
