@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Pre-push hook script to run tests before pushing
+echo "Running tests before push..."
+
+# Run the formatting check
+echo "Checking code formatting..."
+ruff format . --check
+if [ $? -ne 0 ]; then
+  echo "Formatting check failed. Please run 'ruff format .' to fix formatting issues."
+  exit 1
+fi
+
+# Run the linter
+echo "Running linter..."
+ruff check .
+if [ $? -ne 0 ]; then
+  echo "Linter check failed. Please fix the linting issues before pushing."
+  exit 1
+fi
+
+# Run critical tests only (for speed)
+echo "Running critical tests..."
+python -m pytest tests/test_ingestion/test_api.py -v
+if [ $? -ne 0 ]; then
+  echo "Critical tests failed. Please fix the test failures before pushing."
+  exit 1
+fi
+
+echo "Pre-push checks passed!"
+exit 0 
