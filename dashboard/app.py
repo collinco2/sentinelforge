@@ -494,15 +494,19 @@ def explain_ioc(ioc_value):
                 logger.info(
                     f"Extracting features with params: ioc_type={ioc_dict.get('ioc_type')}, feeds=[{ioc_dict.get('source_feed')}], ioc_value={ioc_dict.get('ioc_value')}"
                 )
-                features = extract_features(
-                    ioc_type=ioc_dict.get("ioc_type", "unknown"),
-                    source_feeds=[ioc_dict.get("source_feed", "unknown")],
-                    ioc_value=ioc_dict.get(
-                        "ioc_value", ""
-                    ),  # Use ioc_value only, not "value"
-                    enrichment_data=enrichment_data,
-                    summary=ioc_dict.get("summary", ""),
-                )
+
+                # Explicitly create a features dictionary to ensure we don't pass any column named 'value'
+                feature_dict = {
+                    "ioc_type": ioc_dict.get("ioc_type", "unknown"),
+                    "source_feeds": [ioc_dict.get("source_feed", "unknown")],
+                    "ioc_value": ioc_dict.get("ioc_value", ""),
+                    "enrichment_data": enrichment_data,
+                    "summary": ioc_dict.get("summary", ""),
+                }
+
+                # Extract features using our explicitly created dictionary
+                features = extract_features(**feature_dict)
+
                 logger.info(f"Features extracted successfully: {features}")
             except Exception as feature_err:
                 logger.error(f"Error extracting features: {feature_err}", exc_info=True)
