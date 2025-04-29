@@ -2,7 +2,7 @@ import yaml
 
 # from pathlib import Path # No longer needed directly
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 # Import centralized settings
 from sentinelforge.settings import settings
@@ -13,6 +13,14 @@ from sentinelforge.ml.scoring_model import (
     predict_score,
     KNOWN_SOURCE_FEEDS,
 )
+
+# Import model explainability
+try:
+    from sentinelforge.ml.explainer import explain_prediction_text, get_explanation
+
+    _explainer_available = True
+except ImportError:
+    _explainer_available = False
 
 logger = logging.getLogger(__name__)
 # Set logger level to INFO to see our messages
@@ -76,15 +84,23 @@ def score_ioc(
     source_feeds: List[str],
     enrichment_data: Dict = None,
     summary: str = "",
-) -> int:
+    include_explanation: bool = False,
+) -> Tuple[int, Optional[Dict[str, Any]]]:
     """
     Compute a score based on feeds, multi-feed bonuses, and ML prediction.
-    :param ioc_value: the indicator value
-    :param ioc_type: the indicator type (e.g., 'ip', 'domain')
-    :param source_feeds: list of feed names where the IOC appeared
-    :param enrichment_data: optional enrichment data dictionary
-    :param summary: optional IOC summary
-    :return: integer score (combined rule-based and ML-based)
+
+    Args:
+        ioc_value: The indicator value
+        ioc_type: The indicator type (e.g., 'ip', 'domain')
+        source_feeds: List of feed names where the IOC appeared
+        enrichment_data: Optional enrichment data dictionary
+        summary: Optional IOC summary
+        include_explanation: Whether to include SHAP explanation data
+
+    Returns:
+        A tuple containing:
+        - integer score (combined rule-based and ML-based)
+        - optional explanation data if include_explanation is True
     """
     # --- Rule-Based Score ---
     rule_score = 0
@@ -156,7 +172,38 @@ def score_ioc(
         f"DEBUG - Final score for {ioc_value}: {final_score} (rule: {rule_score}, ML: {ml_score})"
     )
 
-    return final_score
+    # Generate explanation data if requested
+    explanation_data = None
+    if include_explanation and _explainer_available:
+        try:
+            # Get the full SHAP explanation
+            explanation_data = get_explanation(features)
+
+            if explanation_data:
+                # Add a text explanation
+                explanation_data["text_explanation"] = explain_prediction_text(features)
+
+                # Add rule-based explanation data
+                rule_explanation = []
+                for feed in sorted(unique_feeds):
+                    feed_score = feed_scores.get(feed, 0)
+                    if feed_score > 0:
+                        rule_explanation.append(f"Feed '{feed}': +{feed_score} points")
+
+                if len(unique_feeds) >= bonus_threshold:
+                    rule_explanation.append(f"Multi-feed bonus: +{bonus_points} points")
+
+                explanation_data["rule_explanation"] = rule_explanation
+
+                logger.info(f"Generated explanation data for '{ioc_value}'")
+            else:
+                logger.warning(f"Failed to generate explanation data for '{ioc_value}'")
+        except Exception as e:
+            logger.error(
+                f"Error generating explanation for '{ioc_value}': {e}", exc_info=True
+            )
+
+    return final_score, explanation_data
 
 
 def categorize(score: int) -> str:
@@ -175,3 +222,45 @@ def categorize(score: int) -> str:
     if score >= medium_threshold:
         return "medium"
     return "low"
+
+
+def score_ioc_with_explanation(
+    ioc_value: str,
+    ioc_type: str,
+    source_feeds: List[str],
+    enrichment_data: Dict = None,
+    summary: str = "",
+) -> Tuple[int, str, Optional[Dict]]:
+    """
+    Wrapper that scores an IOC and provides a human-readable explanation.
+
+    Args:
+        Same as score_ioc
+
+    Returns:
+        Tuple containing:
+        - final numeric score
+        - human-readable explanation
+        - full explanation data dictionary
+    """
+    score, explanation_data = score_ioc(
+        ioc_value=ioc_value,
+        ioc_type=ioc_type,
+        source_feeds=source_feeds,
+        enrichment_data=enrichment_data,
+        summary=summary,
+        include_explanation=True,
+    )
+
+    # Get the human-readable explanation
+    if explanation_data and "text_explanation" in explanation_data:
+        text_explanation = explanation_data["text_explanation"]
+    else:
+        if _explainer_available:
+            text_explanation = "Could not generate explanation for this score."
+        else:
+            text_explanation = (
+                "ML model explanation is not available. Consider installing SHAP."
+            )
+
+    return score, text_explanation, explanation_data

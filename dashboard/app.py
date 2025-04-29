@@ -75,9 +75,9 @@ def clean_url(url):
         return None
     try:
         # Only keep ASCII characters for URLs
-        clean = ''.join(c for c in url if ord(c) < 128)
+        clean = "".join(c for c in url if ord(c) < 128)
         # If the URL is severely truncated/corrupted, mark it
-        if len(clean) < 5 or not ('://' in clean or '.' in clean):
+        if len(clean) < 5 or not ("://" in clean or "." in clean):
             return f"[corrupted-url-{hash(url) % 1000:03d}]"
         return clean
     except Exception:  # No variable needed

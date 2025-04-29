@@ -1,5 +1,6 @@
 import logging
 from slack_sdk.webhook import WebhookClient
+from typing import Optional
 
 from sentinelforge.settings import settings
 
@@ -15,8 +16,23 @@ else:
     )
 
 
-def send_high_severity_alert(ioc_value: str, ioc_type: str, score: int, link: str = ""):
-    """Sends a formatted alert to Slack for high-severity IOCs."""
+def send_high_severity_alert(
+    ioc_value: str,
+    ioc_type: str,
+    score: int,
+    link: str = "",
+    explanation: Optional[str] = None,
+):
+    """
+    Sends a formatted alert to Slack for high-severity IOCs.
+
+    Args:
+        ioc_value: The IOC value
+        ioc_type: The IOC type (e.g., domain, ip)
+        score: The numeric risk score
+        link: Optional link to the IOC details page
+        explanation: Optional SHAP-based explanation text
+    """
     if not webhook:
         logger.debug("Slack client not initialized, skipping notification.")
         return
@@ -28,9 +44,14 @@ def send_high_severity_alert(ioc_value: str, ioc_type: str, score: int, link: st
         f"> *Type*: `{ioc_type}`\n"
         f"> *Score*: `{score}`\n"
     )
+
     # Conditionally add the link if provided
     if link:
-        text += f"> <{link}|View Details>"
+        text += f"> <{link}|View Details>\n"
+
+    # Add explanation if available
+    if explanation:
+        text += f"\n*Explanation*:\n```\n{explanation}\n```"
 
     try:
         response = webhook.send(text=text)
@@ -60,6 +81,7 @@ if __name__ == "__main__":
             ioc_type="ip",
             score=99,
             link="http://example.com/ioc/8.8.8.8",
+            explanation="Factors influencing this score:\n- IP located in high-risk country\n- Associated with malicious traffic in multiple feeds\n- Recent activity increase detected",
         )
         print("Test notification sent (check Slack).")
     else:
