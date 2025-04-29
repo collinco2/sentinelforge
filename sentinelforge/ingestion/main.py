@@ -251,6 +251,7 @@ def run_ingestion_pipeline():
                     # Fallback to default scoring without explanation
                     ioc_score, explanation_data = 0, None
 
+                # Use only the score part (integer) with categorize
                 ioc_cat = categorize(ioc_score)
 
                 # If we didn't request an explanation but the score is high, generate one now
@@ -259,6 +260,7 @@ def run_ingestion_pipeline():
                     and ioc_score >= settings.slack_alert_threshold
                 ):
                     try:
+                        # Unpack both score and explanation_data
                         _, explanation_data = score_ioc(
                             norm_value,
                             norm_type,

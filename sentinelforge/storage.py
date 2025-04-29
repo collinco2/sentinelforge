@@ -24,6 +24,7 @@ class IOC(Base):
     category = Column(String, nullable=False, default="low")
     enrichment_data = Column(JSON, nullable=True)
     summary = Column(String, nullable=True)
+    explanation_data = Column(JSON, nullable=True)  # SHAP explanation data
 
 
 def init_db():

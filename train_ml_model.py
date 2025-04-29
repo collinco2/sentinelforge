@@ -1,23 +1,43 @@
 #!/usr/bin/env python3
 
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import classification_report, confusion_matrix
-import joblib
-from pathlib import Path
 import logging
+import sys
+from pathlib import Path
 import sqlite3
 import json
 
-# Import our existing feature extraction code
-from sentinelforge.ml.scoring_model import extract_features
-
-# Configure logging
+# Set up logging first
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("train_ml_model")
+
+# Try to import ML libraries, exit gracefully if not available
+try:
+    import pandas as pd
+    import numpy as np  # noqa: F401
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import train_test_split, cross_val_score
+    from sklearn.metrics import classification_report, confusion_matrix
+    import joblib
+
+    _ml_libraries_available = True
+except ImportError as e:
+    logger.error(f"Required ML libraries not available: {e}")
+    logger.error(
+        "Please install required packages: pip install pandas numpy scikit-learn joblib"
+    )
+    _ml_libraries_available = False
+    if __name__ == "__main__":
+        sys.exit(1)
+
+# Import our existing feature extraction code
+try:
+    from sentinelforge.ml.scoring_model import extract_features
+except ImportError as e:
+    logger.error(f"Could not import from sentinelforge.ml.scoring_model: {e}")
+    if __name__ == "__main__":
+        sys.exit(1)
 
 
 def extract_db_data(db_path="ioc_store.db"):
@@ -201,17 +221,29 @@ def train_model(data):
     X = data.drop(["is_malicious", "score"], axis=1, errors="ignore")
     y_classification = data["is_malicious"]
 
-    # Cross validation
-    cv_scores = cross_val_score(
-        RandomForestClassifier(n_estimators=100, random_state=42),
-        X,
-        y_classification,
-        cv=5,
-        scoring="f1_macro",
-    )
+    # Make sure we have enough samples of each class for cross-validation
+    class_counts = pd.Series(y_classification).value_counts()
+    min_class_samples = class_counts.min()
 
-    logger.info(f"Cross-validation F1 scores: {cv_scores}")
-    logger.info(f"Mean CV F1 score: {cv_scores.mean():.4f}")
+    # Determine CV folds based on data size (min 2 folds, max 5)
+    cv_folds = min(5, max(2, min_class_samples))
+    logger.info(f"Using {cv_folds} folds for cross-validation based on sample size")
+
+    # Cross validation with adjusted folds
+    try:
+        cv_scores = cross_val_score(
+            RandomForestClassifier(n_estimators=100, random_state=42),
+            X,
+            y_classification,
+            cv=cv_folds,
+            scoring="f1_macro",
+        )
+
+        logger.info(f"Cross-validation F1 scores: {cv_scores}")
+        logger.info(f"Mean CV F1 score: {cv_scores.mean():.4f}")
+    except Exception as e:
+        logger.warning(f"Cross-validation failed: {e}. Skipping CV evaluation.")
+        cv_scores = None
 
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
@@ -254,18 +286,27 @@ def save_model(model, path="models/ioc_scorer.joblib"):
 
 
 if __name__ == "__main__":
+    # Make sure required libraries are available
+    if not _ml_libraries_available:
+        logger.error("Required ML libraries not available. Exiting.")
+        sys.exit(1)
+
     logger.info("Starting ML model training with real data")
 
-    # Extract data from database
-    df = extract_db_data()
+    try:
+        # Extract data from database
+        df = extract_db_data()
 
-    # Prepare features
-    features_df = prepare_ml_features(df)
+        # Prepare features
+        features_df = prepare_ml_features(df)
 
-    logger.info("Training model...")
-    model = train_model(features_df)
+        logger.info("Training model...")
+        model = train_model(features_df)
 
-    logger.info("Saving model...")
-    save_model(model)
+        logger.info("Saving model...")
+        save_model(model)
 
-    logger.info("Done!")
+        logger.info("Done!")
+    except Exception as e:
+        logger.error(f"Error during model training: {e}", exc_info=True)
+        sys.exit(1)
