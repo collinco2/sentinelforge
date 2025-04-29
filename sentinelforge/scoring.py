@@ -22,6 +22,14 @@ try:
 except ImportError:
     _explainer_available = False
 
+# Import new shap_explainer for enhanced explanations
+try:
+    from sentinelforge.ml.shap_explainer import explain_prediction
+
+    _shap_explainer_available = True
+except ImportError:
+    _shap_explainer_available = False
+
 logger = logging.getLogger(__name__)
 # Set logger level to INFO to see our messages
 logger.setLevel(logging.INFO)
@@ -279,7 +287,77 @@ def score_ioc_with_explanation(
         include_explanation=True,
     )
 
-    # Get the human-readable explanation
+    # Try to use the new shap_explainer if available
+    if _shap_explainer_available:
+        try:
+            # Extract features first
+            features = extract_features(
+                ioc_type=ioc_type,
+                source_feeds=source_feeds,
+                ioc_value=ioc_value,
+                enrichment_data=enrichment_data,
+                summary=summary,
+            )
+
+            # Get explanation using the new explainer
+            shap_explanation = explain_prediction(features)
+
+            if shap_explanation:
+                # Format the text explanation
+                text_lines = [
+                    "Factors influencing this score (in order of importance):"
+                ]
+
+                for item in shap_explanation[:5]:  # Show top 5 factors
+                    feature = item["feature"]
+                    importance = item["importance"]
+
+                    # Describe the impact
+                    if importance > 0.3:
+                        impact = "strongly increasing"
+                    elif importance > 0.1:
+                        impact = "moderately increasing"
+                    elif importance > 0:
+                        impact = "slightly increasing"
+                    elif importance > -0.1:
+                        impact = "slightly decreasing"
+                    elif importance > -0.3:
+                        impact = "moderately decreasing"
+                    else:
+                        impact = "strongly decreasing"
+
+                    # Make the feature name more readable
+                    readable_name = feature
+                    if feature.startswith("type_"):
+                        readable_name = feature[5:].title() + " Type"
+                    elif feature.startswith("feed_"):
+                        readable_name = "From " + feature[5:].title() + " Feed"
+                    elif feature == "feed_count":
+                        readable_name = "Number of Source Feeds"
+                    elif feature == "url_length":
+                        readable_name = "URL Length"
+                    elif feature.startswith("contains_"):
+                        readable_name = "Contains '" + feature[9:] + "'"
+
+                    text_lines.append(
+                        f"- {readable_name}: {impact} the score (impact: {abs(importance):.3f})"
+                    )
+
+                text_explanation = "\n".join(text_lines)
+
+                # Add explanation to explanation_data if it exists
+                if explanation_data is None:
+                    explanation_data = {}
+
+                explanation_data["text_explanation"] = text_explanation
+                explanation_data["shap_values"] = shap_explanation
+
+                return score, text_explanation, explanation_data
+        except Exception as e:
+            logger.error(f"Error generating enhanced explanation: {e}", exc_info=True)
+            # Fall back to original explanation if there's an error
+
+    # Get the human-readable explanation from the original data if enhanced version failed
     if explanation_data and "text_explanation" in explanation_data:
         text_explanation = explanation_data["text_explanation"]
     else:

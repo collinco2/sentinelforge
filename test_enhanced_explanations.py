@@ -343,7 +343,7 @@ def batch_test(
     results = []
 
     for i, ioc_data in enumerate(ioc_list):
-        logger.info(f"Processing batch item {i+1}/{len(ioc_list)}")
+        logger.info(f"Processing batch item {i + 1}/{len(ioc_list)}")
 
         try:
             # Extract parameters from the dictionary

@@ -37,24 +37,88 @@ def send_high_severity_alert(
         logger.debug("Slack client not initialized, skipping notification.")
         return
 
-    # Format the text message using mrkdwn
-    text = (
-        f":rotating_light: *High-Severity IOC Detected* :rotating_light:\n"
-        f"> *Value*: `{ioc_value}`\n"
-        f"> *Type*: `{ioc_type}`\n"
-        f"> *Score*: `{score}`\n"
-    )
+    # Determine color based on score (customize as needed)
+    if score >= 90:
+        color = "#FF0000"  # Red for very high risk
+    elif score >= 80:
+        color = "#FFA500"  # Orange for high risk
+    else:
+        color = "#FFFF00"  # Yellow for medium-high risk
 
-    # Conditionally add the link if provided
+    # Create blocks-based message for better formatting
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"⚠️ High-Severity IOC Detected: {score}/100",
+                "emoji": True,
+            },
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Type:*\n`{ioc_type}`"},
+                {"type": "mrkdwn", "text": f"*Value:*\n`{ioc_value}`"},
+            ],
+        },
+    ]
+
+    # Add link if provided
     if link:
-        text += f"> <{link}|View Details>\n"
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"<{link}|View Details in Dashboard>",
+                },
+            }
+        )
 
-    # Add explanation if available
+    # Add divider
+    blocks.append({"type": "divider"})
+
+    # Process explanation into smaller sections if provided
     if explanation:
-        text += f"\n*Explanation*:\n```\n{explanation}\n```"
+        # Split the explanation into logical sections
+        sections = explanation.split("\n\n")
+
+        for section in sections:
+            if not section.strip():
+                continue
+
+            # Determine if this is a section with a title
+            if ":" in section and len(section.split(":", 1)[0]) < 30:
+                title, content = section.split(":", 1)
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*{title.strip()}*\n{content.strip()}",
+                        },
+                    }
+                )
+            else:
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": section.strip()},
+                    }
+                )
+
+    # Create attachments for color coding
+    attachments = [{"color": color, "blocks": blocks}]
 
     try:
-        response = webhook.send(text=text)
+        # Send the message with blocks and attachments
+        response = webhook.send(
+            text=f"High-Severity IOC Detected: {ioc_type}:{ioc_value}",
+            blocks=blocks,
+            attachments=attachments,
+        )
+
         if response.status_code == 200:
             logger.info(
                 f"Successfully sent Slack alert for IOC: {ioc_type}:{ioc_value}"
@@ -81,7 +145,7 @@ if __name__ == "__main__":
             ioc_type="ip",
             score=99,
             link="http://example.com/ioc/8.8.8.8",
-            explanation="Factors influencing this score:\n- IP located in high-risk country\n- Associated with malicious traffic in multiple feeds\n- Recent activity increase detected",
+            explanation="Factors influencing this score:\n- IP located in high-risk country\n- Associated with malicious traffic in multiple feeds\n- Recent activity increase detected\n\nDetection Sources:\n- URLhaus feed\n- AbuseChTI feed\n\nAdditional Context:\n- Located in United States\n- Associated with Google DNS",
         )
         print("Test notification sent (check Slack).")
     else:

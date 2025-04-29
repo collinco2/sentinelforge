@@ -6,7 +6,7 @@ import logging
 from sentinelforge.storage import init_db, SessionLocal, IOC
 
 # Added scoring imports
-from sentinelforge.scoring import score_ioc, categorize
+from sentinelforge.scoring import score_ioc, categorize, score_ioc_with_explanation
 
 # Added enrichment import
 from sentinelforge.enrichment.whois_geoip import WhoisGeoIPEnricher
@@ -260,14 +260,15 @@ def run_ingestion_pipeline():
                     and ioc_score >= settings.slack_alert_threshold
                 ):
                     try:
-                        # Unpack both score and explanation_data
-                        _, explanation_data = score_ioc(
-                            norm_value,
-                            norm_type,
-                            feeds_seen,
-                            enrichment_data=enrichment_data,
-                            summary=summary,
-                            include_explanation=True,
+                        # Use the comprehensive explanation function instead
+                        _, text_explanation, explanation_data = (
+                            score_ioc_with_explanation(
+                                norm_value,
+                                norm_type,
+                                feeds_seen,
+                                enrichment_data=enrichment_data,
+                                summary=summary,
+                            )
                         )
                         if explanation_data:
                             logger.info(
@@ -305,6 +306,27 @@ def run_ingestion_pipeline():
                         explanation_text = None
                         if explanation_data and "text_explanation" in explanation_data:
                             explanation_text = explanation_data["text_explanation"]
+
+                            # Add information about the sources that contributed to this score
+                            explanation_text += "\n\nDetection Sources:"
+                            for feed in feeds_seen:
+                                explanation_text += f"\n- {feed.title()} feed"
+
+                            # Add enrichment data insights if available
+                            if enrichment_data:
+                                explanation_text += "\n\nAdditional Context:"
+                                if "country" in enrichment_data:
+                                    explanation_text += (
+                                        f"\n- Located in {enrichment_data['country']}"
+                                    )
+                                if "registrar" in enrichment_data:
+                                    explanation_text += f"\n- Registered with {enrichment_data['registrar']}"
+                                if "creation_date" in enrichment_data:
+                                    explanation_text += f"\n- Created on {enrichment_data['creation_date']}"
+
+                            # Add summary if available
+                            if summary:
+                                explanation_text += f"\n\nSummary:\n{summary}"
 
                         send_high_severity_alert(
                             norm_value,
