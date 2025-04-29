@@ -1,202 +1,281 @@
 #!/usr/bin/env python3
 """
-Simplified script to demonstrate ML model explainability using Kernel SHAP.
+SentinelForge ML Model Explainer
+
+Simple command-line tool to explain model predictions for IOCs.
 """
 
+import argparse
 import sys
-import re
-import numpy as np
-import pandas as pd
+import logging
+import os
 import matplotlib.pyplot as plt
-import shap
-import joblib
-from pathlib import Path
-from typing import List
+import matplotlib
 
-from sentinelforge.ml.scoring_model import extract_features, EXPECTED_FEATURES
+matplotlib.use("Agg")  # Use non-interactive backend
+import seaborn as sns
+from typing import List, Optional
+
+# Import SentinelForge modules
+from sentinelforge.ml.scoring_model import extract_features
+from sentinelforge.ml.shap_explainer import explain_prediction
 from sentinelforge.scoring import score_ioc
 
-# Create directory for plots
-Path("visualizations").mkdir(exist_ok=True)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+logger = logging.getLogger(__name__)
 
 
-def get_model_features(ioc_value: str, ioc_type: str, feeds: List[str]) -> pd.DataFrame:
-    """
-    Extract features from an IOC and prepare as DataFrame, ensuring the columns
-    are in the exact same order as used during training.
-    """
-    # Get features dictionary
-    features = extract_features(
-        ioc_type=ioc_type, source_feeds=feeds, ioc_value=ioc_value
+def generate_explanation_text(explanation):
+    """Generate human-readable text from explanation data."""
+    if not explanation:
+        return "No explanation available for this prediction."
+
+    # Create a readable explanation
+    text = "Factors influencing this score (in order of importance):\n"
+
+    for item in explanation[:5]:  # Show top 5 factors
+        feature = item["feature"]
+        importance = item["importance"]
+
+        # Describe the impact
+        if importance > 0.3:
+            impact = "strongly increasing"
+        elif importance > 0.1:
+            impact = "moderately increasing"
+        elif importance > 0:
+            impact = "slightly increasing"
+        elif importance > -0.1:
+            impact = "slightly decreasing"
+        elif importance > -0.3:
+            impact = "moderately decreasing"
+        else:
+            impact = "strongly decreasing"
+
+        # Make the feature name more readable
+        readable_name = feature
+        if feature.startswith("type_"):
+            readable_name = feature[5:].title() + " Type"
+        elif feature.startswith("feed_"):
+            readable_name = "From " + feature[5:].title() + " Feed"
+        elif feature == "feed_count":
+            readable_name = "Number of Source Feeds"
+        elif feature == "url_length":
+            readable_name = "URL Length"
+        elif feature.startswith("contains_"):
+            readable_name = "Contains '" + feature[9:] + "'"
+
+        text += (
+            f"- {readable_name}: {impact} the score (impact: {abs(importance):.3f})\n"
+        )
+
+    return text
+
+
+def visualize_explanation(explanation, ioc_value: str, output_dir: str = "./"):
+    """Generate visualization for explanation data."""
+    if not explanation:
+        return None
+
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Create sanitized filename
+    safe_name = "".join(c for c in ioc_value if c.isalnum() or c in ".-_")[:30]
+    if not safe_name:
+        safe_name = "ioc"
+
+    # Create filenames
+    summary_file = os.path.join(output_dir, f"{safe_name}_summary.png")
+    waterfall_file = os.path.join(output_dir, f"{safe_name}_waterfall.png")
+
+    # Extract data
+    feature_names = [item["feature"] for item in explanation]
+    importance_values = [item["importance"] for item in explanation]
+
+    # Create summary plot
+    plt.figure(figsize=(10, 8))
+    sns.barplot(
+        x=importance_values,
+        y=feature_names,
+        hue=[imp < 0 for imp in importance_values],
+        palette=["red", "green"],
+        legend=False,
+    )
+    plt.title(f"Feature Importance for {ioc_value}")
+    plt.xlabel("SHAP Value (Impact on Score)")
+    plt.tight_layout()
+    plt.savefig(summary_file)
+    plt.close()
+
+    # Create simplified waterfall plot
+    plt.figure(figsize=(12, 8))
+
+    # Get number of features to show, up to 8
+    n_features = min(len(feature_names), 8)
+
+    # Sort by absolute importance for waterfall
+    sorted_indices = sorted(
+        range(len(importance_values)),
+        key=lambda i: abs(importance_values[i]),
+        reverse=True,
     )
 
-    # Create a single-row DataFrame with all expected features
-    # Make sure we get the features in the exact order expected by the model
-    # This is critical for sklearn models which expect the same feature order as training
-    data = {}
-    for name in EXPECTED_FEATURES:
-        data[name] = [features.get(name, 0)]
+    # Get top features for clarity
+    top_indices = sorted_indices[:n_features]
+    top_features = [feature_names[i] for i in top_indices]
+    top_values = [importance_values[i] for i in top_indices]
 
-    df = pd.DataFrame(data)
-    return df
+    # Baseline value (0.5 for binary classification)
+    baseline = 0.5
+    cumulative = baseline
+
+    # Create axis positions
+    n_positions = n_features + 2  # features + baseline + final
+    positions = list(range(n_positions))
+
+    # Plot the waterfall
+    plt.barh([positions[-1]], [baseline], color="gray", label="Baseline")
+
+    for i, (feature, value) in enumerate(zip(top_features, top_values)):
+        plt.barh(
+            [positions[i + 1]],
+            [value],
+            left=cumulative,
+            color="green" if value > 0 else "red",
+        )
+        cumulative += value
+
+    plt.barh([positions[0]], [cumulative], color="blue", label="Final Score")
+
+    # Add feature names as y-tick labels
+    labels = ["Final"] + top_features + ["Baseline"]
+    plt.yticks(positions, labels)
+    plt.title(f"Score Contribution Waterfall for {ioc_value}")
+    plt.xlabel("Contribution to Score")
+    plt.tight_layout()
+    plt.savefig(waterfall_file)
+    plt.close()
+
+    return summary_file, waterfall_file
 
 
-def sanitize_filename(text: str) -> str:
+def explain_ioc(
+    ioc_value: str, ioc_type: str, feeds: List[str], output_dir: Optional[str] = None
+) -> dict:
     """
-    Create a safe filename from arbitrary text.
-    Removes special characters, limits length, and replaces problem characters.
+    Generate an explanation for an IOC.
+
+    Args:
+        ioc_value: The IOC value (e.g., IP address, domain name)
+        ioc_type: The IOC type (e.g., ip, domain, url, hash)
+        feeds: List of feed names where the IOC was observed
+        output_dir: Optional directory for saving visualizations
+
+    Returns:
+        A dictionary with explanation results
     """
-    # Replace any non-alphanumeric characters with underscores
-    safe_text = re.sub(r"[^a-zA-Z0-9_-]", "_", text)
+    try:
+        # Score the IOC
+        score, category = score_ioc(
+            ioc_value=ioc_value, ioc_type=ioc_type, source_feeds=feeds
+        )
 
-    # Limit the length to avoid excessively long filenames
-    if len(safe_text) > 50:
-        safe_text = safe_text[:50]
+        # Extract features
+        features = extract_features(
+            ioc_type=ioc_type, source_feeds=feeds, ioc_value=ioc_value
+        )
 
-    return safe_text
+        # Generate explanation
+        explanation = explain_prediction(features)
+
+        # Generate human-readable explanation
+        explanation_text = generate_explanation_text(explanation)
+
+        # Create visualizations if output_dir is provided
+        visualization_files = None
+        if output_dir:
+            visualization_files = visualize_explanation(
+                explanation, ioc_value, output_dir
+            )
+
+        return {
+            "ioc_value": ioc_value,
+            "ioc_type": ioc_type,
+            "source_feeds": feeds,
+            "score": score,
+            "category": category,
+            "explanation": explanation,
+            "explanation_text": explanation_text,
+            "visualization_files": visualization_files,
+        }
+
+    except Exception as e:
+        logger.error(f"Error explaining IOC: {e}")
+        return {
+            "ioc_value": ioc_value,
+            "ioc_type": ioc_type,
+            "source_feeds": feeds,
+            "error": str(e),
+        }
 
 
 def main():
-    if len(sys.argv) < 3:
-        print(
-            "Usage: python explain_simple.py <ioc_value> <ioc_type> [--feeds feed1 feed2 ...]"
-        )
-        sys.exit(1)
+    """Parse command-line arguments and run the explainer."""
+    parser = argparse.ArgumentParser(
+        description="Explain SentinelForge ML model predictions for IOCs."
+    )
 
-    ioc_value = sys.argv[1]
-    ioc_type = sys.argv[2]
+    parser.add_argument(
+        "ioc_value", help="The IOC value to explain (e.g., IP address, domain, URL)"
+    )
 
-    # Parse feeds
-    feeds = ["dummy"]  # Default feed
-    if "--feeds" in sys.argv:
-        feed_index = sys.argv.index("--feeds")
-        if feed_index + 1 < len(sys.argv):
-            feeds = []
-            for i in range(feed_index + 1, len(sys.argv)):
-                if sys.argv[i].startswith("--"):
-                    break
-                feeds.append(sys.argv[i])
+    parser.add_argument(
+        "ioc_type", choices=["ip", "domain", "url", "hash"], help="The type of IOC"
+    )
 
-    # Load the trained model
-    model_path = "models/ioc_scorer.joblib"
-    try:
-        model = joblib.load(model_path)
-        print(f"Model loaded from {model_path}")
-    except FileNotFoundError:
-        print(f"Error: Model file not found at {model_path}")
-        sys.exit(1)
+    parser.add_argument(
+        "--feeds",
+        nargs="+",
+        default=["dummy"],
+        help="Source feeds where the IOC was observed (space-separated)",
+    )
 
-    # Print the expected feature names from the model
-    print("Expected feature names:")
-    if hasattr(model, "feature_names_in_"):
-        print(f"Model expects {len(model.feature_names_in_)} features:")
-        for i, feature in enumerate(model.feature_names_in_):
-            print(f"  {i}: {feature}")
+    parser.add_argument(
+        "--output-dir",
+        default="./visualizations",
+        help="Directory to save visualization files",
+    )
 
-    # Extract features
-    X = get_model_features(ioc_value, ioc_type, feeds)
-    print(f"Extracted {len(X.columns)} features for {ioc_type}: {ioc_value}")
+    args = parser.parse_args()
 
-    # Verify that the feature names match
-    if hasattr(model, "feature_names_in_"):
-        all_match = True
-        for i, (expected, actual) in enumerate(zip(model.feature_names_in_, X.columns)):
-            if expected != actual:
-                print(
-                    f"Mismatch at position {i}: expected '{expected}', got '{actual}'"
-                )
-                all_match = False
+    # Run the explainer
+    result = explain_ioc(
+        ioc_value=args.ioc_value,
+        ioc_type=args.ioc_type,
+        feeds=args.feeds,
+        output_dir=args.output_dir,
+    )
 
-        if all_match:
-            print("Feature names match model expectations!")
+    # Print the results
+    print(f"\nIOC: {result['ioc_value']} ({result['ioc_type']})")
+    print(f"Source Feeds: {', '.join(result['source_feeds'])}")
 
-    # Get the model prediction
-    try:
-        prediction = model.predict_proba(X)[0, 1]  # Probability of class 1 (malicious)
-        print(f"ML model prediction: {prediction:.4f}")
-    except Exception as e:
-        print(f"Error getting prediction: {e}")
-        # Try to fix the order if possible
-        if hasattr(model, "feature_names_in_"):
-            print("Attempting to fix feature order...")
-            X_reordered = X[model.feature_names_in_]
-            prediction = model.predict_proba(X_reordered)[0, 1]
-            print(f"ML model prediction after reordering: {prediction:.4f}")
-            X = X_reordered
-        else:
-            print(
-                "Cannot fix feature order, model does not have feature_names_in_ attribute"
-            )
-            sys.exit(1)
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return 1
 
-    # Get the score using the scoring function
-    score, _ = score_ioc(ioc_value, ioc_type, feeds)
-    print(f"Final score: {score}")
+    print(f"Score: {result['score']} ({result.get('category', 'unknown')})")
+    print("\n" + result["explanation_text"])
 
-    # Create a sanitized filename for output
-    safe_ioc_value = sanitize_filename(ioc_value)
+    if result.get("visualization_files"):
+        summary_file, waterfall_file = result["visualization_files"]
+        print("\nVisualizations saved to:")
+        print(f"  - Summary Plot: {summary_file}")
+        print(f"  - Waterfall Plot: {waterfall_file}")
 
-    try:
-        # Use a simple permutation explainer which is more robust
-        explainer = shap.explainers.Permutation(
-            model.predict_proba,
-            X,
-            max_evals=300,  # Increase for more stable results
-        )
-
-        # Calculate SHAP values
-        shap_values = explainer(X)
-
-        # For classification models, use the positive class values
-        if shap_values.shape[1] > 1:  # More than one output dimension
-            shap_values = shap_values[:, :, 1]  # Select second class (malicious)
-
-        # Create summary plot (bar plot of feature importance)
-        plt.figure(figsize=(12, 8))
-        shap.plots.bar(shap_values, show=False)
-        plt.title(f"Feature importance for {ioc_type}: {ioc_value}", fontsize=14)
-        plt.tight_layout()
-        plot_path = f"visualizations/shap_summary_{ioc_type}_{safe_ioc_value}.png"
-        plt.savefig(plot_path, bbox_inches="tight")
-        plt.close()
-        print(f"\nSHAP visualization saved to: {plot_path}")
-
-        # Create waterfall plot for detailed explanation
-        plt.figure(figsize=(12, 8))
-        shap.plots.waterfall(shap_values[0], show=False)
-        plt.title(f"SHAP waterfall plot for {ioc_type}: {ioc_value}", fontsize=14)
-        waterfall_path = (
-            f"visualizations/shap_waterfall_{ioc_type}_{safe_ioc_value}.png"
-        )
-        plt.savefig(waterfall_path, bbox_inches="tight")
-        plt.close()
-        print(f"SHAP waterfall plot saved to: {waterfall_path}")
-
-        # Prepare feature importance info
-        importance_df = pd.DataFrame(
-            {
-                "Feature": X.columns,
-                "SHAP Value": np.abs(shap_values.values).mean(0),
-                "Direction": np.where(
-                    shap_values.values.mean(0) > 0, "Increases", "Decreases"
-                ),
-            }
-        )
-        importance_df = importance_df.sort_values("SHAP Value", ascending=False)
-
-        # Print top 5 most important features
-        print("\nTop 5 most influential features:")
-        for i, (_, row) in enumerate(importance_df.head(5).iterrows()):
-            print(
-                f"  {i + 1}. {row['Feature']}: {row['Direction']} risk (importance: {row['SHAP Value']:.4f})"
-            )
-
-    except Exception as e:
-        print(f"Error generating explanations: {e}")
-        import traceback
-
-        traceback.print_exc()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

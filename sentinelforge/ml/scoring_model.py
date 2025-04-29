@@ -269,9 +269,16 @@ def predict_score(features: Dict[str, Any]) -> float:
         return 0.0
 
     try:
-        # Prepare feature vector in the correct order using EXPECTED_FEATURES_FULL
+        # Get the feature names the model was trained on
+        if hasattr(_model, "feature_names_in_"):
+            model_features = list(_model.feature_names_in_)
+        else:
+            # Default to first 34 features if model doesn't have feature_names_in_
+            model_features = EXPECTED_FEATURES_FULL[:34]
+
+        # Prepare feature vector in the correct order using model features
         # This ensures we match exactly what the model was trained with
-        feature_vector = [features.get(name, 0) for name in EXPECTED_FEATURES_FULL]
+        feature_vector = [features.get(name, 0) for name in model_features]
 
         # Reshape for scikit-learn (assuming single sample)
         feature_array = np.array([feature_vector])

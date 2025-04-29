@@ -1,10 +1,9 @@
-import shap
 import pandas as pd
 import joblib
 import logging
 from typing import Dict, List, Any
 
-from .scoring_model import MODEL_PATH, EXPECTED_FEATURES
+from .scoring_model import MODEL_FILE_PATH as MODEL_PATH, EXPECTED_FEATURES_FULL
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -35,38 +34,51 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
         if model is None:
             return []
 
+        # Get the feature names the model was trained on
+        if hasattr(model, "feature_names_in_"):
+            model_features = list(model.feature_names_in_)
+        else:
+            # Default to first 34 features if model doesn't have feature_names_in_
+            model_features = EXPECTED_FEATURES_FULL[:34]
+
         # Convert features dictionary to DataFrame
         feature_df = pd.DataFrame([features])
 
         # Ensure all expected features are present
-        for feature in EXPECTED_FEATURES:
+        for feature in model_features:
             if feature not in feature_df.columns:
                 feature_df[feature] = 0
 
         # Reorder columns to match training data
-        feature_df = feature_df[EXPECTED_FEATURES]
+        feature_df = feature_df[model_features]
 
-        # Create a SHAP explainer
-        explainer = shap.TreeExplainer(model)
+        # Create a simpler explanation since TreeExplainer is causing issues
+        # We'll use a permutation-based approach
+        importances = []
 
-        # Calculate SHAP values
-        shap_values = explainer.shap_values(feature_df)
+        # Get baseline prediction
+        baseline_pred = model.predict_proba(feature_df.values)[0, 1]
 
-        # For binary classification, shap_values is a list with one array
-        if isinstance(shap_values, list):
-            shap_values = shap_values[1]  # Use positive class values
-
-        # Get feature importance
-        feature_importance = []
-        for i, feature_name in enumerate(EXPECTED_FEATURES):
-            # Skip features with zero importance
-            if abs(shap_values[0][i]) < 0.001:
+        # Test importance of each feature
+        for i, feature_name in enumerate(model_features):
+            # Skip features with zero value
+            if feature_df[feature_name].iloc[0] == 0:
                 continue
 
-            feature_importance.append(
+            # Create a copy with this feature zeroed
+            modified = feature_df.copy()
+            modified[feature_name] = 0
+
+            # Get new prediction
+            new_pred = model.predict_proba(modified.values)[0, 1]
+
+            # Calculate importance (difference from baseline)
+            importance = baseline_pred - new_pred
+
+            importances.append(
                 {
                     "feature": feature_name,
-                    "importance": float(shap_values[0][i]),
+                    "importance": float(importance),
                     "value": float(feature_df[feature_name].iloc[0])
                     if pd.api.types.is_numeric_dtype(feature_df[feature_name])
                     else str(feature_df[feature_name].iloc[0]),
@@ -74,10 +86,10 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
 
         # Sort by absolute importance
-        feature_importance.sort(key=lambda x: abs(x["importance"]), reverse=True)
+        importances.sort(key=lambda x: abs(x["importance"]), reverse=True)
 
-        # Limit to top 10 features
-        return feature_importance[:10]
+        # Return top 10 features
+        return importances[:10]
 
     except Exception as e:
         logger.error(f"Error generating explanation: {e}")

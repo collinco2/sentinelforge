@@ -270,15 +270,15 @@ def explain_ioc(ioc_value):
         if not conn:
             return jsonify({"error": "Database connection failed"}), 500
 
-        # Log the columns for debugging
+        # Log the actual schema
         cursor = conn.execute("PRAGMA table_info(iocs)")
         columns = [row["name"] for row in cursor.fetchall()]
         logger.info(f"Database columns: {columns}")
 
-        # Try to clean the URL if it contains encoding issues
+        # Clean the IOC value
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
 
-        # Use ioc_value column to ensure we're looking up the correct record
+        # Find the IOC in the database - use ioc_value column, not value
         cursor = conn.execute(
             "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
         )
@@ -337,26 +337,56 @@ def explain_ioc(ioc_value):
         ioc_dict = row_to_dict(ioc)
 
         # Create a generic filename to avoid issues with corrupted IOC values
-        viz_filename = "ioc_explanation.png"
+        viz_filename = f"ioc_explanation_{hash(str(ioc_value)) % 10000:04d}.png"
 
         try:
-            # Try to generate real explanation
+            # Get enrichment data as a dictionary
+            enrichment_data = {}
+            if ioc_dict.get("enrichment_data"):
+                try:
+                    # If it's a string (JSON), parse it
+                    if isinstance(ioc_dict["enrichment_data"], str):
+                        import json
+
+                        enrichment_data = json.loads(ioc_dict["enrichment_data"])
+                    elif isinstance(ioc_dict["enrichment_data"], dict):
+                        enrichment_data = ioc_dict["enrichment_data"]
+                except Exception as e:
+                    logger.error(f"Error parsing enrichment data: {e}")
+
+            # Extract features with the correct parameters
             features = extract_features(
-                ioc_dict, [ioc_dict.get("source_feed", "unknown")]
+                ioc_type=ioc_dict.get("ioc_type", "unknown"),
+                source_feeds=[ioc_dict.get("source_feed", "unknown")],
+                ioc_value=ioc_dict.get("ioc_value", ""),  # Use ioc_value, not value
+                enrichment_data=enrichment_data,
+                summary=ioc_dict.get("summary", ""),
             )
-            explanation = explain_prediction(features)
+
+            # If explanation_data exists in db and is not empty, try to use it directly
+            existing_explanation = None
+            if ioc_dict.get("explanation_data"):
+                try:
+                    import json
+
+                    existing_explanation = json.loads(ioc_dict["explanation_data"])
+                except Exception as e:
+                    logger.error(f"Error parsing existing explanation data: {e}")
+
+            # Generate a new explanation if needed
+            explanation = existing_explanation or explain_prediction(features)
 
             # Create visualization
             if explanation:
                 viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
 
                 # Create waterfall plot for feature importance
-                features = [item["feature"] for item in explanation]
-                importance = [item["importance"] for item in explanation]
+                feature_names = [item["feature"] for item in explanation]
+                importance_values = [item["importance"] for item in explanation]
 
                 plt.figure(figsize=(10, 6))
-                colors = ["red" if imp < 0 else "green" for imp in importance]
-                sns.barplot(x=importance, y=features, palette=colors)
+                colors = ["red" if imp < 0 else "green" for imp in importance_values]
+                sns.barplot(x=importance_values, y=feature_names, palette=colors)
                 plt.title("Feature Importance")
                 plt.xlabel("SHAP Value (Impact on Score)")
                 plt.tight_layout()
@@ -366,7 +396,7 @@ def explain_ioc(ioc_value):
                 return jsonify(
                     {
                         "ioc": ioc_dict,
-                        "features": features,
+                        "features": feature_names,
                         "explanation": explanation,
                         "visualization": f"/visualizations/{viz_filename}",
                     }
@@ -439,13 +469,23 @@ def get_stats():
             "SELECT MIN(score) as min, MAX(score) as max, AVG(score) as avg FROM iocs"
         )
         score_row = cursor.fetchone()
-        # Convert SQLite Row to dict
-        score_stats = dict(score_row) if score_row else {"min": 0, "max": 0, "avg": 0}
+        # Convert SQLite Row to dict and ensure all values are serializable
+        score_stats = {
+            "min": float(score_row["min"])
+            if score_row and score_row["min"] is not None
+            else 0,
+            "max": float(score_row["max"])
+            if score_row and score_row["max"] is not None
+            else 0,
+            "avg": float(score_row["avg"])
+            if score_row and score_row["avg"] is not None
+            else 0,
+        }
         stats["scores"] = score_stats
 
         # Create score distribution visualization
         cursor = conn.execute("SELECT score FROM iocs")
-        scores = [row[0] for row in cursor.fetchall()]
+        scores = [float(row[0]) for row in cursor.fetchall() if row[0] is not None]
 
         plt.figure(figsize=(10, 6))
         sns.histplot(scores, kde=True, bins=20)
