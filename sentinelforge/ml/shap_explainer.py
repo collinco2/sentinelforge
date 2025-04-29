@@ -79,7 +79,7 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
                 {
                     "feature": feature_name,
                     "importance": float(importance),
-                    "value": float(feature_df[feature_name].iloc[0])
+                    "feature_value": float(feature_df[feature_name].iloc[0])
                     if pd.api.types.is_numeric_dtype(feature_df[feature_name])
                     else str(feature_df[feature_name].iloc[0]),
                 }
