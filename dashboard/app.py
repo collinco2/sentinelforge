@@ -426,21 +426,44 @@ def explain_ioc(ioc_value):
                 }
             ), 500
 
+        # Log database schema for debugging
+        try:
+            cursor = conn.execute("PRAGMA table_info(iocs)")
+            columns = [row["name"] for row in cursor.fetchall()]
+            logger.info(f"Database columns: {columns}")
+        except Exception as schema_err:
+            logger.error(f"Error checking database schema: {schema_err}")
+
         # Clean the IOC value
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
 
         # Find the IOC in the database - explicitly use the ioc_value column name
-        cursor = conn.execute(
-            "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
-        )
-        ioc = cursor.fetchone()
+        try:
+            logger.info(
+                f"Executing SQL query: SELECT * FROM iocs WHERE ioc_value = '{cleaned_ioc_value}'"
+            )
+            cursor = conn.execute(
+                "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
+            )
+            ioc = cursor.fetchone()
+        except Exception as query_err:
+            logger.error(f"SQL error on primary query: {query_err}", exc_info=True)
+            ioc = None
 
         # If not found with cleaned value, try with original
         if not ioc and cleaned_ioc_value != ioc_value:
-            cursor = conn.execute(
-                "SELECT * FROM iocs WHERE ioc_value = ?", (ioc_value,)
-            )
-            ioc = cursor.fetchone()
+            try:
+                logger.info(
+                    f"Trying alternate query: SELECT * FROM iocs WHERE ioc_value = '{ioc_value}'"
+                )
+                cursor = conn.execute(
+                    "SELECT * FROM iocs WHERE ioc_value = ?", (ioc_value,)
+                )
+                ioc = cursor.fetchone()
+            except Exception as alt_query_err:
+                logger.error(
+                    f"SQL error on alternate query: {alt_query_err}", exc_info=True
+                )
 
         if not ioc:
             logger.info(f"IOC not found: {ioc_value}, providing generic explanation")
@@ -467,27 +490,51 @@ def explain_ioc(ioc_value):
                     logger.error(f"Error parsing enrichment data: {e}")
 
             # Extract features with the correct parameters
-            features = extract_features(
-                ioc_type=ioc_dict.get("ioc_type", "unknown"),
-                source_feeds=[ioc_dict.get("source_feed", "unknown")],
-                ioc_value=ioc_dict.get("ioc_value", ""),  # Use ioc_value, not value
-                enrichment_data=enrichment_data,
-                summary=ioc_dict.get("summary", ""),
-            )
+            try:
+                logger.info(
+                    f"Extracting features with params: ioc_type={ioc_dict.get('ioc_type')}, feeds=[{ioc_dict.get('source_feed')}], ioc_value={ioc_dict.get('ioc_value')}"
+                )
+                features = extract_features(
+                    ioc_type=ioc_dict.get("ioc_type", "unknown"),
+                    source_feeds=[ioc_dict.get("source_feed", "unknown")],
+                    ioc_value=ioc_dict.get(
+                        "ioc_value", ""
+                    ),  # Use ioc_value only, not "value"
+                    enrichment_data=enrichment_data,
+                    summary=ioc_dict.get("summary", ""),
+                )
+                logger.info(f"Features extracted successfully: {features}")
+            except Exception as feature_err:
+                logger.error(f"Error extracting features: {feature_err}", exc_info=True)
+                raise
 
             # If explanation_data exists in db and is not empty, try to use it directly
             existing_explanation = None
             if ioc_dict.get("explanation_data"):
                 try:
+                    logger.info(
+                        "Found existing explanation data in database, parsing..."
+                    )
                     if isinstance(ioc_dict["explanation_data"], str):
                         existing_explanation = json.loads(ioc_dict["explanation_data"])
                     elif isinstance(ioc_dict["explanation_data"], dict):
                         existing_explanation = ioc_dict["explanation_data"]
+                    logger.info(
+                        f"Successfully parsed explanation: {existing_explanation}"
+                    )
                 except Exception as e:
                     logger.error(f"Error parsing existing explanation data: {e}")
 
             # Generate a new explanation if needed
-            explanation = existing_explanation or explain_prediction(features)
+            explanation = None
+            try:
+                explanation = existing_explanation or explain_prediction(features)
+                logger.info(f"Final explanation: {explanation}")
+            except Exception as explain_err:
+                logger.error(
+                    f"Error generating new explanation: {explain_err}", exc_info=True
+                )
+                raise
 
             # Create visualization
             if explanation:
