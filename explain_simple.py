@@ -270,7 +270,7 @@ def main():
 
     if result.get("visualization_files"):
         summary_file, waterfall_file = result["visualization_files"]
-        print(f"\nVisualizations saved to:")
+        print("\nVisualizations saved to:")
         print(f"  - Summary Plot: {summary_file}")
         print(f"  - Waterfall Plot: {waterfall_file}")
 
