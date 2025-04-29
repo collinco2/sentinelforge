@@ -8,9 +8,15 @@ from typing import List, Dict, Any
 from sentinelforge.settings import settings
 
 # Import ML scoring functions
-from sentinelforge.ml.scoring_model import extract_features, predict_score
+from sentinelforge.ml.scoring_model import (
+    extract_features,
+    predict_score,
+    KNOWN_SOURCE_FEEDS,
+)
 
 logger = logging.getLogger(__name__)
+# Set logger level to INFO to see our messages
+logger.setLevel(logging.INFO)
 
 # Define path to rules file relative to this file's directory or project root?
 # RULES_FILE_PATH = Path("scoring_rules.yaml") # Use path from settings
@@ -64,14 +70,21 @@ except Exception as e:
     }
 
 
-def score_ioc(ioc_value: str, ioc_type: str, source_feeds: List[str]) -> int:
+def score_ioc(
+    ioc_value: str,
+    ioc_type: str,
+    source_feeds: List[str],
+    enrichment_data: Dict = None,
+    summary: str = "",
+) -> int:
     """
-    Compute a score based on feeds and multi-feed bonuses.
-    Also computes (but doesn't yet use) an ML-based score.
+    Compute a score based on feeds, multi-feed bonuses, and ML prediction.
     :param ioc_value: the indicator value
     :param ioc_type: the indicator type (e.g., 'ip', 'domain')
     :param source_feeds: list of feed names where the IOC appeared
-    :return: integer score (currently rule-based)
+    :param enrichment_data: optional enrichment data dictionary
+    :param summary: optional IOC summary
+    :return: integer score (combined rule-based and ML-based)
     """
     # --- Rule-Based Score ---
     rule_score = 0
@@ -99,21 +112,51 @@ def score_ioc(ioc_value: str, ioc_type: str, source_feeds: List[str]) -> int:
 
     logger.debug(f"  - Rule-based score for '{ioc_value}': {rule_score}")
 
-    # --- ML-Based Score (Placeholder Integration) ---
-    # Pass correct arguments to extract_features
-    features = extract_features(ioc_type, source_feeds)
-    ml_score_prob = predict_score(features)  # Score is likely 0.0-1.0
-    # TODO: Decide how to use ml_score_prob:
-    # 1. Combine with rule_score (e.g., weighted average)?
-    # 2. Convert prob to 0-100 scale and use instead of rule_score?
-    # 3. Use for categorization only?
-    # Currently just logging it.
-    logger.debug(
-        f"  - ML-based score prediction for '{ioc_value}': {ml_score_prob:.4f}"
+    # --- ML-Based Score ---
+    # Pass all parameters to extract_features
+    features = extract_features(
+        ioc_type=ioc_type,
+        source_feeds=source_feeds,
+        ioc_value=ioc_value,
+        enrichment_data=enrichment_data,
+        summary=summary,
+    )
+    ml_score_prob = predict_score(features)  # Score is 0.0-1.0
+
+    # Convert ML probability to same scale as rule_score (assuming 0-100 scale)
+    # Get maximum possible score from rules for scaling
+    max_rule_score = 100  # Default assumption
+    for feed in KNOWN_SOURCE_FEEDS:
+        max_rule_score += feed_scores.get(feed, 0)
+    max_rule_score += bonus_points
+
+    # Scale ML score to match rule score scale
+    ml_score = int(ml_score_prob * max_rule_score)
+
+    logger.info(
+        f"  - ML-based score prediction for '{ioc_value}': {ml_score_prob:.4f} (scaled: {ml_score})"
+    )
+    # Add direct print statement for debugging
+    print(
+        f"DEBUG - ML score for {ioc_value}: {ml_score_prob:.4f} (scaled to {ml_score})"
     )
 
-    # Return the rule-based score for now
-    return rule_score
+    # Combine scores with weighting (adjust weights as needed)
+    # Using 70% rule-based, 30% ML-based weighting
+    rule_weight = 0.7
+    ml_weight = 0.3
+
+    final_score = int((rule_score * rule_weight) + (ml_score * ml_weight))
+
+    logger.info(
+        f"  - Final combined score for '{ioc_value}': {final_score} (rule: {rule_score}, ML: {ml_score})"
+    )
+    # Add direct print statement for debugging
+    print(
+        f"DEBUG - Final score for {ioc_value}: {final_score} (rule: {rule_score}, ML: {ml_score})"
+    )
+
+    return final_score
 
 
 def categorize(score: int) -> str:

@@ -1,23 +1,35 @@
 from typing import List, Dict, Optional, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_value_and_type(item: Dict[str, Any]) -> Optional[tuple[str, str]]:
     """Extracts the primary value and its type from an indicator dict."""
+
+    # Debug logging
+    logger.debug(f"Normalizing item: {item}")
+
     if "ip" in item:
+        logger.debug(f"Extracted IP: {item['ip']}")
         return str(item["ip"]), "ip"
     if "domain" in item:
+        logger.debug(f"Extracted domain: {item['domain']}")
         return str(item["domain"]), "domain"
     if "url" in item:
         # Basic check if it's just a domain or a full URL path
         # You might want more sophisticated URL parsing here
+        logger.debug(f"Extracted URL: {item['url']}")
         return str(item["url"]), "url"
     if "hash" in item:
         # Could check for specific hash types (md5, sha1, sha256) if needed
+        logger.debug(f"Extracted hash: {item['hash']}")
         return str(item["hash"]), "hash"
     if "value" in item and "type" in item:
         # Handle generic STIX-like format from DummyIngestor
         value = str(item["value"])
         type_ = str(item["type"])
+        logger.debug(f"Extracted STIX format - type: {type_}, value: {value}")
         if type_ == "ipv4-addr":
             type_ = "ip"
         if type_ == "domain-name":
@@ -32,8 +44,11 @@ def _get_value_and_type(item: Dict[str, Any]) -> Optional[tuple[str, str]]:
             if "SHA-256" in hashes:
                 return str(hashes["SHA-256"]), "hash"
             # Fallback if only file type is known but no hash
+            logger.debug("Cannot extract hash value from file type")
             return None  # Cannot uniquely identify without a value
         return value, type_
+
+    logger.debug(f"Failed to extract value and type from item: {item}")
     return None  # Indicate item couldn't be processed
 
 
@@ -44,11 +59,16 @@ def normalize_indicators(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     - Return list of unique indicator dicts, potentially adding normalized keys.
       (Original implementation returned original dicts)
     """
+    logger.info(f"Normalizing {len(raw)} raw indicators")
+
     seen = set()
     result = []  # This will now store modified dicts or tuples
+    skipped = 0
+
     for item in raw:
         value_type = _get_value_and_type(item)
         if value_type is None:
+            skipped += 1
             continue
 
         value, type_ = value_type
@@ -80,4 +100,5 @@ def normalize_indicators(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             }
             result.append(normalized_item)
 
+    logger.info(f"Normalized {len(result)} indicators, skipped {skipped}")
     return result
