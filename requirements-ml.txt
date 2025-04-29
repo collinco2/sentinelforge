@@ -1,0 +1,7 @@
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.0
+joblib>=1.2.0
+matplotlib>=3.5.0  # For visualizations
+seaborn>=0.11.0    # For visualizations
+shap>=0.41.0       # For model explainability 

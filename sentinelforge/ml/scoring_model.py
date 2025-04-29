@@ -1,12 +1,90 @@
 import logging
-from typing import Dict, Any, List, Set
-import joblib  # Example for loading models
-from pathlib import Path
 import os
 import contextlib
+from typing import Dict, List, Any
 
-# TODO: Define path for saved models
-MODEL_PATH = Path("models/ioc_scorer.joblib")  # Example path
+# Import ML libraries with error handling
+try:
+    import numpy as np
+
+    # Only import pandas and sklearn when needed for type checking
+    import pandas as pd  # noqa: F401
+    import joblib
+    from sklearn.ensemble import RandomForestClassifier  # noqa: F401
+
+    _ml_libraries_available = True
+except ImportError:
+    _ml_libraries_available = False
+    logging.warning(
+        "ML libraries (pandas, numpy, joblib, scikit-learn) not available. ML scoring will be disabled."
+    )
+
+# Import settings
+from sentinelforge.settings import settings
+
+logger = logging.getLogger(__name__)
+
+# Default model path
+MODEL_FILE_PATH = settings.model_path
+
+# These feeds are known by the model during training
+KNOWN_SOURCE_FEEDS = [
+    "dummy",
+    "abusech",
+    "urlhaus",
+    "malwaredomains",
+    "phishtank",
+    "openphish",
+]
+
+# Expected features the model was trained on
+EXPECTED_FEATURES = [
+    "type_ip",
+    "type_domain",
+    "type_url",
+    "type_hash",
+    "type_other",
+    "feed_dummy",
+    "feed_abusech",
+    "feed_urlhaus",
+    "feed_malwaredomains",
+    "feed_phishtank",
+    "feed_openphish",
+    "feed_count",
+    "has_country",
+    "country_high_risk",
+    "country_medium_risk",
+    "has_geo_coords",
+    "has_registrar",
+    "has_creation_date",
+    "url_length",
+    "dot_count",
+    "contains_?",
+    "contains_=",
+    "contains_&",
+    "hash_length",
+    "has_summary",
+    "summary_length",
+    "from_threat_feed",
+    "from_url_feed",
+    "from_test_feed",
+]
+
+# Load the model (if available)
+_model = None
+try:
+    if os.path.exists(MODEL_FILE_PATH) and _ml_libraries_available:
+        _model = joblib.load(MODEL_FILE_PATH)
+        logger.info(f"ML model loaded successfully from {MODEL_FILE_PATH}")
+    else:
+        if not os.path.exists(MODEL_FILE_PATH):
+            logger.warning(
+                f"ML model file not found at {MODEL_FILE_PATH}. ML scoring will be limited."
+            )
+        # Model remains None
+except Exception as e:
+    logger.error(f"Error loading ML model: {e}")
+    # Model remains None
 
 # Define known IOC types and source feeds for feature generation
 # TODO: Keep this list consistent with normalization/ingestion logic
@@ -18,10 +96,9 @@ KNOWN_IOC_TYPES = [
     "email",
     "other",
 ]  # Added email, other
-KNOWN_SOURCE_FEEDS = ["dummy", "urlhaus", "abusech"]  # From scoring_rules.yaml
 
 # Define the expected features based on the above + feed count
-EXPECTED_FEATURES = (
+EXPECTED_FEATURES_FULL = (
     [f"type_{t}" for t in KNOWN_IOC_TYPES]
     + [f"feed_{f}" for f in KNOWN_SOURCE_FEEDS]
     + ["feed_count"]
@@ -54,53 +131,34 @@ EXPECTED_FEATURES = (
     ]  # General features
 )
 
-logger = logging.getLogger(__name__)
-
-# --- Model Loading ---
-# Load the trained model once when the module is imported
-_model = None
-if MODEL_PATH.exists():
-    try:
-        _model = joblib.load(MODEL_PATH)
-        logger.info(f"ML scoring model loaded successfully from {MODEL_PATH}")
-    except Exception as e:
-        logger.error(
-            f"Failed to load ML scoring model from {MODEL_PATH}: {e}", exc_info=True
-        )
-        _model = None
-else:
-    logger.warning(
-        f"ML scoring model file not found at {MODEL_PATH}. ML scoring will be disabled."
-    )
-
 
 # --- Feature Extraction ---
 def extract_features(
     ioc_type: str,
     source_feeds: List[str],
     ioc_value: str = "",
-    enrichment_data: Dict = None,
+    enrichment_data: Dict[str, Any] = None,
     summary: str = "",
-) -> Dict[str, Any]:
+) -> Dict[str, float]:
     """
-    Extracts features for the ML model based on IOC type, value, source feeds, and optional enrichment data.
+    Extract ML features from an IOC and its metadata.
 
     Args:
-        ioc_type: The type of the indicator (e.g., 'ip', 'domain').
-        source_feeds: List of feed names where the IOC appeared.
-        ioc_value: The actual value of the IOC (e.g., the IP address, domain name).
-        enrichment_data: Optional dictionary containing enrichment data.
-        summary: Optional text summary of the IOC.
+        ioc_type: The type of indicator (e.g., "ip", "domain", "url", "hash")
+        source_feeds: List of feed names where the IOC was observed
+        ioc_value: The actual indicator value
+        enrichment_data: Optional dictionary with enrichment data
+        summary: Optional summary/description of the IOC
 
     Returns:
-        A dictionary of features ready for the model.
+        A dictionary with feature names and values (all numeric)
     """
-    # Initialize enrichment data if None
+    # Use empty dict if enrichment_data is None
     if enrichment_data is None:
         enrichment_data = {}
 
     # Initialize all expected features to 0
-    features = {name: 0 for name in EXPECTED_FEATURES}
+    features = {name: 0 for name in EXPECTED_FEATURES_FULL}
 
     # 1. One-hot encode IOC type
     normalized_type = ioc_type.lower().strip()
@@ -111,7 +169,7 @@ def extract_features(
         features["type_other"] = 1  # Fallback for unknown types
 
     # 2. Source Feed Features
-    unique_feeds: Set[str] = set(f.lower().strip() for f in source_feeds)
+    unique_feeds = set(f.lower().strip() for f in source_feeds)
     features["feed_count"] = len(unique_feeds)
 
     # 3. Specific Feed Presence (Binary)
@@ -211,13 +269,11 @@ def predict_score(features: Dict[str, Any]) -> float:
         return 0.0
 
     try:
-        # Prepare feature vector in the correct order using EXPECTED_FEATURES
+        # Prepare feature vector in the correct order using EXPECTED_FEATURES_FULL
         # This ensures we match exactly what the model was trained with
-        feature_vector = [features.get(name, 0) for name in EXPECTED_FEATURES]
+        feature_vector = [features.get(name, 0) for name in EXPECTED_FEATURES_FULL]
 
         # Reshape for scikit-learn (assuming single sample)
-        import numpy as np
-
         feature_array = np.array([feature_vector])
 
         # Get probability of malicious class (second column of predict_proba output)
