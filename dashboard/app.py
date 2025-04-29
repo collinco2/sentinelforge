@@ -505,8 +505,14 @@ def explain_ioc(ioc_value):
                     "summary": ioc_dict.get("summary", ""),
                 }
 
-                # Extract features
-                features = extract_features(**feature_params)
+                # Extract features using explicitly named parameters to avoid 'value' column issue
+                features = extract_features(
+                    ioc_type=feature_params["ioc_type"],
+                    source_feeds=feature_params["source_feeds"],
+                    ioc_value=feature_params["ioc_value"],
+                    enrichment_data=feature_params["enrichment_data"],
+                    summary=feature_params["summary"],
+                )
 
                 logger.info(f"Features extracted successfully: {features}")
             except Exception as feature_err:
@@ -731,4 +737,4 @@ if __name__ == "__main__":
         )
 
     # Start the Flask app with a different port
-    app.run(host="0.0.0.0", port=5050)
+    app.run(host="0.0.0.0", port=5050, debug=True)
