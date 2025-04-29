@@ -12,11 +12,7 @@ class DummyIngestor(ThreatIntelIngestor):
         # The source_url argument is ignored in this dummy implementation.
         return [
             {"type": "ipv4-addr", "value": "1.1.1.1"},
-            {
-                "type": "domain-name",
-                "value": "example.com",
-                "description": "This is a long description of the example.com domain which is often used for testing purposes. It should be summarized by the NLP model into something shorter and more concise, capturing the main point about its usage in testing.",
-            },
+            {"type": "domain-name", "value": "example.com"},
             {"type": "file", "hashes": {"MD5": "abcd1234ef567890"}},
         ]
 
