@@ -36,6 +36,7 @@ Use:
 ```python
 from sentinelforge.scoring import score_ioc, categorize
 
-score = score_ioc("1.2.3.4", ["urlhaus","abusech"])  # => e.g. 15
-tier  = categorize(score)                           # => "medium"
+# score_ioc returns a tuple of (score, explanation_data)
+score, _ = score_ioc("1.1.1.1", "ip", ["urlhaus","abusech"])  # => e.g. 15
+tier  = categorize(score)                                     # => "medium"
 ``` 

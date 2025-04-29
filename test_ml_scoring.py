@@ -142,7 +142,8 @@ def test_integrated_scoring():
 
     results = []
     for ioc in test_iocs:
-        final_score = score_ioc(
+        # Unpack the tuple returned by score_ioc
+        final_score, explanation = score_ioc(
             ioc_value=ioc["value"],
             ioc_type=ioc["type"],
             source_feeds=ioc["feeds"],
