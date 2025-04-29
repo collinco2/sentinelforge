@@ -495,8 +495,9 @@ def explain_ioc(ioc_value):
                     f"Extracting features with params: ioc_type={ioc_dict.get('ioc_type')}, feeds=[{ioc_dict.get('source_feed')}], ioc_value={ioc_dict.get('ioc_value')}"
                 )
 
-                # Explicitly create a features dictionary to ensure we don't pass any column named 'value'
-                feature_dict = {
+                # Create a dictionary of parameters with the correct names
+                # Use ioc_value instead of value to avoid the column name issue
+                feature_params = {
                     "ioc_type": ioc_dict.get("ioc_type", "unknown"),
                     "source_feeds": [ioc_dict.get("source_feed", "unknown")],
                     "ioc_value": ioc_dict.get("ioc_value", ""),
@@ -504,8 +505,8 @@ def explain_ioc(ioc_value):
                     "summary": ioc_dict.get("summary", ""),
                 }
 
-                # Extract features using our explicitly created dictionary
-                features = extract_features(**feature_dict)
+                # Extract features
+                features = extract_features(**feature_params)
 
                 logger.info(f"Features extracted successfully: {features}")
             except Exception as feature_err:
