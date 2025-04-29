@@ -278,7 +278,7 @@ def explain_ioc(ioc_value):
         # Clean the IOC value
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
 
-        # Find the IOC in the database
+        # Find the IOC in the database - use ioc_value column, not value
         cursor = conn.execute(
             "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
         )
@@ -358,7 +358,7 @@ def explain_ioc(ioc_value):
             features = extract_features(
                 ioc_type=ioc_dict.get("ioc_type", "unknown"),
                 source_feeds=[ioc_dict.get("source_feed", "unknown")],
-                ioc_value=ioc_dict.get("ioc_value", ""),
+                ioc_value=ioc_dict.get("ioc_value", ""),  # Use ioc_value, not value
                 enrichment_data=enrichment_data,
                 summary=ioc_dict.get("summary", ""),
             )
