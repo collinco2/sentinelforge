@@ -4,7 +4,7 @@ import joblib
 import logging
 from typing import Dict, List, Any
 
-from .scoring_model import MODEL_PATH, EXPECTED_FEATURES
+from .scoring_model import MODEL_FILE_PATH as MODEL_PATH, EXPECTED_FEATURES_FULL
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -39,12 +39,12 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
         feature_df = pd.DataFrame([features])
 
         # Ensure all expected features are present
-        for feature in EXPECTED_FEATURES:
+        for feature in EXPECTED_FEATURES_FULL:
             if feature not in feature_df.columns:
                 feature_df[feature] = 0
 
         # Reorder columns to match training data
-        feature_df = feature_df[EXPECTED_FEATURES]
+        feature_df = feature_df[EXPECTED_FEATURES_FULL]
 
         # Create a SHAP explainer
         explainer = shap.TreeExplainer(model)
@@ -58,7 +58,7 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         # Get feature importance
         feature_importance = []
-        for i, feature_name in enumerate(EXPECTED_FEATURES):
+        for i, feature_name in enumerate(EXPECTED_FEATURES_FULL):
             # Skip features with zero importance
             if abs(shap_values[0][i]) < 0.001:
                 continue
