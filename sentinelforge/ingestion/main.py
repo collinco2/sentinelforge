@@ -227,14 +227,54 @@ def run_ingestion_pipeline():
 
                 # Calculate Score and Category using normalized type/value
                 feeds_seen = [feed_name]  # Still using current feed, TODO remains
-                ioc_score = score_ioc(
-                    norm_value,
-                    norm_type,
-                    feeds_seen,
-                    enrichment_data=enrichment_data,
-                    summary=summary,
-                )
+
+                # Get score with explanation for high-risk IOCs or those from specific feeds
+                # We'll generate explanations for potentially interesting IOCs
+                include_explanation = feed_name in [
+                    "urlhaus",
+                    "abusech",
+                ] or norm_type in ["url", "domain"]
+
+                try:
+                    ioc_score, explanation_data = score_ioc(
+                        norm_value,
+                        norm_type,
+                        feeds_seen,
+                        enrichment_data=enrichment_data,
+                        summary=summary,
+                        include_explanation=include_explanation,
+                    )
+                except Exception as scoring_err:
+                    logger.error(
+                        f"Scoring failed for {norm_type}:{norm_value} - {scoring_err}"
+                    )
+                    # Fallback to default scoring without explanation
+                    ioc_score, explanation_data = 0, None
+
                 ioc_cat = categorize(ioc_score)
+
+                # If we didn't request an explanation but the score is high, generate one now
+                if (
+                    explanation_data is None
+                    and ioc_score >= settings.slack_alert_threshold
+                ):
+                    try:
+                        _, explanation_data = score_ioc(
+                            norm_value,
+                            norm_type,
+                            feeds_seen,
+                            enrichment_data=enrichment_data,
+                            summary=summary,
+                            include_explanation=True,
+                        )
+                        if explanation_data:
+                            logger.info(
+                                f"Generated explanation for high-score IOC {norm_type}:{norm_value}"
+                            )
+                    except Exception as explain_err:
+                        logger.error(
+                            f"Explanation generation failed for {norm_type}:{norm_value} - {explain_err}"
+                        )
 
                 # store normalized IOC into DB (upsert) using normalized type/value
                 record = IOC(
@@ -245,6 +285,7 @@ def run_ingestion_pipeline():
                     category=ioc_cat,
                     enrichment_data=enrichment_data if enrichment_data else None,
                     summary=summary if summary else None,
+                    explanation_data=explanation_data,  # Store explanation data in DB
                 )
                 try:
                     db.merge(record)
@@ -257,8 +298,18 @@ def run_ingestion_pipeline():
                         logger.info(
                             f"Score {ioc_score} >= {settings.slack_alert_threshold}, sending Slack alert for {norm_type}:{norm_value}"
                         )
+
+                        # Include explanation text in Slack notification if available
+                        explanation_text = None
+                        if explanation_data and "text_explanation" in explanation_data:
+                            explanation_text = explanation_data["text_explanation"]
+
                         send_high_severity_alert(
-                            norm_value, norm_type, ioc_score, dashboard_url
+                            norm_value,
+                            norm_type,
+                            ioc_score,
+                            dashboard_url,
+                            explanation_text,
                         )
                     # --- End Slack Alert ---
 
