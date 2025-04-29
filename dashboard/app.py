@@ -429,7 +429,7 @@ def explain_ioc(ioc_value):
         # Clean the IOC value
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
 
-        # Find the IOC in the database - use ioc_value column, not value
+        # Find the IOC in the database - explicitly use the ioc_value column name
         cursor = conn.execute(
             "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
         )

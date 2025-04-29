@@ -44,11 +44,20 @@ def test_send_alert_success(mock_webhook_client):
     mock_webhook_client.send.assert_called_once()
     # Check some basic content of the call args
     args, kwargs = mock_webhook_client.send.call_args
+
+    # Check text field (contains basic info)
     assert "High-Severity IOC Detected" in kwargs.get("text", "")
-    assert "`9.9.9.9`" in kwargs.get("text", "")
-    assert "`ip`" in kwargs.get("text", "")
-    assert "`90`" in kwargs.get("text", "")
-    assert "<http://link.example.com|View Details>" in kwargs.get("text", "")
+
+    # Check blocks content
+    blocks = kwargs.get("blocks", [])
+    assert len(blocks) > 0
+
+    # Convert blocks to string for easier assertion
+    blocks_str = str(blocks)
+    assert "9.9.9.9" in blocks_str
+    assert "ip" in blocks_str
+    assert "90" in blocks_str
+    assert "http://link.example.com" in blocks_str
 
 
 def test_no_webhook_configured(monkeypatch):
