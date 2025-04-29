@@ -78,31 +78,22 @@ except Exception as e:
     }
 
 
-def score_ioc(
+def rule_based_score(
     ioc_value: str,
     ioc_type: str,
     source_feeds: List[str],
-    enrichment_data: Dict = None,
-    summary: str = "",
-    include_explanation: bool = False,
-) -> Tuple[int, Optional[Dict[str, Any]]]:
+) -> int:
     """
-    Compute a score based on feeds, multi-feed bonuses, and ML prediction.
+    Compute a rule-based score based on feeds and multi-feed bonuses.
 
     Args:
         ioc_value: The indicator value
         ioc_type: The indicator type (e.g., 'ip', 'domain')
         source_feeds: List of feed names where the IOC appeared
-        enrichment_data: Optional enrichment data dictionary
-        summary: Optional IOC summary
-        include_explanation: Whether to include SHAP explanation data
 
     Returns:
-        A tuple containing:
-        - integer score (combined rule-based and ML-based)
-        - optional explanation data if include_explanation is True
+        An integer score based on rule-based scoring
     """
-    # --- Rule-Based Score ---
     rule_score = 0
     feed_scores = _rules.get("feed_scores", {})
     multi_feed_bonus = _rules.get("multi_feed_bonus", {})
@@ -128,6 +119,36 @@ def score_ioc(
 
     logger.debug(f"  - Rule-based score for '{ioc_value}': {rule_score}")
 
+    return rule_score
+
+
+def score_ioc(
+    ioc_value: str,
+    ioc_type: str,
+    source_feeds: List[str],
+    enrichment_data: Dict = None,
+    summary: str = "",
+    include_explanation: bool = False,
+) -> Tuple[int, Optional[Dict[str, Any]]]:
+    """
+    Compute a score based on feeds, multi-feed bonuses, and ML prediction.
+
+    Args:
+        ioc_value: The indicator value
+        ioc_type: The indicator type (e.g., 'ip', 'domain')
+        source_feeds: List of feed names where the IOC appeared
+        enrichment_data: Optional enrichment data dictionary
+        summary: Optional IOC summary
+        include_explanation: Whether to include SHAP explanation data
+
+    Returns:
+        A tuple containing:
+        - integer score (combined rule-based and ML-based)
+        - optional explanation data if include_explanation is True
+    """
+    # --- Rule-Based Score ---
+    rule_score = rule_based_score(ioc_value, ioc_type, source_feeds)
+
     # --- ML-Based Score ---
     # Pass all parameters to extract_features
     features = extract_features(
@@ -142,8 +163,10 @@ def score_ioc(
     # Convert ML probability to same scale as rule_score (assuming 0-100 scale)
     # Get maximum possible score from rules for scaling
     max_rule_score = 100  # Default assumption
+    feed_scores = _rules.get("feed_scores", {})
     for feed in KNOWN_SOURCE_FEEDS:
         max_rule_score += feed_scores.get(feed, 0)
+    bonus_points = _rules.get("multi_feed_bonus", {}).get("points", 0)
     max_rule_score += bonus_points
 
     # Scale ML score to match rule score scale
@@ -185,13 +208,17 @@ def score_ioc(
 
                 # Add rule-based explanation data
                 rule_explanation = []
-                for feed in sorted(unique_feeds):
+                for feed in sorted(set(source_feeds)):
                     feed_score = feed_scores.get(feed, 0)
                     if feed_score > 0:
                         rule_explanation.append(f"Feed '{feed}': +{feed_score} points")
 
-                if len(unique_feeds) >= bonus_threshold:
-                    rule_explanation.append(f"Multi-feed bonus: +{bonus_points} points")
+                if len(set(source_feeds)) >= _rules.get("multi_feed_bonus", {}).get(
+                    "threshold", 999
+                ):
+                    rule_explanation.append(
+                        f"Multi-feed bonus: +{_rules.get('multi_feed_bonus', {}).get('points', 0)} points"
+                    )
 
                 explanation_data["rule_explanation"] = rule_explanation
 
