@@ -35,9 +35,9 @@ class TestMLScoring:
 
             # Check that all expected features are present
             for feature_name in EXPECTED_FEATURES:
-                assert (
-                    feature_name in features
-                ), f"Feature '{feature_name}' missing for {ioc_type}"
+                assert feature_name in features, (
+                    f"Feature '{feature_name}' missing for {ioc_type}"
+                )
 
     def test_feature_extraction_ip_specific(self):
         """Test IP-specific feature extraction."""
@@ -87,9 +87,9 @@ class TestMLScoring:
 
             # Check that all expected values match
             for key, expected_value in case["expected"].items():
-                assert (
-                    features[key] == expected_value
-                ), f"Feature '{key}' mismatch for {case['ioc_value']}"
+                assert features[key] == expected_value, (
+                    f"Feature '{key}' mismatch for {case['ioc_value']}"
+                )
 
     def test_feature_extraction_url_specific(self):
         """Test URL-specific feature extraction."""
@@ -125,9 +125,9 @@ class TestMLScoring:
 
             # Check that all expected values match
             for key, expected_value in case["expected"].items():
-                assert (
-                    features[key] == expected_value
-                ), f"Feature '{key}' mismatch for {case['ioc_value']}"
+                assert features[key] == expected_value, (
+                    f"Feature '{key}' mismatch for {case['ioc_value']}"
+                )
 
     def test_predict_score_with_loaded_model(self, mock_ml_model):
         """Test prediction with a loaded model."""
