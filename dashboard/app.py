@@ -105,9 +105,24 @@ def rate_limit(f):
 
 def validate_ioc_value(ioc_value, ioc_type=None):
     """Validate IOC value based on its type and general rules."""
-    # Check for empty value
-    if not ioc_value or not isinstance(ioc_value, str):
-        return False, "IOC value must be a non-empty string"
+    # Check for None or non-string types
+    if ioc_value is None:
+        return False, "IOC value cannot be None"
+
+    # Convert to string if not already a string
+    if not isinstance(ioc_value, str):
+        try:
+            ioc_value = str(ioc_value)
+        except Exception:
+            return False, "IOC value must be convertible to a string"
+
+    # Check for empty string
+    if not ioc_value.strip():
+        return False, "IOC value cannot be empty"
+
+    # Check for binary or non-printable characters
+    if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
+        return False, "IOC value contains non-printable characters"
 
     # Check length
     if len(ioc_value) > MAX_IOC_LENGTH:
@@ -168,6 +183,11 @@ def clean_url(url):
     if url is None:
         return None
     try:
+        # Check if input contains non-printable or binary data
+        # If it does, replace with a placeholder hash
+        if any(ord(c) < 32 or ord(c) > 126 for c in url if isinstance(c, str)):
+            return f"[binary-url-{hash(url) % 1000:03d}]"
+
         # First try to URL-decode it in case it's percent-encoded
         try:
             url = urllib.parse.unquote(url)
@@ -176,11 +196,13 @@ def clean_url(url):
 
         # Only keep ASCII characters for URLs
         clean = "".join(c for c in url if ord(c) < 128)
+
         # If the URL is severely truncated/corrupted, mark it
         if len(clean) < 5 or not ("://" in clean or "." in clean):
             return f"[corrupted-url-{hash(url) % 1000:03d}]"
+
         return clean
-    except Exception:  # No variable needed
+    except Exception:  # Catch any error, including encoding issues
         return f"[invalid-url-{hash(str(url)) % 1000:03d}]"
 
 
@@ -669,6 +691,10 @@ def get_stats():
         plt.xlabel("Score")
         plt.ylabel("Frequency")
         plt.tight_layout()
+
+        # Ensure the visualizations directory exists
+        os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
+        logger.info(f"Saving visualization to {VISUALIZATIONS_DIR}")
 
         viz_filename = "score_distribution.png"
         viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
