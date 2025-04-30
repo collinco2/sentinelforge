@@ -9,12 +9,17 @@ the ML model's predictions on IOCs.
 import os
 import logging
 import sqlite3
+import time
+import json
+import re
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from pathlib import Path
 import sys
 import matplotlib.pyplot as plt
 import matplotlib
-import re
+from functools import wraps
+from collections import defaultdict
+import urllib.parse
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import seaborn as sns
@@ -42,9 +47,98 @@ VISUALIZATIONS_DIR = Path(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "static", "visualizations"))
 )
 
+# Rate limiting settings
+RATE_LIMIT = 30  # requests per minute
+RATE_LIMIT_WINDOW = 60  # seconds
+client_requests = defaultdict(list)
+
+# Validation constants
+MAX_IOC_LENGTH = 2048  # Maximum length of IOC value
+VALID_IOC_TYPES = {"ip", "domain", "url", "hash", "email"}
+IOC_PATTERNS = {
+    "ip": re.compile(r"^(\d{1,3}\.){3}\d{1,3}$"),
+    "domain": re.compile(
+        r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$"
+    ),
+    "url": re.compile(r"^https?://"),
+    "hash": re.compile(r"^[a-fA-F0-9]{32,64}$"),
+    "email": re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"),
+}
+
 # Ensure visualizations directory exists
 os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
 print(f"Visualizations directory: {VISUALIZATIONS_DIR}")
+
+
+def rate_limit(f):
+    """Rate limiting decorator for API endpoints."""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        client_ip = request.remote_addr
+        request_time = time.time()
+
+        # Remove old requests outside the window
+        client_requests[client_ip] = [
+            t
+            for t in client_requests[client_ip]
+            if request_time - t < RATE_LIMIT_WINDOW
+        ]
+
+        # Check if rate limit is exceeded
+        if len(client_requests[client_ip]) >= RATE_LIMIT:
+            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+            return jsonify(
+                {
+                    "error": "Rate limit exceeded",
+                    "message": f"Maximum {RATE_LIMIT} requests per {RATE_LIMIT_WINDOW} seconds",
+                }
+            ), 429
+
+        # Add current request time
+        client_requests[client_ip].append(request_time)
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def validate_ioc_value(ioc_value, ioc_type=None):
+    """Validate IOC value based on its type and general rules."""
+    # Check for empty value
+    if not ioc_value or not isinstance(ioc_value, str):
+        return False, "IOC value must be a non-empty string"
+
+    # Check length
+    if len(ioc_value) > MAX_IOC_LENGTH:
+        return False, f"IOC value exceeds maximum length of {MAX_IOC_LENGTH} characters"
+
+    # Check for potentially harmful characters
+    if re.search(r'[<>"\'%;)(&+]', ioc_value):
+        return False, "IOC value contains potentially harmful characters"
+
+    # If type is specified, check type-specific pattern
+    if ioc_type and ioc_type in IOC_PATTERNS:
+        if not IOC_PATTERNS[ioc_type].search(ioc_value):
+            return False, f"IOC value doesn't match the pattern for type '{ioc_type}'"
+
+    return True, ""
+
+
+def validate_numeric_param(param, min_val=None, max_val=None, default=None):
+    """Validate numeric parameters with bounds checking."""
+    if param is None:
+        return default
+
+    try:
+        value = int(param)
+        if min_val is not None and value < min_val:
+            return min_val
+        if max_val is not None and value > max_val:
+            return max_val
+        return value
+    except (ValueError, TypeError):
+        return default
 
 
 def get_db_connection():
@@ -74,6 +168,12 @@ def clean_url(url):
     if url is None:
         return None
     try:
+        # First try to URL-decode it in case it's percent-encoded
+        try:
+            url = urllib.parse.unquote(url)
+        except Exception:
+            pass
+
         # Only keep ASCII characters for URLs
         clean = "".join(c for c in url if ord(c) < 128)
         # If the URL is severely truncated/corrupted, mark it
@@ -108,6 +208,31 @@ def row_to_dict(row):
     return result
 
 
+def infer_ioc_type(ioc_value):
+    """Infer the IOC type based on the value format."""
+    if not isinstance(ioc_value, str):
+        return "unknown"
+
+    if re.match(r"^https?://", ioc_value):
+        return "url"
+    elif re.match(r"^[a-fA-F0-9]{32,64}$", ioc_value):
+        return "hash"
+    elif (
+        re.match(
+            r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$",
+            ioc_value,
+        )
+        and "." in ioc_value
+    ):
+        return "domain"
+    elif re.match(r"^(\d{1,3}\.){3}\d{1,3}$", ioc_value):
+        return "ip"
+    elif re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", ioc_value):
+        return "email"
+    else:
+        return "other"
+
+
 @app.route("/")
 def index():
     """Render the dashboard home page."""
@@ -115,6 +240,7 @@ def index():
 
 
 @app.route("/api/iocs")
+@rate_limit
 def get_iocs():
     """Get IOCs from the database with optional filtering."""
     try:
@@ -122,12 +248,27 @@ def get_iocs():
         if not conn:
             return jsonify({"error": "Database connection failed"}), 500
 
-        # Get query parameters
+        # Get and validate query parameters
         ioc_type = request.args.get("type")
-        limit = request.args.get("limit", 100, type=int)
-        offset = request.args.get("offset", 0, type=int)
-        min_score = request.args.get("min_score", type=int)
-        max_score = request.args.get("max_score", type=int)
+        if ioc_type and ioc_type not in VALID_IOC_TYPES:
+            return jsonify(
+                {
+                    "error": f"Invalid IOC type. Must be one of: {', '.join(VALID_IOC_TYPES)}"
+                }
+            ), 400
+
+        limit = validate_numeric_param(
+            request.args.get("limit"), min_val=1, max_val=1000, default=100
+        )
+        offset = validate_numeric_param(
+            request.args.get("offset"), min_val=0, default=0
+        )
+        min_score = validate_numeric_param(
+            request.args.get("min_score"), min_val=0, max_val=100
+        )
+        max_score = validate_numeric_param(
+            request.args.get("max_score"), min_val=0, max_val=100
+        )
 
         # Build the query - explicitly select columns to ensure correct order
         query = "SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs WHERE 1=1"
@@ -181,21 +322,29 @@ def get_iocs():
 
     except Exception as e:
         logger.error(f"Error retrieving IOCs: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify(
+            {
+                "error": "An error occurred while retrieving IOCs",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
 
 
 @app.route("/api/ioc/<path:ioc_value>")
+@rate_limit
 def get_ioc(ioc_value):
     """Get details for a specific IOC."""
     try:
+        # Validate the IOC value
+        is_valid, error_message = validate_ioc_value(ioc_value)
+        if not is_valid:
+            return jsonify(
+                {"error": "Invalid IOC value", "message": error_message}
+            ), 400
+
         conn = get_db_connection()
         if not conn:
             return jsonify({"error": "Database connection failed"}), 500
-
-        # Log the schema for debugging
-        cursor = conn.execute("PRAGMA table_info(iocs)")
-        columns = [row["name"] for row in cursor.fetchall()]
-        logger.info(f"Database columns: {columns}")
 
         # Try to clean the URL if it contains encoding issues
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
@@ -218,17 +367,7 @@ def get_ioc(ioc_value):
         if not ioc:
             logger.info(f"IOC not found: {ioc_value}, providing generic response")
             # Infer the IOC type based on its format
-            ioc_type = (
-                "url"
-                if "?" in ioc_value or "://" in ioc_value
-                else "hash"
-                if len(ioc_value) > 32
-                else "domain"
-                if "." in ioc_value
-                else "ip"
-                if "." in ioc_value and all(c.isdigit() or c == "." for c in ioc_value)
-                else "other"
-            )
+            ioc_type = infer_ioc_type(ioc_value)
 
             # Return a generic response instead of 404
             return jsonify(
@@ -256,82 +395,80 @@ def get_ioc(ioc_value):
                 "score": 44,
                 "category": "medium",
                 "source_feed": "unknown",
-                "error": str(e),
+                "error": str(e) if app.debug else "An error occurred",
                 "note": "Error occurred but response constructed for view",
             }
         )
 
 
 @app.route("/api/explain/<path:ioc_value>")
+@rate_limit
 def explain_ioc(ioc_value):
     """Generate and return an explanation for a given IOC."""
     try:
+        # Validate the IOC value
+        is_valid, error_message = validate_ioc_value(ioc_value)
+        if not is_valid:
+            return jsonify(
+                {
+                    "error": "Invalid IOC value",
+                    "message": error_message,
+                    "fallback_explanation": generate_fallback_explanation(ioc_value),
+                }
+            ), 400
+
         conn = get_db_connection()
         if not conn:
-            return jsonify({"error": "Database connection failed"}), 500
+            return jsonify(
+                {
+                    "error": "Database connection failed",
+                    "fallback_explanation": generate_fallback_explanation(ioc_value),
+                }
+            ), 500
 
-        # Log the actual schema
-        cursor = conn.execute("PRAGMA table_info(iocs)")
-        columns = [row["name"] for row in cursor.fetchall()]
-        logger.info(f"Database columns: {columns}")
+        # Log database schema for debugging
+        try:
+            cursor = conn.execute("PRAGMA table_info(iocs)")
+            columns = [row["name"] for row in cursor.fetchall()]
+            logger.info(f"Database columns: {columns}")
+        except Exception as schema_err:
+            logger.error(f"Error checking database schema: {schema_err}")
 
         # Clean the IOC value
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
 
-        # Find the IOC in the database - use ioc_value column, not value
-        cursor = conn.execute(
-            "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
-        )
-        ioc = cursor.fetchone()
+        # Find the IOC in the database - explicitly use the ioc_value column name
+        try:
+            logger.info(
+                f"Executing SQL query: SELECT * FROM iocs WHERE ioc_value = '{cleaned_ioc_value}'"
+            )
+            cursor = conn.execute(
+                "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
+            )
+            ioc = cursor.fetchone()
+        except Exception as query_err:
+            logger.error(f"SQL error on primary query: {query_err}", exc_info=True)
+            ioc = None
 
         # If not found with cleaned value, try with original
         if not ioc and cleaned_ioc_value != ioc_value:
-            cursor = conn.execute(
-                "SELECT * FROM iocs WHERE ioc_value = ?", (ioc_value,)
-            )
-            ioc = cursor.fetchone()
+            try:
+                logger.info(
+                    f"Trying alternate query: SELECT * FROM iocs WHERE ioc_value = '{ioc_value}'"
+                )
+                cursor = conn.execute(
+                    "SELECT * FROM iocs WHERE ioc_value = ?", (ioc_value,)
+                )
+                ioc = cursor.fetchone()
+            except Exception as alt_query_err:
+                logger.error(
+                    f"SQL error on alternate query: {alt_query_err}", exc_info=True
+                )
 
         if not ioc:
             logger.info(f"IOC not found: {ioc_value}, providing generic explanation")
             # Create a mock response with generic explanation
-            ioc_type = (
-                "url"
-                if "?" in ioc_value or "://" in ioc_value
-                else "hash"
-                if len(ioc_value) > 32
-                else "domain"
-                if "." in ioc_value
-                else "ip"
-                if "." in ioc_value and all(c.isdigit() or c == "." for c in ioc_value)
-                else "other"
-            )
-
-            # Generate a generic explanation with feature importance values
-            return jsonify(
-                {
-                    "ioc": {
-                        "ioc_type": ioc_type,
-                        "ioc_value": ioc_value,
-                        "score": 44,  # Most common score from your data
-                    },
-                    "explanation": [
-                        {"feature": "IOC Type", "importance": 0.35, "value": 1},
-                        {"feature": "Source Feed", "importance": 0.25, "value": 1},
-                        {
-                            "feature": "Character Patterns",
-                            "importance": 0.15,
-                            "value": 1,
-                        },
-                        {"feature": "Length", "importance": 0.10, "value": 1},
-                        {
-                            "feature": "Special Characters",
-                            "importance": 0.05,
-                            "value": 1,
-                        },
-                    ],
-                    "note": "This is a generic explanation as the specific IOC couldn't be found in the database",
-                }
-            )
+            return jsonify(generate_fallback_explanation(ioc_value))
 
         # Convert to dict with clean text
         ioc_dict = row_to_dict(ioc)
@@ -346,8 +483,6 @@ def explain_ioc(ioc_value):
                 try:
                     # If it's a string (JSON), parse it
                     if isinstance(ioc_dict["enrichment_data"], str):
-                        import json
-
                         enrichment_data = json.loads(ioc_dict["enrichment_data"])
                     elif isinstance(ioc_dict["enrichment_data"], dict):
                         enrichment_data = ioc_dict["enrichment_data"]
@@ -355,26 +490,62 @@ def explain_ioc(ioc_value):
                     logger.error(f"Error parsing enrichment data: {e}")
 
             # Extract features with the correct parameters
-            features = extract_features(
-                ioc_type=ioc_dict.get("ioc_type", "unknown"),
-                source_feeds=[ioc_dict.get("source_feed", "unknown")],
-                ioc_value=ioc_dict.get("ioc_value", ""),  # Use ioc_value, not value
-                enrichment_data=enrichment_data,
-                summary=ioc_dict.get("summary", ""),
-            )
+            try:
+                logger.info(
+                    f"Extracting features with params: ioc_type={ioc_dict.get('ioc_type')}, feeds=[{ioc_dict.get('source_feed')}], ioc_value={ioc_dict.get('ioc_value')}"
+                )
+
+                # Create a dictionary of parameters with the correct names
+                # Use ioc_value instead of value to avoid the column name issue
+                feature_params = {
+                    "ioc_type": ioc_dict.get("ioc_type", "unknown"),
+                    "source_feeds": [ioc_dict.get("source_feed", "unknown")],
+                    "ioc_value": ioc_dict.get("ioc_value", ""),
+                    "enrichment_data": enrichment_data,
+                    "summary": ioc_dict.get("summary", ""),
+                }
+
+                # Extract features using explicitly named parameters to avoid 'value' column issue
+                features = extract_features(
+                    ioc_type=feature_params["ioc_type"],
+                    source_feeds=feature_params["source_feeds"],
+                    ioc_value=feature_params["ioc_value"],
+                    enrichment_data=feature_params["enrichment_data"],
+                    summary=feature_params["summary"],
+                )
+
+                logger.info(f"Features extracted successfully: {features}")
+            except Exception as feature_err:
+                logger.error(f"Error extracting features: {feature_err}", exc_info=True)
+                raise
 
             # If explanation_data exists in db and is not empty, try to use it directly
             existing_explanation = None
             if ioc_dict.get("explanation_data"):
                 try:
-                    import json
-
-                    existing_explanation = json.loads(ioc_dict["explanation_data"])
+                    logger.info(
+                        "Found existing explanation data in database, parsing..."
+                    )
+                    if isinstance(ioc_dict["explanation_data"], str):
+                        existing_explanation = json.loads(ioc_dict["explanation_data"])
+                    elif isinstance(ioc_dict["explanation_data"], dict):
+                        existing_explanation = ioc_dict["explanation_data"]
+                    logger.info(
+                        f"Successfully parsed explanation: {existing_explanation}"
+                    )
                 except Exception as e:
                     logger.error(f"Error parsing existing explanation data: {e}")
 
             # Generate a new explanation if needed
-            explanation = existing_explanation or explain_prediction(features)
+            explanation = None
+            try:
+                explanation = existing_explanation or explain_prediction(features)
+                logger.info(f"Final explanation: {explanation}")
+            except Exception as explain_err:
+                logger.error(
+                    f"Error generating new explanation: {explain_err}", exc_info=True
+                )
+                raise
 
             # Create visualization
             if explanation:
@@ -411,13 +582,7 @@ def explain_ioc(ioc_value):
         return jsonify(
             {
                 "ioc": ioc_dict,
-                "explanation": [
-                    {"feature": "IOC Type", "importance": 0.35, "value": 1},
-                    {"feature": "Source Feed", "importance": 0.25, "value": 1},
-                    {"feature": "Character Patterns", "importance": 0.15, "value": 1},
-                    {"feature": "Length", "importance": 0.10, "value": 1},
-                    {"feature": "Special Characters", "importance": 0.05, "value": 1},
-                ],
+                "explanation": generate_fallback_explanation(ioc_value)["explanation"],
                 "visualization": f"/visualizations/{viz_filename}",
                 "note": "This is a generic explanation as the specific model explanation couldn't be generated",
             }
@@ -426,21 +591,32 @@ def explain_ioc(ioc_value):
     except Exception as e:
         logger.error(f"Error generating explanation: {e}", exc_info=True)
         # Return a generic explanation instead of an error
-        return jsonify(
-            {
-                "explanation": [
-                    {"feature": "IOC Type", "importance": 0.35, "value": 1},
-                    {"feature": "Source Feed", "importance": 0.25, "value": 1},
-                    {"feature": "Character Patterns", "importance": 0.15, "value": 1},
-                    {"feature": "Length", "importance": 0.10, "value": 1},
-                    {"feature": "Special Characters", "importance": 0.05, "value": 1},
-                ],
-                "note": "This is a generic explanation as an error occurred generating the real explanation",
-            }
-        )
+        return jsonify(generate_fallback_explanation(ioc_value))
+
+
+def generate_fallback_explanation(ioc_value):
+    """Generate a generic fallback explanation when the real one can't be produced."""
+    ioc_type = infer_ioc_type(ioc_value)
+
+    return {
+        "ioc": {
+            "ioc_type": ioc_type,
+            "ioc_value": ioc_value,
+            "score": 44,  # Most common score from your data
+        },
+        "explanation": [
+            {"feature": "IOC Type", "importance": 0.35, "value": 1},
+            {"feature": "Source Feed", "importance": 0.25, "value": 1},
+            {"feature": "Character Patterns", "importance": 0.15, "value": 1},
+            {"feature": "Length", "importance": 0.10, "value": 1},
+            {"feature": "Special Characters", "importance": 0.05, "value": 1},
+        ],
+        "note": "This is a generic explanation as the specific IOC couldn't be analyzed properly",
+    }
 
 
 @app.route("/api/stats")
+@rate_limit
 def get_stats():
     """Get statistics about the IOCs in the database."""
     try:
@@ -514,15 +690,43 @@ def get_stats():
 
     except Exception as e:
         logger.error(f"Error retrieving stats: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify(
+            {
+                "error": "An error occurred while retrieving statistics",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
 
 
 @app.route("/visualizations/<path:filename>")
 def get_visualization(filename):
     """Serve visualization files."""
+    # Validate the filename to prevent directory traversal
+    if not re.match(r"^[a-zA-Z0-9_\-.]+\.(png|jpg|jpeg|svg)$", filename):
+        return jsonify({"error": "Invalid filename"}), 400
+
     # The browser is requesting /visualizations/filename, but we're storing
     # the files in static/visualizations, so extract just the filename
     return send_from_directory(VISUALIZATIONS_DIR, filename)
+
+
+@app.errorhandler(404)
+def page_not_found(e):
+    """Handle 404 errors."""
+    return jsonify({"error": "Resource not found"}), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    """Handle 405 errors."""
+    return jsonify({"error": "Method not allowed"}), 405
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    """Handle 500 errors."""
+    logger.error(f"Internal server error: {str(e)}")
+    return jsonify({"error": "Internal server error"}), 500
 
 
 if __name__ == "__main__":
@@ -533,4 +737,4 @@ if __name__ == "__main__":
         )
 
     # Start the Flask app with a different port
-    app.run(host="0.0.0.0", port=5050)
+    app.run(host="0.0.0.0", port=5050, debug=True)

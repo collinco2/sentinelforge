@@ -155,8 +155,8 @@ def get_explanation(features: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             logger.error(f"Failed to create SHAP visualization: {e}")
 
         return {
-            "shap_values": {name: value for name, value in features_with_shap},
-            "top_features": [(name, value) for name, value in top_features],
+            "shap_values": {name: shap_val for name, shap_val in features_with_shap},
+            "top_features": [(name, shap_val) for name, shap_val in top_features],
             "base_value": base_value,
             "plot_path": shap_plot_path,
         }
@@ -183,8 +183,8 @@ def explain_prediction_text(features: Dict[str, Any]) -> str:
 
     text = ["Factors influencing this score (in order of importance):"]
 
-    for feature_name, value in explanation["top_features"]:
-        direction = "increasing" if value > 0 else "decreasing"
+    for feature_name, shap_val in explanation["top_features"]:
+        direction = "increasing" if shap_val > 0 else "decreasing"
 
         # Format the feature name to be more human-readable
         readable_name = feature_name.replace("_", " ").title()
@@ -200,7 +200,7 @@ def explain_prediction_text(features: Dict[str, Any]) -> str:
             readable_name = f"Contains '{char}'"
 
         # Format the impact
-        impact = abs(value)
+        impact = abs(shap_val)
         if impact > 0.3:
             strength = "strongly"
         elif impact > 0.1:

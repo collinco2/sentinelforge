@@ -1,0 +1,28 @@
+[
+  {
+    "ioc_value": "malware.example.com",
+    "ioc_type": "domain",
+    "source_feeds": ["urlhaus", "abusech"],
+    "score_override": 90
+  },
+  {
+    "ioc_value": "192.168.1.1",
+    "ioc_type": "ip",
+    "source_feeds": ["urlhaus"]
+  },
+  {
+    "ioc_value": "https://malicious-site.com/download/malware.exe",
+    "ioc_type": "url",
+    "source_feeds": ["abusech", "malwaredomains"]
+  },
+  {
+    "ioc_value": "44d88612fea8a8f36de82e1278abb02f",
+    "ioc_type": "hash",
+    "source_feeds": ["urlhaus"]
+  },
+  {
+    "ioc_value": "attacker@malicious.org",
+    "ioc_type": "email",
+    "source_feeds": ["phishtank"]
+  }
+] 
