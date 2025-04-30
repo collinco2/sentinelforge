@@ -428,9 +428,23 @@ def get_ioc(ioc_value):
 def explain_ioc(ioc_value):
     """Generate and return an explanation for a given IOC."""
     try:
+        # Add additional check for binary data early in the function
+        try:
+            if any(
+                ord(c) < 32 or ord(c) > 126 for c in ioc_value if isinstance(c, str)
+            ):
+                logger.warning(
+                    "Binary data detected in IOC value, returning fallback explanation"
+                )
+                return jsonify(generate_fallback_explanation("[binary-data]"))
+        except Exception as binary_check_err:
+            logger.warning(f"Error checking for binary data: {binary_check_err}")
+            return jsonify(generate_fallback_explanation("[invalid-data]"))
+
         # Validate the IOC value
         is_valid, error_message = validate_ioc_value(ioc_value)
         if not is_valid:
+            logger.info(f"Invalid IOC value: {error_message}")
             return jsonify(
                 {
                     "error": "Invalid IOC value",
@@ -456,8 +470,20 @@ def explain_ioc(ioc_value):
         except Exception as schema_err:
             logger.error(f"Error checking database schema: {schema_err}")
 
-        # Clean the IOC value
-        cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
+        # Clean the IOC value - use the more robust implementation
+        try:
+            cleaned_ioc_value = (
+                clean_url(ioc_value) if "://" in ioc_value else ioc_value
+            )
+            if (
+                "[binary-url-" in cleaned_ioc_value
+                or "[corrupted-url-" in cleaned_ioc_value
+            ):
+                logger.warning(f"URL was cleaned to a placeholder: {cleaned_ioc_value}")
+                return jsonify(generate_fallback_explanation(cleaned_ioc_value))
+        except Exception as clean_err:
+            logger.error(f"Error cleaning URL: {clean_err}")
+            return jsonify(generate_fallback_explanation("[cleaning-error]"))
 
         # Find the IOC in the database - explicitly use the ioc_value column name
         try:
@@ -527,6 +553,16 @@ def explain_ioc(ioc_value):
                     "summary": ioc_dict.get("summary", ""),
                 }
 
+                # Handle potential KeyError proactively
+                if not all(
+                    key in feature_params
+                    for key in ["ioc_type", "source_feeds", "ioc_value"]
+                ):
+                    logger.error(
+                        f"Missing required parameters in feature_params: {feature_params}"
+                    )
+                    return jsonify(generate_fallback_explanation(ioc_value))
+
                 # Extract features using explicitly named parameters to avoid 'value' column issue
                 features = extract_features(
                     ioc_type=feature_params["ioc_type"],
@@ -539,7 +575,7 @@ def explain_ioc(ioc_value):
                 logger.info(f"Features extracted successfully: {features}")
             except Exception as feature_err:
                 logger.error(f"Error extracting features: {feature_err}", exc_info=True)
-                raise
+                return jsonify(generate_fallback_explanation(ioc_value))
 
             # If explanation_data exists in db and is not empty, try to use it directly
             existing_explanation = None
@@ -567,24 +603,33 @@ def explain_ioc(ioc_value):
                 logger.error(
                     f"Error generating new explanation: {explain_err}", exc_info=True
                 )
-                raise
+                return jsonify(generate_fallback_explanation(ioc_value))
 
             # Create visualization
             if explanation:
-                viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
+                try:
+                    # Ensure visualizations directory exists
+                    os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
 
-                # Create waterfall plot for feature importance
-                feature_names = [item["feature"] for item in explanation]
-                importance_values = [item["importance"] for item in explanation]
+                    viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
 
-                plt.figure(figsize=(10, 6))
-                colors = ["red" if imp < 0 else "green" for imp in importance_values]
-                sns.barplot(x=importance_values, y=feature_names, palette=colors)
-                plt.title("Feature Importance")
-                plt.xlabel("SHAP Value (Impact on Score)")
-                plt.tight_layout()
-                plt.savefig(viz_path)
-                plt.close()
+                    # Create waterfall plot for feature importance
+                    feature_names = [item["feature"] for item in explanation]
+                    importance_values = [item["importance"] for item in explanation]
+
+                    plt.figure(figsize=(10, 6))
+                    colors = [
+                        "red" if imp < 0 else "green" for imp in importance_values
+                    ]
+                    sns.barplot(x=importance_values, y=feature_names, palette=colors)
+                    plt.title("Feature Importance")
+                    plt.xlabel("SHAP Value (Impact on Score)")
+                    plt.tight_layout()
+                    plt.savefig(viz_path)
+                    plt.close()
+                except Exception as viz_err:
+                    logger.error(f"Error creating visualization: {viz_err}")
+                    # Continue without visualization
 
                 return jsonify(
                     {
@@ -618,12 +663,28 @@ def explain_ioc(ioc_value):
 
 def generate_fallback_explanation(ioc_value):
     """Generate a generic fallback explanation when the real one can't be produced."""
-    ioc_type = infer_ioc_type(ioc_value)
+    # Handle binary/invalid data in a special way
+    if (
+        ioc_value.startswith("[binary-")
+        or ioc_value.startswith("[invalid-")
+        or ioc_value.startswith("[corrupted-")
+    ):
+        clean_type = "unknown"
+        clean_value = ioc_value
+    else:
+        # For normal IOCs, try to infer the type
+        try:
+            clean_type = infer_ioc_type(ioc_value)
+            clean_value = ioc_value
+        except Exception as e:
+            logger.warning(f"Error inferring IOC type: {e}")
+            clean_type = "unknown"
+            clean_value = "[error-inferring-type]"
 
     return {
         "ioc": {
-            "ioc_type": ioc_type,
-            "ioc_value": ioc_value,
+            "ioc_type": clean_type,
+            "ioc_value": clean_value,
             "score": 44,  # Most common score from your data
         },
         "explanation": [
