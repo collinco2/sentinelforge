@@ -255,7 +255,13 @@ def train_model(data):
         n_estimators=100, max_depth=None, min_samples_split=2, random_state=42
     )
 
+    # Store feature names in the model to avoid warnings
+    feature_names = X.columns.tolist()
+
     model.fit(X_train, y_train)
+
+    # Store feature names as a model attribute to avoid warnings during prediction
+    model.feature_names_in_ = feature_names
 
     # Evaluate on test set
     y_pred = model.predict(X_test)

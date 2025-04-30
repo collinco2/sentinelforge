@@ -39,6 +39,13 @@ def test_enrich_ip(monkeypatch, enricher):
         city = type("C", (), {"name": "Imaginaria"})
         location = type("L", (), {"latitude": 1.23, "longitude": 4.56})
 
+    # Skip test if geoip_reader is None
+    if enricher.geoip_reader is None:
+        # Create a new geoip_reader mock object to use in the test
+        from unittest.mock import Mock
+
+        enricher.geoip_reader = Mock()
+
     # Mock the city method of the specific reader instance
     monkeypatch.setattr(enricher.geoip_reader, "city", lambda ip: DummyGeo())
     out = enricher.enrich({"type": "ip", "value": "192.0.2.1"})
@@ -59,4 +66,26 @@ def test_enrichment_handles_errors(enricher, monkeypatch):
         "sentinelforge.enrichment.whois_geoip.whois.whois", raise_exception
     )
     out = enricher.enrich({"type": "domain", "value": "fail.example.com"})
+    assert out == {}
+
+    # Test when geoip lookup fails
+    if enricher.geoip_reader is None:
+        # Create a mock reader that will raise an exception
+        from unittest.mock import Mock
+
+        enricher.geoip_reader = Mock()
+
+    # Mock the city method to raise an exception
+    monkeypatch.setattr(enricher.geoip_reader, "city", raise_exception)
+    out = enricher.enrich({"type": "ip", "value": "192.0.2.1"})
+    assert out == {}  # Should return empty dict on error
+
+    # Test with invalid input
+    out = enricher.enrich(None)  # None input
+    assert out == {}
+
+    out = enricher.enrich({})  # Empty dict
+    assert out == {}
+
+    out = enricher.enrich({"type": "ip"})  # Missing value
     assert out == {}

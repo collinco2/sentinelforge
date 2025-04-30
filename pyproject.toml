@@ -56,3 +56,8 @@ dev = [
 where = ["."]
 include = ["sentinelforge*"]
 exclude = ["feeds*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "explainability: marks tests that check ML model explanation functionality",
+]

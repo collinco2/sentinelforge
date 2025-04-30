@@ -57,7 +57,7 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
         importances = []
 
         # Get baseline prediction
-        baseline_pred = model.predict_proba(feature_df.values)[0, 1]
+        baseline_pred = model.predict_proba(feature_df)[0, 1]
 
         # Test importance of each feature
         for i, feature_name in enumerate(model_features):
@@ -70,7 +70,7 @@ def explain_prediction(features: Dict[str, Any]) -> List[Dict[str, Any]]:
             modified[feature_name] = 0
 
             # Get new prediction
-            new_pred = model.predict_proba(modified.values)[0, 1]
+            new_pred = model.predict_proba(modified)[0, 1]
 
             # Calculate importance (difference from baseline)
             importance = baseline_pred - new_pred

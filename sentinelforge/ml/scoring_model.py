@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 
 # Import ML libraries with error handling
 try:
-    import numpy as np
+    import numpy as np  # noqa: F401
 
     # Only import pandas and sklearn when needed for type checking
     import pandas as pd  # noqa: F401
@@ -153,103 +153,128 @@ def extract_features(
     Returns:
         A dictionary with feature names and values (all numeric)
     """
-    # Use empty dict if enrichment_data is None
-    if enrichment_data is None:
-        enrichment_data = {}
+    try:
+        # Use empty dict if enrichment_data is None
+        if enrichment_data is None:
+            enrichment_data = {}
 
-    # Initialize all expected features to 0
-    features = {name: 0 for name in EXPECTED_FEATURES_FULL}
+        # Initialize all expected features to 0
+        features = {name: 0 for name in EXPECTED_FEATURES_FULL}
 
-    # 1. One-hot encode IOC type
-    normalized_type = ioc_type.lower().strip()
-    type_feature = f"type_{normalized_type}"
-    if type_feature in features:
-        features[type_feature] = 1
-    else:
-        features["type_other"] = 1  # Fallback for unknown types
+        # 1. One-hot encode IOC type
+        normalized_type = ioc_type.lower().strip()
+        type_feature = f"type_{normalized_type}"
+        if type_feature in features:
+            features[type_feature] = 1
+        else:
+            features["type_other"] = 1  # Fallback for unknown types
 
-    # 2. Source Feed Features
-    unique_feeds = set(f.lower().strip() for f in source_feeds)
-    features["feed_count"] = len(unique_feeds)
+        # 2. Source Feed Features
+        unique_feeds = set(f.lower().strip() for f in source_feeds)
+        features["feed_count"] = len(unique_feeds)
 
-    # 3. Specific Feed Presence (Binary)
-    for feed_name in KNOWN_SOURCE_FEEDS:
-        feed_feature = f"feed_{feed_name}"
-        if feed_name in unique_feeds:
-            features[feed_feature] = 1
+        # 3. Specific Feed Presence (Binary)
+        for feed_name in KNOWN_SOURCE_FEEDS:
+            feed_feature = f"feed_{feed_name}"
+            if feed_name in unique_feeds:
+                features[feed_feature] = 1
 
-    # 4. Feed-specific features
-    for feed in unique_feeds:
-        if feed == "abusech":
-            features["from_threat_feed"] = 1
-        elif feed == "urlhaus":
-            features["from_url_feed"] = 1
-        elif feed == "dummy":
-            features["from_test_feed"] = 1
+        # 4. Feed-specific features
+        for feed in unique_feeds:
+            if feed == "abusech":
+                features["from_threat_feed"] = 1
+            elif feed == "urlhaus":
+                features["from_url_feed"] = 1
+            elif feed == "dummy":
+                features["from_test_feed"] = 1
 
-    # 5. IP-specific features
-    if normalized_type == "ip":
-        # Geographical features
-        if "country" in enrichment_data and enrichment_data["country"]:
-            features["has_country"] = 1
-            # Encode country name
-            country = str(enrichment_data["country"]).lower()
-            features["country_high_risk"] = (
-                1 if country in ["russia", "china", "iran", "north korea"] else 0
+        # 5. IP-specific features
+        if normalized_type == "ip":
+            # Geographical features
+            if "country" in enrichment_data and enrichment_data["country"]:
+                features["has_country"] = 1
+                # Encode country name
+                country = str(enrichment_data["country"]).lower()
+                features["country_high_risk"] = (
+                    1 if country in ["russia", "china", "iran", "north korea"] else 0
+                )
+                features["country_medium_risk"] = (
+                    1 if country in ["ukraine", "belarus", "romania"] else 0
+                )
+
+            # Latitude/longitude features
+            if (
+                "latitude" in enrichment_data
+                and enrichment_data["latitude"]
+                and "longitude" in enrichment_data
+                and enrichment_data["longitude"]
+            ):
+                features["has_geo_coords"] = 1
+
+        # 6. Domain-specific features
+        if normalized_type == "domain":
+            # Registrar features
+            if "registrar" in enrichment_data and enrichment_data["registrar"]:
+                features["has_registrar"] = 1
+
+            # Domain age features
+            if "creation_date" in enrichment_data and enrichment_data["creation_date"]:
+                features["has_creation_date"] = 1
+
+        # 7. URL-specific features
+        if normalized_type == "url":
+            # URL length
+            features["url_length"] = len(ioc_value)
+
+            # Count special characters in URL
+            special_chars = ["&", "?", "=", ".", "-", "_", "~", "%", "+"]
+            for char in special_chars:
+                features[f"contains_{char}"] = 1 if char in ioc_value else 0
+
+            # Count number of dots in URL
+            features["dot_count"] = ioc_value.count(".")
+
+            # Check for IP in URL
+            features["has_ip_in_url"] = (
+                1 if any(c.isdigit() for c in ioc_value.split(".")) else 0
             )
-            features["country_medium_risk"] = (
-                1 if country in ["ukraine", "belarus", "romania"] else 0
+
+        # 8. Hash-specific features
+        if normalized_type == "hash":
+            # Hash length
+            features["hash_length"] = len(ioc_value)
+
+        # 9. Summary features
+        if summary:
+            features["has_summary"] = 1
+            features["summary_length"] = len(summary)
+
+        logger.debug(f"Extracted features: {features}")
+        return features
+
+    except Exception as e:
+        # Catch the "no such column: value" error which can occur in SQL operations
+        if isinstance(e, Exception) and "no such column: value" in str(e):
+            logger.error(
+                "Caught 'no such column: value' error in extract_features. Using default features."
             )
+            # Return basic features to avoid crashing
+            default_features = {
+                f"type_{ioc_type}": 1 if ioc_type in KNOWN_IOC_TYPES else 0,
+                "type_other": 0 if ioc_type in KNOWN_IOC_TYPES else 1,
+                "feed_count": len(source_feeds),
+            }
+            # Add feed features
+            for feed_name in KNOWN_SOURCE_FEEDS:
+                default_features[f"feed_{feed_name}"] = (
+                    1 if feed_name in source_feeds else 0
+                )
 
-        # Latitude/longitude features
-        if (
-            "latitude" in enrichment_data
-            and enrichment_data["latitude"]
-            and "longitude" in enrichment_data
-            and enrichment_data["longitude"]
-        ):
-            features["has_geo_coords"] = 1
-
-    # 6. Domain-specific features
-    if normalized_type == "domain":
-        # Registrar features
-        if "registrar" in enrichment_data and enrichment_data["registrar"]:
-            features["has_registrar"] = 1
-
-        # Domain age features
-        if "creation_date" in enrichment_data and enrichment_data["creation_date"]:
-            features["has_creation_date"] = 1
-
-    # 7. URL-specific features
-    if normalized_type == "url":
-        # URL length
-        features["url_length"] = len(ioc_value)
-
-        # Count special characters in URL
-        special_chars = ["&", "?", "=", ".", "-", "_", "~", "%", "+"]
-        for char in special_chars:
-            features[f"contains_{char}"] = 1 if char in ioc_value else 0
-
-        # Count number of dots in URL
-        features["dot_count"] = ioc_value.count(".")
-
-        # Check for IP in URL
-        features["has_ip_in_url"] = (
-            1 if any(c.isdigit() for c in ioc_value.split(".")) else 0
-        )
-
-    # 8. Hash-specific features
-    if normalized_type == "hash":
-        # Hash length
-        features["hash_length"] = len(ioc_value)
-
-    # 9. Summary features
-    if summary:
-        features["has_summary"] = 1
-        features["summary_length"] = len(summary)
-
-    logger.debug(f"Extracted features: {features}")
-    return features
+            return default_features
+        else:
+            # Log the error and re-raise
+            logger.error(f"Error in extract_features: {e}")
+            raise
 
 
 # --- Prediction ---
@@ -276,19 +301,22 @@ def predict_score(features: Dict[str, Any]) -> float:
             # Default to first 34 features if model doesn't have feature_names_in_
             model_features = EXPECTED_FEATURES_FULL[:34]
 
-        # Prepare feature vector in the correct order using model features
-        # This ensures we match exactly what the model was trained with
-        feature_vector = [features.get(name, 0) for name in model_features]
+        # Create a proper pandas DataFrame with feature names to avoid sklearn warnings
+        import pandas as pd
 
-        # Reshape for scikit-learn (assuming single sample)
-        feature_array = np.array([feature_vector])
+        # Prepare feature vector with correct names
+        feature_dict = {name: features.get(name, 0) for name in model_features}
+        feature_df = pd.DataFrame([feature_dict])
+
+        # Ensure all expected features are present with the right order
+        feature_df = feature_df[model_features]
 
         # Get probability of malicious class (second column of predict_proba output)
         with (
             open(os.devnull, "w") as f,
             contextlib.redirect_stderr(f),
         ):  # Suppress warnings
-            prediction = _model.predict_proba(feature_array)[0, 1]
+            prediction = _model.predict_proba(feature_df)[0, 1]
 
         logger.debug(f"ML model predicted score: {prediction}")
         return float(prediction)

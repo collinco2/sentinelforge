@@ -233,13 +233,16 @@ def test_explanation(ioc_value="example.com", ioc_type="domain", source_feeds=No
     if source_feeds is None:
         source_feeds = ["urlhaus", "abusech"]
 
-    # For testing purposes, just validate parameters and return success
+    # For testing purposes, just validate parameters
     is_valid, error_message = validate_ioc(ioc_type, ioc_value)
     if not is_valid:
         logging.error(f"Invalid IOC: {error_message}")
-        return False
+        # Use assertion instead of return value
+        assert False, f"IOC validation failed: {error_message}"
 
-    return True
+    # If we get here, test passes
+    assert True, "IOC validation passed"
+    # No return statement
 
 
 def batch_test(

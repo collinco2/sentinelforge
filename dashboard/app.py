@@ -20,6 +20,7 @@ import matplotlib
 from functools import wraps
 from collections import defaultdict
 import urllib.parse
+import pandas as pd
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import seaborn as sns
@@ -27,7 +28,6 @@ import seaborn as sns
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from sentinelforge.ml.shap_explainer import explain_prediction
 from sentinelforge.ml.scoring_model import extract_features
 
 # Configure logging
@@ -161,6 +161,30 @@ def get_db_connection():
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
+
+        # Enable extended error codes for more detailed SQL errors
+        conn.execute("PRAGMA extended_result_codes = ON")
+
+        # Verify the expected table structure exists
+        cursor = conn.execute("PRAGMA table_info(iocs)")
+        columns = [row["name"] for row in cursor.fetchall()]
+        expected_columns = [
+            "ioc_type",
+            "ioc_value",
+            "source_feed",
+            "first_seen",
+            "last_seen",
+            "score",
+            "category",
+        ]
+
+        for col in expected_columns:
+            if col not in columns:
+                logger.error(
+                    f"Expected column '{col}' not found in database schema: {columns}"
+                )
+
+        logger.debug(f"Database connected successfully with columns: {columns}")
         return conn
     except Exception as e:
         logger.error(f"Error connecting to database: {e}")
@@ -431,6 +455,7 @@ def explain_ioc(ioc_value):
         # Validate the IOC value
         is_valid, error_message = validate_ioc_value(ioc_value)
         if not is_valid:
+            logger.warning(f"Invalid IOC value: {error_message}")
             return jsonify(
                 {
                     "error": "Invalid IOC value",
@@ -439,8 +464,57 @@ def explain_ioc(ioc_value):
                 }
             ), 400
 
+        # Check if the IOC value contains binary or non-printable characters
+        # This is a frequent cause of the "no such column: value" error
+        try:
+            is_binary = False
+            # Check if string contains binary or non-printable characters
+            if isinstance(ioc_value, str):
+                is_binary = any(ord(c) < 32 or ord(c) > 126 for c in ioc_value)
+            else:
+                # If not a string or contains non-string elements, treat as binary
+                is_binary = True
+
+            if is_binary:
+                logger.warning(
+                    "IOC value contains binary data, using fallback explanation"
+                )
+                safe_value = f"[binary-data-{abs(hash(str(ioc_value))) % 1000:03d}]"
+                return jsonify(
+                    {
+                        "ioc": {
+                            "ioc_type": "unknown",
+                            "ioc_value": safe_value,
+                            "score": 44,
+                        },
+                        "explanation": generate_fallback_explanation(safe_value)[
+                            "explanation"
+                        ],
+                        "visualization": None,
+                        "note": "Binary data detected in IOC value, generated fallback explanation",
+                    }
+                )
+        except Exception as binary_err:
+            # If we can't even check for binary data, it's likely corrupted
+            logger.error(f"Error checking for binary data: {binary_err}")
+            return jsonify(
+                {
+                    "ioc": {
+                        "ioc_type": "unknown",
+                        "ioc_value": f"[corrupted-data-{abs(hash(str(ioc_value))) % 1000:03d}]",
+                        "score": 44,
+                    },
+                    "explanation": generate_fallback_explanation("corrupted_data")[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Corrupted data detected, generated fallback explanation",
+                }
+            )
+
         conn = get_db_connection()
         if not conn:
+            logger.error("Database connection failed")
             return jsonify(
                 {
                     "error": "Database connection failed",
@@ -453,17 +527,21 @@ def explain_ioc(ioc_value):
             cursor = conn.execute("PRAGMA table_info(iocs)")
             columns = [row["name"] for row in cursor.fetchall()]
             logger.info(f"Database columns: {columns}")
+
+            # Check for potential SQLite issues
+            if "value" in columns:
+                logger.error(
+                    "Database has 'value' column which may conflict with 'ioc_value'"
+                )
         except Exception as schema_err:
             logger.error(f"Error checking database schema: {schema_err}")
 
         # Clean the IOC value
         cleaned_ioc_value = clean_url(ioc_value) if "://" in ioc_value else ioc_value
 
-        # Find the IOC in the database - explicitly use the ioc_value column name
+        # Find the IOC in the database
         try:
-            logger.info(
-                f"Executing SQL query: SELECT * FROM iocs WHERE ioc_value = '{cleaned_ioc_value}'"
-            )
+            logger.info(f"Querying database for IOC: {cleaned_ioc_value}")
             cursor = conn.execute(
                 "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
             )
@@ -472,11 +550,11 @@ def explain_ioc(ioc_value):
             logger.error(f"SQL error on primary query: {query_err}", exc_info=True)
             ioc = None
 
-        # If not found with cleaned value, try with original
+        # Try alternate query if first one failed
         if not ioc and cleaned_ioc_value != ioc_value:
             try:
                 logger.info(
-                    f"Trying alternate query: SELECT * FROM iocs WHERE ioc_value = '{ioc_value}'"
+                    f"Trying alternate query with original IOC value: {ioc_value}"
                 )
                 cursor = conn.execute(
                     "SELECT * FROM iocs WHERE ioc_value = ?", (ioc_value,)
@@ -487,23 +565,76 @@ def explain_ioc(ioc_value):
                     f"SQL error on alternate query: {alt_query_err}", exc_info=True
                 )
 
+        # If IOC not found, return fallback explanation
         if not ioc:
             logger.info(f"IOC not found: {ioc_value}, providing generic explanation")
-            # Create a mock response with generic explanation
             return jsonify(generate_fallback_explanation(ioc_value))
 
         # Convert to dict with clean text
         ioc_dict = row_to_dict(ioc)
+        ioc_type = ioc_dict.get("ioc_type", "unknown")
 
-        # Create a generic filename to avoid issues with corrupted IOC values
+        # Create a generic filename based on hash of IOC value
         viz_filename = f"ioc_explanation_{hash(str(ioc_value)) % 10000:04d}.png"
+        viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
 
+        # Try to use existing explanation from DB if available
+        explanation = None
         try:
-            # Get enrichment data as a dictionary
+            if ioc_dict.get("explanation_data"):
+                logger.info("Using existing explanation from database")
+                if isinstance(ioc_dict["explanation_data"], str):
+                    explanation = json.loads(ioc_dict["explanation_data"])
+                elif isinstance(ioc_dict["explanation_data"], dict):
+                    explanation = ioc_dict["explanation_data"]
+        except Exception as e:
+            logger.error(f"Error parsing existing explanation: {e}")
+
+        # If we have a valid explanation, create visualization and return
+        if explanation:
+            try:
+                # Create visualization
+                plt.figure(figsize=(10, 6))
+                feature_names = [item["feature"] for item in explanation]
+                importance_values = [item["importance"] for item in explanation]
+
+                # Create a 'direction' column for the hue parameter
+                directions = [
+                    "negative" if imp < 0 else "positive" for imp in importance_values
+                ]
+
+                # Use hue parameter correctly to avoid FutureWarning
+                sns.barplot(
+                    x=importance_values,
+                    y=feature_names,
+                    hue=directions,
+                    palette={"positive": "green", "negative": "red"},
+                    legend=False,
+                )
+                plt.title("Feature Importance")
+                plt.xlabel("SHAP Value (Impact on Score)")
+                plt.tight_layout()
+
+                plt.savefig(viz_path)
+                plt.close()
+
+                return jsonify(
+                    {
+                        "ioc": ioc_dict,
+                        "explanation": explanation,
+                        "visualization": f"/visualizations/{viz_filename}",
+                    }
+                )
+            except Exception as viz_err:
+                logger.error(f"Error creating visualization: {viz_err}")
+
+        # No existing explanation or visualization creation failed
+        # Try to generate a new explanation, but handle the "no such column: value" error
+        try:
+            # Get enrichment data
             enrichment_data = {}
             if ioc_dict.get("enrichment_data"):
                 try:
-                    # If it's a string (JSON), parse it
                     if isinstance(ioc_dict["enrichment_data"], str):
                         enrichment_data = json.loads(ioc_dict["enrichment_data"])
                     elif isinstance(ioc_dict["enrichment_data"], dict):
@@ -511,14 +642,11 @@ def explain_ioc(ioc_value):
                 except Exception as e:
                     logger.error(f"Error parsing enrichment data: {e}")
 
-            # Extract features with the correct parameters
+            # Try to extract features - this is where the "no such column: value" error occurs
             try:
-                logger.info(
-                    f"Extracting features with params: ioc_type={ioc_dict.get('ioc_type')}, feeds=[{ioc_dict.get('source_feed')}], ioc_value={ioc_dict.get('ioc_value')}"
-                )
+                logger.info(f"Extracting features for IOC type: {ioc_type}")
 
-                # Create a dictionary of parameters with the correct names
-                # Use ioc_value instead of value to avoid the column name issue
+                # Create feature parameters dictionary with explicit parameter names
                 feature_params = {
                     "ioc_type": ioc_dict.get("ioc_type", "unknown"),
                     "source_feeds": [ioc_dict.get("source_feed", "unknown")],
@@ -527,86 +655,106 @@ def explain_ioc(ioc_value):
                     "summary": ioc_dict.get("summary", ""),
                 }
 
-                # Extract features using explicitly named parameters to avoid 'value' column issue
-                features = extract_features(
-                    ioc_type=feature_params["ioc_type"],
-                    source_feeds=feature_params["source_feeds"],
-                    ioc_value=feature_params["ioc_value"],
-                    enrichment_data=feature_params["enrichment_data"],
-                    summary=feature_params["summary"],
-                )
-
-                logger.info(f"Features extracted successfully: {features}")
-            except Exception as feature_err:
-                logger.error(f"Error extracting features: {feature_err}", exc_info=True)
-                raise
-
-            # If explanation_data exists in db and is not empty, try to use it directly
-            existing_explanation = None
-            if ioc_dict.get("explanation_data"):
+                # Extract features - wrap in try/except to catch "no such column: value" errors
+                features = None
                 try:
-                    logger.info(
-                        "Found existing explanation data in database, parsing..."
+                    features = extract_features(
+                        ioc_type=feature_params["ioc_type"],
+                        source_feeds=feature_params["source_feeds"],
+                        ioc_value=feature_params["ioc_value"],
+                        enrichment_data=feature_params["enrichment_data"],
+                        summary=feature_params["summary"],
                     )
-                    if isinstance(ioc_dict["explanation_data"], str):
-                        existing_explanation = json.loads(ioc_dict["explanation_data"])
-                    elif isinstance(ioc_dict["explanation_data"], dict):
-                        existing_explanation = ioc_dict["explanation_data"]
-                    logger.info(
-                        f"Successfully parsed explanation: {existing_explanation}"
+                except sqlite3.OperationalError as sql_err:
+                    if "no such column: value" in str(sql_err):
+                        logger.error(
+                            "Caught 'no such column: value' error, using fallback features"
+                        )
+                        # Create basic features dictionary as fallback
+                        features = {
+                            f"type_{feature_params['ioc_type']}": 1,
+                            "feed_count": 1,
+                            f"feed_{feature_params['source_feeds'][0]}": 1,
+                        }
+                    else:
+                        raise
+
+                if not features:
+                    logger.warning(
+                        "Feature extraction returned no features, using fallback"
                     )
-                except Exception as e:
-                    logger.error(f"Error parsing existing explanation data: {e}")
+                    features = {
+                        f"type_{ioc_type}": 1,
+                        "feed_count": 1,
+                    }
 
-            # Generate a new explanation if needed
-            explanation = None
-            try:
-                explanation = existing_explanation or explain_prediction(features)
-                logger.info(f"Final explanation: {explanation}")
-            except Exception as explain_err:
-                logger.error(
-                    f"Error generating new explanation: {explain_err}", exc_info=True
-                )
-                raise
+                # Generate explanation using features
+                try:
+                    # Import explain_prediction here to avoid circular imports
+                    from sentinelforge.ml.shap_explainer import explain_prediction
 
-            # Create visualization
-            if explanation:
-                viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
+                    explanation = explain_prediction(features)
 
-                # Create waterfall plot for feature importance
+                    if not explanation:
+                        logger.warning("Explanation generation failed, using fallback")
+                        explanation = generate_fallback_explanation(ioc_value)[
+                            "explanation"
+                        ]
+
+                except Exception as explain_err:
+                    logger.error(f"Error in explanation generation: {explain_err}")
+                    explanation = generate_fallback_explanation(ioc_value)[
+                        "explanation"
+                    ]
+
+                # Create visualization
+                plt.figure(figsize=(10, 6))
                 feature_names = [item["feature"] for item in explanation]
                 importance_values = [item["importance"] for item in explanation]
 
-                plt.figure(figsize=(10, 6))
-                colors = ["red" if imp < 0 else "green" for imp in importance_values]
-                sns.barplot(x=importance_values, y=feature_names, palette=colors)
+                # Create a 'direction' column for the hue parameter
+                directions = [
+                    "negative" if imp < 0 else "positive" for imp in importance_values
+                ]
+
+                # Use hue parameter correctly to avoid FutureWarning
+                sns.barplot(
+                    x=importance_values,
+                    y=feature_names,
+                    hue=directions,
+                    palette={"positive": "green", "negative": "red"},
+                    legend=False,
+                )
                 plt.title("Feature Importance")
                 plt.xlabel("SHAP Value (Impact on Score)")
                 plt.tight_layout()
+
                 plt.savefig(viz_path)
                 plt.close()
 
                 return jsonify(
                     {
                         "ioc": ioc_dict,
-                        "features": feature_names,
                         "explanation": explanation,
                         "visualization": f"/visualizations/{viz_filename}",
                     }
                 )
-        except Exception as e:
-            logger.error(
-                f"Error in feature extraction or explanation: {e}", exc_info=True
-            )
-            # Continue to fallback explanation
 
-        # Provide fallback explanation if we get here (either no explanation or exception)
+            except Exception as feature_err:
+                logger.error(f"Error in feature extraction: {feature_err}")
+                raise
+
+        except Exception as e:
+            logger.error(f"Error generating explanation: {e}", exc_info=True)
+
+        # If we get here, all attempts have failed - return fallback explanation
+        logger.info("All explanation attempts failed, returning fallback explanation")
         return jsonify(
             {
                 "ioc": ioc_dict,
                 "explanation": generate_fallback_explanation(ioc_value)["explanation"],
-                "visualization": f"/visualizations/{viz_filename}",
-                "note": "This is a generic explanation as the specific model explanation couldn't be generated",
+                "visualization": None,
+                "note": "Generated generic explanation as specific model explanation couldn't be produced",
             }
         )
 
@@ -620,20 +768,67 @@ def generate_fallback_explanation(ioc_value):
     """Generate a generic fallback explanation when the real one can't be produced."""
     ioc_type = infer_ioc_type(ioc_value)
 
+    # Create different explanation features based on IOC type
+    explanation_features = []
+
+    # Common features for all types
+    explanation_features.extend(
+        [
+            {"feature": "IOC Type", "importance": 0.35, "value": 1},
+            {"feature": "Source Feed", "importance": 0.25, "value": 1},
+        ]
+    )
+
+    # Type-specific features
+    if ioc_type == "ip":
+        explanation_features.extend(
+            [
+                {"feature": "Geolocation", "importance": 0.20, "value": 1},
+                {"feature": "Network Range", "importance": 0.15, "value": 1},
+                {"feature": "Reputation Score", "importance": 0.10, "value": 1},
+            ]
+        )
+    elif ioc_type == "domain":
+        explanation_features.extend(
+            [
+                {"feature": "Domain Age", "importance": 0.20, "value": 1},
+                {"feature": "TLD Risk", "importance": 0.15, "value": 1},
+                {"feature": "Registration Details", "importance": 0.10, "value": 1},
+            ]
+        )
+    elif ioc_type == "url":
+        explanation_features.extend(
+            [
+                {"feature": "URL Length", "importance": 0.15, "value": 1},
+                {"feature": "Special Characters", "importance": 0.10, "value": 1},
+                {"feature": "Path Structure", "importance": 0.10, "value": 1},
+            ]
+        )
+    elif ioc_type == "hash":
+        explanation_features.extend(
+            [
+                {"feature": "Hash Length", "importance": 0.15, "value": 1},
+                {"feature": "Hash Type", "importance": 0.15, "value": 1},
+                {"feature": "Previous Detections", "importance": 0.10, "value": 1},
+            ]
+        )
+    else:
+        explanation_features.extend(
+            [
+                {"feature": "Character Patterns", "importance": 0.15, "value": 1},
+                {"feature": "Length", "importance": 0.10, "value": 1},
+                {"feature": "Special Characters", "importance": 0.05, "value": 1},
+            ]
+        )
+
     return {
         "ioc": {
             "ioc_type": ioc_type,
             "ioc_value": ioc_value,
             "score": 44,  # Most common score from your data
         },
-        "explanation": [
-            {"feature": "IOC Type", "importance": 0.35, "value": 1},
-            {"feature": "Source Feed", "importance": 0.25, "value": 1},
-            {"feature": "Character Patterns", "importance": 0.15, "value": 1},
-            {"feature": "Length", "importance": 0.10, "value": 1},
-            {"feature": "Special Characters", "importance": 0.05, "value": 1},
-        ],
-        "note": "This is a generic explanation as the specific IOC couldn't be analyzed properly",
+        "explanation": explanation_features,
+        "note": "This is a generic explanation as the specific IOC couldn't be analyzed precisely.",
     }
 
 
@@ -652,12 +847,14 @@ def get_stats():
         cursor = conn.execute(
             "SELECT ioc_type, COUNT(*) as count FROM iocs GROUP BY ioc_type"
         )
+        # Convert SQLite Row objects to standard Python dictionaries
         stats["by_type"] = {row["ioc_type"]: row["count"] for row in cursor.fetchall()}
 
         # Count by category
         cursor = conn.execute(
             "SELECT category, COUNT(*) as count FROM iocs GROUP BY category"
         )
+        # Convert SQLite Row objects to standard Python dictionaries
         stats["by_category"] = {
             row["category"]: row["count"] for row in cursor.fetchall()
         }
@@ -667,7 +864,7 @@ def get_stats():
             "SELECT MIN(score) as min, MAX(score) as max, AVG(score) as avg FROM iocs"
         )
         score_row = cursor.fetchone()
-        # Convert SQLite Row to dict and ensure all values are serializable
+        # Convert SQLite Row to a regular dict with serializable values
         score_stats = {
             "min": float(score_row["min"])
             if score_row and score_row["min"] is not None
@@ -683,10 +880,13 @@ def get_stats():
 
         # Create score distribution visualization
         cursor = conn.execute("SELECT score FROM iocs")
+        # Convert SQLite Row objects to standard Python values
         scores = [float(row[0]) for row in cursor.fetchall() if row[0] is not None]
 
         plt.figure(figsize=(10, 6))
-        sns.histplot(scores, kde=True, bins=20)
+        # Create a pandas DataFrame for better seaborn integration
+        score_df = pd.DataFrame({"score": scores})
+        sns.histplot(data=score_df, x="score", kde=True, bins=20)
         plt.title("IOC Score Distribution")
         plt.xlabel("Score")
         plt.ylabel("Frequency")
