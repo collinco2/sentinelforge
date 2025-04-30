@@ -12,7 +12,9 @@ import sqlite3
 import time
 import json
 import re
-from flask import Flask, jsonify, request, render_template, send_from_directory
+import csv
+from io import StringIO
+from flask import Flask, jsonify, request, render_template, send_from_directory, Response
 from pathlib import Path
 import sys
 import matplotlib.pyplot as plt
@@ -346,13 +348,14 @@ def get_iocs():
         max_score = validate_numeric_param(
             request.args.get("max_score"), min_val=0, max_val=100
         )
-
+        
         # Get additional filter parameters
         source_feed = request.args.get("source_feed")
         category = request.args.get("category")
         date_from = request.args.get("date_from")
         date_to = request.args.get("date_to")
-
+        search_query = request.args.get("search_query")
+        
         # Validate date formats if provided
         if date_from:
             try:
@@ -362,10 +365,8 @@ def get_iocs():
                     date_from = f"{date_from} 00:00:00"  # Add time component
             except Exception as e:
                 logger.warning(f"Invalid date_from format: {date_from}, {e}")
-                return jsonify(
-                    {"error": "Invalid date_from format. Use YYYY-MM-DD."}
-                ), 400
-
+                return jsonify({"error": "Invalid date_from format. Use YYYY-MM-DD."}), 400
+                
         if date_to:
             try:
                 # Try to parse to ensure it's a valid date format
@@ -374,9 +375,7 @@ def get_iocs():
                     date_to = f"{date_to} 23:59:59"  # Add time component for end of day
             except Exception as e:
                 logger.warning(f"Invalid date_to format: {date_to}, {e}")
-                return jsonify(
-                    {"error": "Invalid date_to format. Use YYYY-MM-DD."}
-                ), 400
+                return jsonify({"error": "Invalid date_to format. Use YYYY-MM-DD."}), 400
 
         # Build the base query conditions that will be used for both the count and data queries
         query_conditions = "WHERE 1=1"
@@ -393,24 +392,30 @@ def get_iocs():
         if max_score is not None:
             query_conditions += " AND score <= ?"
             params.append(max_score)
-
+            
         # Add new filter conditions
         if source_feed:
             query_conditions += " AND source_feed = ?"
             params.append(source_feed)
-
+            
         if category:
             query_conditions += " AND category = ?"
             params.append(category)
-
+            
         if date_from:
             query_conditions += " AND first_seen >= ?"
             params.append(date_from)
-
+            
         if date_to:
             query_conditions += " AND first_seen <= ?"
             params.append(date_to)
-
+            
+        # Add search functionality
+        if search_query:
+            # Use LIKE for partial matches, with wildcards on both sides
+            query_conditions += " AND ioc_value LIKE ?"
+            params.append(f"%{search_query}%")
+            
         # Get total count for pagination
         count_query = f"SELECT COUNT(*) as total FROM iocs {query_conditions}"
         cursor = conn.execute(count_query, params)
@@ -451,25 +456,281 @@ def get_iocs():
         conn.close()
 
         # Return data with pagination metadata
-        return jsonify(
-            {
-                "iocs": iocs,
-                "pagination": {
-                    "total_count": total_count,
-                    "total_pages": total_pages,
-                    "current_page": (offset // limit) + 1,
-                    "page_size": limit,
-                    "has_next": offset + limit < total_count,
-                    "has_prev": offset > 0,
-                },
+        return jsonify({
+            "iocs": iocs,
+            "pagination": {
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "current_page": (offset // limit) + 1,
+                "page_size": limit,
+                "has_next": offset + limit < total_count,
+                "has_prev": offset > 0
             }
-        )
+        })
 
     except Exception as e:
         logger.error(f"Error retrieving IOCs: {e}")
         return jsonify(
             {
                 "error": "An error occurred while retrieving IOCs",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
+
+
+@app.route("/api/export/csv")
+@rate_limit
+def export_csv():
+    """Export IOCs to CSV format."""
+    try:
+        # Reuse most of the filtering logic from get_iocs
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Get and validate query parameters
+        ioc_type = request.args.get("type")
+        if ioc_type and ioc_type not in VALID_IOC_TYPES:
+            return jsonify(
+                {
+                    "error": f"Invalid IOC type. Must be one of: {', '.join(VALID_IOC_TYPES)}"
+                }
+            ), 400
+
+        min_score = validate_numeric_param(
+            request.args.get("min_score"), min_val=0, max_val=100
+        )
+        max_score = validate_numeric_param(
+            request.args.get("max_score"), min_val=0, max_val=100
+        )
+        
+        # Get additional filter parameters
+        source_feed = request.args.get("source_feed")
+        category = request.args.get("category")
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+        search_query = request.args.get("search_query")
+        
+        # Validate date formats if provided
+        if date_from:
+            try:
+                date_from = date_from.strip()
+                if len(date_from) == 10:  # Only date like "2025-04-30"
+                    date_from = f"{date_from} 00:00:00"  # Add time component
+            except Exception as e:
+                logger.warning(f"Invalid date_from format: {date_from}, {e}")
+                return jsonify({"error": "Invalid date_from format. Use YYYY-MM-DD."}), 400
+                
+        if date_to:
+            try:
+                date_to = date_to.strip()
+                if len(date_to) == 10:  # Only date like "2025-04-30"
+                    date_to = f"{date_to} 23:59:59"  # Add time component for end of day
+            except Exception as e:
+                logger.warning(f"Invalid date_to format: {date_to}, {e}")
+                return jsonify({"error": "Invalid date_to format. Use YYYY-MM-DD."}), 400
+
+        # Build the base query conditions that will be used for the data query
+        query_conditions = "WHERE 1=1"
+        params = []
+
+        if ioc_type:
+            query_conditions += " AND ioc_type = ?"
+            params.append(ioc_type)
+
+        if min_score is not None:
+            query_conditions += " AND score >= ?"
+            params.append(min_score)
+
+        if max_score is not None:
+            query_conditions += " AND score <= ?"
+            params.append(max_score)
+            
+        # Add new filter conditions
+        if source_feed:
+            query_conditions += " AND source_feed = ?"
+            params.append(source_feed)
+            
+        if category:
+            query_conditions += " AND category = ?"
+            params.append(category)
+            
+        if date_from:
+            query_conditions += " AND first_seen >= ?"
+            params.append(date_from)
+            
+        if date_to:
+            query_conditions += " AND first_seen <= ?"
+            params.append(date_to)
+            
+        # Add search functionality
+        if search_query:
+            # Use LIKE for partial matches, with wildcards on both sides
+            query_conditions += " AND ioc_value LIKE ?"
+            params.append(f"%{search_query}%")
+            
+        # For exports, get all matching data with no pagination limit
+        data_query = f"SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs {query_conditions} ORDER BY score DESC"
+        
+        # Execute the data query
+        cursor = conn.execute(data_query, params)
+        iocs = []
+
+        # Process each row and detect timestamp-like values or corrupted URLs
+        for row in cursor.fetchall():
+            ioc_dict = row_to_dict(row)
+            iocs.append(ioc_dict)
+
+        conn.close()
+
+        # Create CSV data
+        csv_file = StringIO()
+        if iocs:
+            # Use the keys from the first item as column headers
+            fieldnames = iocs[0].keys()
+            csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            
+            # Write headers and data
+            csv_writer.writeheader()
+            csv_writer.writerows(iocs)
+            
+        # Create the response
+        filename = f"sentinelforge_iocs_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        response = Response(csv_file.getvalue(), mimetype="text/csv")
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        
+        return response
+
+    except Exception as e:
+        logger.error(f"Error exporting IOCs to CSV: {e}")
+        return jsonify(
+            {
+                "error": "An error occurred while exporting IOCs",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
+
+
+@app.route("/api/export/json")
+@rate_limit
+def export_json():
+    """Export IOCs to JSON format."""
+    try:
+        # Reuse most of the filtering logic from get_iocs
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Get and validate query parameters
+        ioc_type = request.args.get("type")
+        if ioc_type and ioc_type not in VALID_IOC_TYPES:
+            return jsonify(
+                {
+                    "error": f"Invalid IOC type. Must be one of: {', '.join(VALID_IOC_TYPES)}"
+                }
+            ), 400
+
+        min_score = validate_numeric_param(
+            request.args.get("min_score"), min_val=0, max_val=100
+        )
+        max_score = validate_numeric_param(
+            request.args.get("max_score"), min_val=0, max_val=100
+        )
+        
+        # Get additional filter parameters
+        source_feed = request.args.get("source_feed")
+        category = request.args.get("category")
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+        search_query = request.args.get("search_query")
+        
+        # Validate date formats if provided
+        if date_from:
+            try:
+                date_from = date_from.strip()
+                if len(date_from) == 10:  # Only date like "2025-04-30"
+                    date_from = f"{date_from} 00:00:00"  # Add time component
+            except Exception as e:
+                logger.warning(f"Invalid date_from format: {date_from}, {e}")
+                return jsonify({"error": "Invalid date_from format. Use YYYY-MM-DD."}), 400
+                
+        if date_to:
+            try:
+                date_to = date_to.strip()
+                if len(date_to) == 10:  # Only date like "2025-04-30"
+                    date_to = f"{date_to} 23:59:59"  # Add time component for end of day
+            except Exception as e:
+                logger.warning(f"Invalid date_to format: {date_to}, {e}")
+                return jsonify({"error": "Invalid date_to format. Use YYYY-MM-DD."}), 400
+
+        # Build the base query conditions that will be used for the data query
+        query_conditions = "WHERE 1=1"
+        params = []
+
+        if ioc_type:
+            query_conditions += " AND ioc_type = ?"
+            params.append(ioc_type)
+
+        if min_score is not None:
+            query_conditions += " AND score >= ?"
+            params.append(min_score)
+
+        if max_score is not None:
+            query_conditions += " AND score <= ?"
+            params.append(max_score)
+            
+        # Add new filter conditions
+        if source_feed:
+            query_conditions += " AND source_feed = ?"
+            params.append(source_feed)
+            
+        if category:
+            query_conditions += " AND category = ?"
+            params.append(category)
+            
+        if date_from:
+            query_conditions += " AND first_seen >= ?"
+            params.append(date_from)
+            
+        if date_to:
+            query_conditions += " AND first_seen <= ?"
+            params.append(date_to)
+            
+        # Add search functionality
+        if search_query:
+            # Use LIKE for partial matches, with wildcards on both sides
+            query_conditions += " AND ioc_value LIKE ?"
+            params.append(f"%{search_query}%")
+            
+        # For exports, get all matching data with no pagination limit
+        data_query = f"SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs {query_conditions} ORDER BY score DESC"
+        
+        # Execute the data query
+        cursor = conn.execute(data_query, params)
+        iocs = []
+
+        # Process each row and detect timestamp-like values or corrupted URLs
+        for row in cursor.fetchall():
+            ioc_dict = row_to_dict(row)
+            iocs.append(ioc_dict)
+
+        conn.close()
+
+        # Create JSON data
+        json_data = json.dumps({"iocs": iocs}, indent=2)
+        
+        # Create the response
+        filename = f"sentinelforge_iocs_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        response = Response(json_data, mimetype="application/json")
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        
+        return response
+
+    except Exception as e:
+        logger.error(f"Error exporting IOCs to JSON: {e}")
+        return jsonify(
+            {
+                "error": "An error occurred while exporting IOCs",
                 "details": str(e) if app.debug else "Enable debug mode for details",
             }
         ), 500

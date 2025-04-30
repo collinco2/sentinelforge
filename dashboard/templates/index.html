@@ -42,6 +42,18 @@
                     </div>
                     <div class="card-body">
                         <form id="filter-form">
+                            <!-- Add search box at the top -->
+                            <div class="mb-3">
+                                <label for="search-query" class="form-label">Search IOCs</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="search-query" placeholder="Search by value...">
+                                    <button class="btn btn-outline-secondary" type="button" id="clear-search">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted">Search for partial matches in IOC values</small>
+                            </div>
+                            
                             <div class="mb-3">
                                 <label for="ioc-type" class="form-label">IOC Type</label>
                                 <select class="form-select" id="ioc-type">
@@ -146,7 +158,17 @@
                 
                 <div class="card mt-4" id="ioc-explorer">
                     <div class="card-header bg-secondary text-white">
-                        <h5><i class="bi bi-table"></i> IOC Explorer</h5>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5><i class="bi bi-table"></i> IOC Explorer</h5>
+                            <div>
+                                <button class="btn btn-sm btn-outline-light" id="export-csv">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
+                                </button>
+                                <button class="btn btn-sm btn-outline-light" id="export-json">
+                                    <i class="bi bi-file-earmark-code"></i> Export JSON
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">

@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const dateFromInput = document.getElementById('date-from');
     const dateToInput = document.getElementById('date-to');
     const resetFiltersBtn = document.getElementById('reset-filters');
+    // Search elements
+    const searchQueryInput = document.getElementById('search-query');
+    const clearSearchBtn = document.getElementById('clear-search');
 
     // Pagination variables
     let currentPage = 1;
@@ -76,11 +79,35 @@ document.addEventListener('DOMContentLoaded', function() {
             if (maxScoreValue) maxScoreValue.textContent = '100';
             if (dateFromInput) dateFromInput.value = '';
             if (dateToInput) dateToInput.value = '';
+            if (searchQueryInput) searchQueryInput.value = '';
             
             // Reload with reset filters
             currentPage = 1;
             loadingOverlay.style.display = 'flex';
             loadIocs();
+        });
+    }
+
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', function() {
+            if (searchQueryInput) {
+                searchQueryInput.value = '';
+                // Trigger search if there was a value before clearing
+                currentPage = 1;
+                loadingOverlay.style.display = 'flex';
+                loadIocs();
+            }
+        });
+    }
+    
+    // Add event listener for Enter key in search box
+    if (searchQueryInput) {
+        searchQueryInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                currentPage = 1;
+                loadingOverlay.style.display = 'flex';
+                loadIocs();
+            }
         });
     }
 
@@ -94,6 +121,45 @@ document.addEventListener('DOMContentLoaded', function() {
         maxScoreInput.addEventListener('input', function() {
             maxScoreValue.textContent = this.value;
         });
+    }
+
+    // Add event listeners for export buttons
+    const exportCsvBtn = document.getElementById('export-csv');
+    const exportJsonBtn = document.getElementById('export-json');
+    
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', function() {
+            // Build query parameters from current filters
+            const params = buildExportParams();
+            // Trigger the download
+            window.location.href = `/api/export/csv?${params}`;
+        });
+    }
+    
+    if (exportJsonBtn) {
+        exportJsonBtn.addEventListener('click', function() {
+            // Build query parameters from current filters
+            const params = buildExportParams();
+            // Trigger the download
+            window.location.href = `/api/export/json?${params}`;
+        });
+    }
+    
+    // Helper function to build query parameters for export
+    function buildExportParams() {
+        const params = new URLSearchParams();
+        
+        // Add all current filters
+        if (iocTypeSelect && iocTypeSelect.value) params.append('type', iocTypeSelect.value);
+        if (sourceFeedSelect && sourceFeedSelect.value) params.append('source_feed', sourceFeedSelect.value);
+        if (categorySelect && categorySelect.value) params.append('category', categorySelect.value);
+        if (minScoreInput && minScoreInput.value > 0) params.append('min_score', minScoreInput.value);
+        if (maxScoreInput && maxScoreInput.value < 100) params.append('max_score', maxScoreInput.value);
+        if (dateFromInput && dateFromInput.value) params.append('date_from', dateFromInput.value);
+        if (dateToInput && dateToInput.value) params.append('date_to', dateToInput.value);
+        if (searchQueryInput && searchQueryInput.value) params.append('search_query', searchQueryInput.value);
+        
+        return params.toString();
     }
 
     // Load statistics
@@ -241,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const category = categorySelect ? categorySelect.value : '';
         const dateFrom = dateFromInput ? dateFromInput.value : '';
         const dateTo = dateToInput ? dateToInput.value : '';
+        const searchQuery = searchQueryInput ? searchQueryInput.value : '';
         const offset = (currentPage - 1) * itemsPerPage;
         
         // Show loading state
@@ -268,6 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (category) params.append('category', category);
         if (dateFrom) params.append('date_from', dateFrom);
         if (dateTo) params.append('date_to', dateTo);
+        if (searchQuery) params.append('search_query', searchQuery);
         
         // Fetch IOCs
         fetch(`/api/iocs?${params.toString()}`)
