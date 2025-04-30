@@ -1066,7 +1066,9 @@ def explain_ioc(ioc_value):
         try:
             logger.info(f"Querying database for IOC: {cleaned_ioc_value}")
             # Use parameter binding for safety
-            cursor = conn.execute("SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,))
+            cursor = conn.execute(
+                "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
+            )
             row = cursor.fetchone()
             if row:
                 # Wrap the row in SafeDict to prevent "no such column: value" errors
@@ -1184,18 +1186,20 @@ def explain_ioc(ioc_value):
                 # Check if file was created successfully
                 if not os.path.exists(viz_path):
                     logger.error(f"Failed to create visualization file at {viz_path}")
-                    if conn: 
+                    if conn:
                         conn.close()
                     return jsonify(generate_fallback_explanation(ioc_value))
                 else:
                     logger.info(f"Successfully created visualization at {viz_path}")
-                    if conn: 
+                    if conn:
                         conn.close()
-                    return jsonify({
-                        "ioc": ioc_dict,
-                        "explanation": explanation,
-                        "visualization": f"/visualizations/{viz_filename}",
-                    })
+                    return jsonify(
+                        {
+                            "ioc": ioc_dict,
+                            "explanation": explanation,
+                            "visualization": f"/visualizations/{viz_filename}",
+                        }
+                    )
 
             except Exception as viz_err:
                 logger.error(f"Error creating visualization: {viz_err}")
@@ -1319,25 +1323,33 @@ def explain_ioc(ioc_value):
             # Close connection and return result
             if conn:
                 conn.close()
-            return jsonify({
-                "ioc": ioc_dict,
-                "explanation": explanation,
-                "visualization": visualization_path,
-                "note": None if visualization_path else "Visualization could not be generated",
-            })
+            return jsonify(
+                {
+                    "ioc": ioc_dict,
+                    "explanation": explanation,
+                    "visualization": visualization_path,
+                    "note": None
+                    if visualization_path
+                    else "Visualization could not be generated",
+                }
+            )
 
         except Exception as e:
             logger.error(f"Error generating explanation: {e}", exc_info=True)
-            if conn: 
+            if conn:
                 conn.close()
-            
+
             # Provide a useful fallback response
-            return jsonify({
-                "ioc": ioc_dict,
-                "explanation": generate_fallback_explanation(ioc_value)["explanation"],
-                "visualization": None,
-                "note": "Generated generic explanation as specific model explanation couldn't be produced",
-            })
+            return jsonify(
+                {
+                    "ioc": ioc_dict,
+                    "explanation": generate_fallback_explanation(ioc_value)[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Generated generic explanation as specific model explanation couldn't be produced",
+                }
+            )
 
     except sqlite3.OperationalError as sql_err:
         # Catch the "no such column: value" error at the top level
