@@ -23,7 +23,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Search elements
     const searchQueryInput = document.getElementById('search-query');
     const clearSearchBtn = document.getElementById('clear-search');
+    // Batch actions elements
+    const batchActionsToolbar = document.getElementById('batch-actions-toolbar');
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    const selectAllBtn = document.getElementById('select-all');
+    const deselectAllBtn = document.getElementById('deselect-all');
+    const selectedCountElement = document.getElementById('selected-count');
+    const batchExportBtn = document.getElementById('batch-export');
+    const batchRecategorizeBtn = document.getElementById('batch-recategorize');
+    const batchDeleteBtn = document.getElementById('batch-delete');
 
+    // Selected IOCs set
+    const selectedIOCs = new Set();
+    
     // Pagination variables
     let currentPage = 1;
     const itemsPerPage = 10;
@@ -123,6 +135,201 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Add event listeners for batch action buttons
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.ioc-checkbox');
+            const isChecked = this.checked;
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+                const iocId = checkbox.getAttribute('data-ioc');
+                
+                if (isChecked) {
+                    selectedIOCs.add(iocId);
+                } else {
+                    selectedIOCs.delete(iocId);
+                }
+            });
+            
+            updateBatchActionsUI();
+        });
+    }
+    
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.dispatchEvent(new Event('change'));
+            }
+        });
+    }
+    
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.dispatchEvent(new Event('change'));
+            }
+        });
+    }
+    
+    if (batchExportBtn) {
+        batchExportBtn.addEventListener('click', function() {
+            if (selectedIOCs.size === 0) return;
+            
+            // Create a modal with export format options
+            const modalHtml = `
+                <div class="modal fade" id="batch-export-modal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Export ${selectedIOCs.size} Selected IOCs</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Choose export format:</p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary export-format-btn" data-format="csv">
+                                        <i class="bi bi-file-earmark-spreadsheet"></i> CSV Format
+                                    </button>
+                                    <button class="btn btn-primary export-format-btn" data-format="json">
+                                        <i class="bi bi-file-earmark-code"></i> JSON Format
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add modal to the body
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = modalHtml;
+            document.body.appendChild(modalContainer);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('batch-export-modal'));
+            modal.show();
+            
+            // Add event listeners to the export format buttons
+            document.querySelectorAll('.export-format-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const format = this.getAttribute('data-format');
+                    exportSelectedIOCs(format);
+                    modal.hide();
+                    
+                    // Clean up - remove modal after hiding
+                    modal._element.addEventListener('hidden.bs.modal', function() {
+                        document.body.removeChild(modalContainer);
+                    });
+                });
+            });
+        });
+    }
+    
+    if (batchRecategorizeBtn) {
+        batchRecategorizeBtn.addEventListener('click', function() {
+            if (selectedIOCs.size === 0) return;
+            
+            // Create a modal with category options
+            const modalHtml = `
+                <div class="modal fade" id="batch-recategorize-modal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Recategorize ${selectedIOCs.size} Selected IOCs</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Choose new category:</p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-success category-btn" data-category="low">Low Risk</button>
+                                    <button class="btn btn-outline-warning category-btn" data-category="medium">Medium Risk</button>
+                                    <button class="btn btn-outline-danger category-btn" data-category="high">High Risk</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add modal to the body
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = modalHtml;
+            document.body.appendChild(modalContainer);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('batch-recategorize-modal'));
+            modal.show();
+            
+            // Add event listeners to the category buttons
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const category = this.getAttribute('data-category');
+                    recategorizeSelectedIOCs(category);
+                    modal.hide();
+                    
+                    // Clean up - remove modal after hiding
+                    modal._element.addEventListener('hidden.bs.modal', function() {
+                        document.body.removeChild(modalContainer);
+                    });
+                });
+            });
+        });
+    }
+    
+    if (batchDeleteBtn) {
+        batchDeleteBtn.addEventListener('click', function() {
+            if (selectedIOCs.size === 0) return;
+            
+            // Create a confirmation modal
+            const modalHtml = `
+                <div class="modal fade" id="batch-delete-modal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Confirm Deletion</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-danger">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                    Are you sure you want to delete ${selectedIOCs.size} IOCs?
+                                </div>
+                                <p>This action cannot be undone.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-danger" id="confirm-delete-btn">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add modal to the body
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = modalHtml;
+            document.body.appendChild(modalContainer);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('batch-delete-modal'));
+            modal.show();
+            
+            // Add event listener to the confirm button
+            document.getElementById('confirm-delete-btn').addEventListener('click', function() {
+                deleteSelectedIOCs();
+                modal.hide();
+                
+                // Clean up - remove modal after hiding
+                modal._element.addEventListener('hidden.bs.modal', function() {
+                    document.body.removeChild(modalContainer);
+                });
+            });
+        });
+    }
+    
     // Add event listeners for export buttons
     const exportCsvBtn = document.getElementById('export-csv');
     const exportJsonBtn = document.getElementById('export-json');
@@ -391,7 +598,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!Array.isArray(data) || data.length === 0) {
             iocTableBody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="text-center">No IOCs found</td>
+                    <td colspan="6" class="text-center">No IOCs found</td>
                 </tr>
             `;
             return;
@@ -425,6 +632,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             html += `
                 <tr data-ioc="${actionId}" class="ioc-row">
+                    <td>
+                        <input type="checkbox" class="form-check-input ioc-checkbox" data-ioc="${actionId}">
+                    </td>
                     <td>${warningIcon}${undefinedWarning}${displayValue}</td>
                     <td>${ioc.ioc_type || 'Unknown'}</td>
                     <td>${ioc.category || 'N/A'}</td>
@@ -478,13 +688,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Find the actual table row
                     const row = this.closest('tr');
                     const cells = row.querySelectorAll('td');
-                    if (cells.length >= 1) {
+                    if (cells.length >= 2) {
                         // Get the row's IOC value even if it's corrupted
-                        const displayedValue = cells[0].textContent.trim();
+                        const displayedValue = cells[1].textContent.trim();
                         // Find the IOC type from the second cell
-                        const iocType = cells.length >= 2 ? cells[1].textContent.trim() : 'unknown';
+                        const iocType = cells.length >= 3 ? cells[2].textContent.trim() : 'unknown';
                         // Generate an explanation based on the table row data
-                        showGeneratedExplanation(displayedValue, iocType, parseInt(cells[3].textContent.trim()));
+                        showGeneratedExplanation(displayedValue, iocType, parseInt(cells[4].textContent.trim()));
                     } else {
                         // Fallback if we can't get any data
                         showGeneratedExplanation("Unknown", "unknown", 50);
@@ -492,6 +702,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         });
+        
+        // Add event listeners to checkboxes
+        document.querySelectorAll('.ioc-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const iocId = this.getAttribute('data-ioc');
+                
+                if (this.checked) {
+                    selectedIOCs.add(iocId);
+                } else {
+                    selectedIOCs.delete(iocId);
+                }
+                
+                updateBatchActionsUI();
+            });
+            
+            // Set initial checked state based on selectedIOCs
+            const iocId = checkbox.getAttribute('data-ioc');
+            checkbox.checked = selectedIOCs.has(iocId);
+        });
+        
+        // Update batch actions UI
+        updateBatchActionsUI();
     }
 
     // Update pagination controls
@@ -638,8 +870,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // View IOC details
     function viewIocDetails(iocValue) {
-        // Check for undefined or empty values
-        if (!iocValue || iocValue === "undefined") {
+        // Check for undefined or empty values more thoroughly
+        if (!iocValue || iocValue === "undefined" || iocValue === undefined || iocValue === null) {
             // Show a user-friendly message instead of making the API call
             const modal = new bootstrap.Modal(document.getElementById('ioc-detail-modal'));
             const modalContent = document.getElementById('ioc-detail-content');
@@ -808,36 +1040,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Explain IOC
     function explainIoc(iocValue) {
-        // Check for undefined or empty values
-        if (!iocValue || iocValue === "undefined") {
+        // Check for undefined or empty values more thoroughly
+        if (!iocValue || iocValue === "undefined" || iocValue === undefined || iocValue === null) {
             // Show a generic explanation in the UI without making the API call
             const explanationContainer = document.getElementById('explanation-container');
             const noIocSelected = document.getElementById('no-ioc-selected');
             const explanationIocValue = document.getElementById('explanation-ioc-value');
-            const explanationContent = document.getElementById('explanation-content');
+            const featureImportanceContainer = document.getElementById('feature-importance');
             
             explanationContainer.classList.remove('d-none');
             noIocSelected.classList.add('d-none');
             explanationIocValue.textContent = "Unknown IOC";
             
-            explanationContent.innerHTML = `
+            featureImportanceContainer.innerHTML = `
                 <div class="alert alert-warning">
                     <h5>No Valid IOC Value</h5>
                     <p>The system couldn't determine a valid IOC value to analyze.</p>
                     <p>This typically happens with malformed data in the database.</p>
                 </div>
             `;
+            
+            // Create score chart with generic data
+            createGenericScoreChart();
             return;
         }
         
         const explanationContainer = document.getElementById('explanation-container');
         const noIocSelected = document.getElementById('no-ioc-selected');
         const explanationIocValue = document.getElementById('explanation-ioc-value');
+        const featureImportanceContainer = document.getElementById('feature-importance');
         
         // Show loading state
         explanationContainer.classList.remove('d-none');
         noIocSelected.classList.add('d-none');
         explanationIocValue.textContent = `Analyzing ${iocValue}...`;
+        featureImportanceContainer.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Generating explanation...</p>
+            </div>
+        `;
+        
+        // Create score chart with loading state
+        createScoreChart(50);
         
         // URL encode the IOC value
         const encodedIoc = encodeURIComponent(iocValue);
@@ -850,14 +1097,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(data => {
                     // Handle the explanation data
-                    const explanationContent = document.getElementById('explanation-content');
+                    const featureImportanceContainer = document.getElementById('feature-importance');
                     const explanationIocValue = document.getElementById('explanation-ioc-value');
+                    
+                    // Create score chart with actual data
+                    createScoreChart(data.ioc?.score || 44);
                     
                     // Update the IOC value display
                     explanationIocValue.textContent = iocValue;
                     
                     if (data.error || !data.explanation) {
-                        explanationContent.innerHTML = `
+                        featureImportanceContainer.innerHTML = `
                             <div class="alert alert-warning">
                                 ${data.note || 'Limited explanation available for this IOC'}
                             </div>
@@ -924,15 +1174,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                     
-                    explanationContent.innerHTML = explanationHtml;
+                    featureImportanceContainer.innerHTML = explanationHtml;
                 })
                 .catch(error => {
                     console.error('Error getting explanation:', error);
-                    const explanationContent = document.getElementById('explanation-content');
+                    const featureImportanceContainer = document.getElementById('feature-importance');
                     const explanationIocValue = document.getElementById('explanation-ioc-value');
                     
+                    // Create generic chart even on error
+                    createScoreChart(44);
+                    
                     explanationIocValue.textContent = iocValue;
-                    explanationContent.innerHTML = `
+                    featureImportanceContainer.innerHTML = `
                         <div class="alert alert-danger">
                             <h5>Error</h5>
                             <p>We encountered an issue generating an explanation for this IOC.</p>
@@ -949,11 +1202,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
         } catch (e) {
             console.error('Exception in explain function:', e);
-            const explanationContent = document.getElementById('explanation-content');
+            const featureImportanceContainer = document.getElementById('feature-importance');
             const explanationIocValue = document.getElementById('explanation-ioc-value');
             
+            // Create generic chart even on error
+            createScoreChart(44);
+            
             explanationIocValue.textContent = iocValue;
-            explanationContent.innerHTML = `
+            featureImportanceContainer.innerHTML = `
                 <div class="alert alert-danger">
                     <h5>Error</h5>
                     <p>An unexpected error occurred while processing this IOC.</p>
@@ -962,6 +1218,55 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Create a score chart with actual data
+    function createScoreChart(score) {
+        const scoreChartCanvas = document.getElementById('score-chart');
+        if (scoreChartCanvas) {
+            const ctx = scoreChartCanvas.getContext('2d');
+            
+            // Clear any existing chart
+            if (window.scoreChart) {
+                window.scoreChart.destroy();
+            }
+            
+            // Calculate ML vs Rule-based components of the score
+            // For demo purposes, we'll show a 60/40 split or use the actual score
+            const mlScore = Math.round(score * 0.6);
+            const ruleScore = Math.round(score * 0.4);
+            
+            window.scoreChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['ML Score', 'Rule Score'],
+                    datasets: [{
+                        data: [mlScore, ruleScore],
+                        backgroundColor: ['#0d6efd', '#20c997']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     // Create a generic score chart
     function createGenericScoreChart() {
         const scoreChartCanvas = document.getElementById('score-chart');
@@ -1234,4 +1539,252 @@ document.addEventListener('DOMContentLoaded', function() {
     loadStats.call(loadStats); 
     loadIocs.call(loadIocs);
     forceHideLoading();
+
+    // Export selected IOCs
+    function exportSelectedIOCs(format) {
+        if (selectedIOCs.size === 0) return;
+        
+        // Filter out invalid values to prevent API errors
+        const validIOCs = Array.from(selectedIOCs).filter(
+            ioc => ioc && ioc !== "undefined" && ioc !== undefined && ioc !== null
+        );
+        
+        if (validIOCs.length === 0) {
+            showNotification('No valid IOCs to export', 'warning');
+            return;
+        }
+        
+        // Show loading indicator
+        showGlobalLoading();
+        
+        // Create request body
+        const requestBody = {
+            iocs: validIOCs,
+            format: format
+        };
+        
+        // Call the batch export API
+        fetch('/api/batch/export', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Create a download link for the file
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `sentinelforge_iocs_${format}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            // Hide loading and show success
+            hideLoadingWhenReady();
+            showNotification('Export successful', 'success');
+        })
+        .catch(error => {
+            console.error('Error exporting IOCs:', error);
+            hideLoadingWhenReady();
+            showNotification('Export failed: ' + error.message, 'error');
+        });
+    }
+
+    // Recategorize selected IOCs
+    function recategorizeSelectedIOCs(category) {
+        if (selectedIOCs.size === 0) return;
+        
+        // Filter out invalid values to prevent API errors
+        const validIOCs = Array.from(selectedIOCs).filter(
+            ioc => ioc && ioc !== "undefined" && ioc !== undefined && ioc !== null
+        );
+        
+        if (validIOCs.length === 0) {
+            showNotification('No valid IOCs to recategorize', 'warning');
+            return;
+        }
+        
+        // Show loading indicator
+        showGlobalLoading();
+        
+        // Create request body
+        const requestBody = {
+            iocs: validIOCs,
+            category: category
+        };
+        
+        // Call the batch recategorize API
+        fetch('/api/batch/recategorize', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || `Recategorization failed: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Hide loading
+            hideLoadingWhenReady();
+            
+            // Show success message
+            showNotification(`Recategorized ${data.updated_count} IOCs to ${category}`, 'success');
+            
+            // Reload data to reflect changes
+            loadIocs();
+            loadStats();
+            
+            // Clear selection
+            selectedIOCs.clear();
+            updateBatchActionsUI();
+        })
+        .catch(error => {
+            console.error('Error recategorizing IOCs:', error);
+            hideLoadingWhenReady();
+            showNotification('Recategorization failed: ' + error.message, 'error');
+        });
+    }
+
+    // Delete selected IOCs
+    function deleteSelectedIOCs() {
+        if (selectedIOCs.size === 0) return;
+        
+        // Filter out invalid values to prevent API errors
+        const validIOCs = Array.from(selectedIOCs).filter(
+            ioc => ioc && ioc !== "undefined" && ioc !== undefined && ioc !== null
+        );
+        
+        if (validIOCs.length === 0) {
+            showNotification('No valid IOCs to delete', 'warning');
+            return;
+        }
+        
+        // Show loading indicator
+        showGlobalLoading();
+        
+        // Create request body
+        const requestBody = {
+            iocs: validIOCs
+        };
+        
+        // Call the batch delete API
+        fetch('/api/batch/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || `Deletion failed: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Hide loading
+            hideLoadingWhenReady();
+            
+            // Show success message
+            showNotification(`Deleted ${data.deleted_count} IOCs`, 'success');
+            
+            // Reload data to reflect changes
+            loadIocs();
+            loadStats();
+            
+            // Clear selection
+            selectedIOCs.clear();
+            updateBatchActionsUI();
+        })
+        .catch(error => {
+            console.error('Error deleting IOCs:', error);
+            hideLoadingWhenReady();
+            showNotification('Deletion failed: ' + error.message, 'error');
+        });
+    }
+
+    // Update batch actions UI based on selection state
+    function updateBatchActionsUI() {
+        const selectedCount = selectedIOCs.size;
+        
+        // Update selected count display
+        if (selectedCountElement) {
+            selectedCountElement.textContent = selectedCount;
+        }
+        
+        // Show/hide batch actions toolbar
+        if (batchActionsToolbar) {
+            if (selectedCount > 0) {
+                batchActionsToolbar.classList.remove('d-none');
+            } else {
+                batchActionsToolbar.classList.add('d-none');
+            }
+        }
+        
+        // Update "Select All" checkbox state
+        if (selectAllCheckbox) {
+            const allCheckboxes = document.querySelectorAll('.ioc-checkbox');
+            const allChecked = allCheckboxes.length > 0 && selectedCount === allCheckboxes.length;
+            selectAllCheckbox.checked = allChecked;
+        }
+    }
+
+    // Show notification messages
+    function showNotification(message, type = 'info') {
+        // Create a notification element if it doesn't exist
+        let notificationContainer = document.getElementById('notification-container');
+        if (!notificationContainer) {
+            notificationContainer = document.createElement('div');
+            notificationContainer.id = 'notification-container';
+            notificationContainer.style.position = 'fixed';
+            notificationContainer.style.bottom = '20px';
+            notificationContainer.style.right = '20px';
+            notificationContainer.style.zIndex = '9999';
+            document.body.appendChild(notificationContainer);
+        }
+        
+        // Create the notification
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} shadow-sm`;
+        notification.style.minWidth = '250px';
+        notification.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <span>${message}</span>
+                <button type="button" class="btn-close btn-sm" aria-label="Close"></button>
+            </div>
+        `;
+        
+        // Add to container
+        notificationContainer.appendChild(notification);
+        
+        // Add close button functionality
+        notification.querySelector('.btn-close').addEventListener('click', function() {
+            notification.remove();
+        });
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
 }); 

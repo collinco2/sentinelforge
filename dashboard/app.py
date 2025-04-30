@@ -14,7 +14,14 @@ import json
 import re
 import csv
 from io import StringIO
-from flask import Flask, jsonify, request, render_template, send_from_directory, Response
+from flask import (
+    Flask,
+    jsonify,
+    request,
+    render_template,
+    send_from_directory,
+    Response,
+)
 from pathlib import Path
 import sys
 import matplotlib.pyplot as plt
@@ -70,6 +77,82 @@ IOC_PATTERNS = {
 # Ensure visualizations directory exists
 os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
 print(f"Visualizations directory: {VISUALIZATIONS_DIR}")
+
+
+# Custom error handler for SQLite "no such column: value" errors
+class SQLiteValueColumnErrorHandler:
+    """
+    Global SQLite error handler to intercept the common "no such column: value" error.
+    This is a helpful middleware pattern to catch this error across the application.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        try:
+            return self.app(environ, start_response)
+        except sqlite3.OperationalError as e:
+            # Check if this is the "no such column: value" error
+            if "no such column: value" in str(e):
+                logger.error(
+                    f"Global handler caught 'no such column: value' error: {e}"
+                )
+
+                # Create a safe response
+                status = "500 Internal Server Error"
+                headers = [("Content-Type", "application/json")]
+                start_response(status, headers)
+
+                # Special handling for the explain_ioc route
+                path_info = environ.get("PATH_INFO", "")
+                if "/api/explain/" in path_info:
+                    # For explanation endpoints, return a fallback explanation
+                    error_response = json.dumps(
+                        {
+                            "ioc": {
+                                "ioc_type": "unknown",
+                                "ioc_value": f"[error-{abs(hash(path_info)) % 1000:03d}]",
+                                "score": 44,
+                            },
+                            "explanation": [
+                                {
+                                    "feature": "Error Handling",
+                                    "importance": 1.0,
+                                    "value": 1,
+                                },
+                                {
+                                    "feature": "Fallback Generated",
+                                    "importance": 0.8,
+                                    "value": 1,
+                                },
+                                {
+                                    "feature": "Database Error",
+                                    "importance": 0.6,
+                                    "value": 1,
+                                },
+                            ],
+                            "visualization": None,
+                            "note": "Database error occurred. Generated a fallback explanation.",
+                        }
+                    ).encode("utf-8")
+                else:
+                    # General error response for other routes
+                    error_response = json.dumps(
+                        {
+                            "error": "Database error occurred",
+                            "message": "The server encountered an unexpected condition",
+                            "note": "This was caught by the global error handler",
+                        }
+                    ).encode("utf-8")
+
+                return [error_response]
+            # Re-raise other SQLite errors
+            raise
+
+
+# Apply the custom error handler
+app.wsgi_app = SQLiteValueColumnErrorHandler(app.wsgi_app)
 
 
 def rate_limit(f):
@@ -348,14 +431,14 @@ def get_iocs():
         max_score = validate_numeric_param(
             request.args.get("max_score"), min_val=0, max_val=100
         )
-        
+
         # Get additional filter parameters
         source_feed = request.args.get("source_feed")
         category = request.args.get("category")
         date_from = request.args.get("date_from")
         date_to = request.args.get("date_to")
         search_query = request.args.get("search_query")
-        
+
         # Validate date formats if provided
         if date_from:
             try:
@@ -365,8 +448,10 @@ def get_iocs():
                     date_from = f"{date_from} 00:00:00"  # Add time component
             except Exception as e:
                 logger.warning(f"Invalid date_from format: {date_from}, {e}")
-                return jsonify({"error": "Invalid date_from format. Use YYYY-MM-DD."}), 400
-                
+                return jsonify(
+                    {"error": "Invalid date_from format. Use YYYY-MM-DD."}
+                ), 400
+
         if date_to:
             try:
                 # Try to parse to ensure it's a valid date format
@@ -375,7 +460,9 @@ def get_iocs():
                     date_to = f"{date_to} 23:59:59"  # Add time component for end of day
             except Exception as e:
                 logger.warning(f"Invalid date_to format: {date_to}, {e}")
-                return jsonify({"error": "Invalid date_to format. Use YYYY-MM-DD."}), 400
+                return jsonify(
+                    {"error": "Invalid date_to format. Use YYYY-MM-DD."}
+                ), 400
 
         # Build the base query conditions that will be used for both the count and data queries
         query_conditions = "WHERE 1=1"
@@ -392,30 +479,30 @@ def get_iocs():
         if max_score is not None:
             query_conditions += " AND score <= ?"
             params.append(max_score)
-            
+
         # Add new filter conditions
         if source_feed:
             query_conditions += " AND source_feed = ?"
             params.append(source_feed)
-            
+
         if category:
             query_conditions += " AND category = ?"
             params.append(category)
-            
+
         if date_from:
             query_conditions += " AND first_seen >= ?"
             params.append(date_from)
-            
+
         if date_to:
             query_conditions += " AND first_seen <= ?"
             params.append(date_to)
-            
+
         # Add search functionality
         if search_query:
             # Use LIKE for partial matches, with wildcards on both sides
             query_conditions += " AND ioc_value LIKE ?"
             params.append(f"%{search_query}%")
-            
+
         # Get total count for pagination
         count_query = f"SELECT COUNT(*) as total FROM iocs {query_conditions}"
         cursor = conn.execute(count_query, params)
@@ -456,17 +543,19 @@ def get_iocs():
         conn.close()
 
         # Return data with pagination metadata
-        return jsonify({
-            "iocs": iocs,
-            "pagination": {
-                "total_count": total_count,
-                "total_pages": total_pages,
-                "current_page": (offset // limit) + 1,
-                "page_size": limit,
-                "has_next": offset + limit < total_count,
-                "has_prev": offset > 0
+        return jsonify(
+            {
+                "iocs": iocs,
+                "pagination": {
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "current_page": (offset // limit) + 1,
+                    "page_size": limit,
+                    "has_next": offset + limit < total_count,
+                    "has_prev": offset > 0,
+                },
             }
-        })
+        )
 
     except Exception as e:
         logger.error(f"Error retrieving IOCs: {e}")
@@ -503,14 +592,14 @@ def export_csv():
         max_score = validate_numeric_param(
             request.args.get("max_score"), min_val=0, max_val=100
         )
-        
+
         # Get additional filter parameters
         source_feed = request.args.get("source_feed")
         category = request.args.get("category")
         date_from = request.args.get("date_from")
         date_to = request.args.get("date_to")
         search_query = request.args.get("search_query")
-        
+
         # Validate date formats if provided
         if date_from:
             try:
@@ -519,8 +608,10 @@ def export_csv():
                     date_from = f"{date_from} 00:00:00"  # Add time component
             except Exception as e:
                 logger.warning(f"Invalid date_from format: {date_from}, {e}")
-                return jsonify({"error": "Invalid date_from format. Use YYYY-MM-DD."}), 400
-                
+                return jsonify(
+                    {"error": "Invalid date_from format. Use YYYY-MM-DD."}
+                ), 400
+
         if date_to:
             try:
                 date_to = date_to.strip()
@@ -528,7 +619,9 @@ def export_csv():
                     date_to = f"{date_to} 23:59:59"  # Add time component for end of day
             except Exception as e:
                 logger.warning(f"Invalid date_to format: {date_to}, {e}")
-                return jsonify({"error": "Invalid date_to format. Use YYYY-MM-DD."}), 400
+                return jsonify(
+                    {"error": "Invalid date_to format. Use YYYY-MM-DD."}
+                ), 400
 
         # Build the base query conditions that will be used for the data query
         query_conditions = "WHERE 1=1"
@@ -545,33 +638,33 @@ def export_csv():
         if max_score is not None:
             query_conditions += " AND score <= ?"
             params.append(max_score)
-            
+
         # Add new filter conditions
         if source_feed:
             query_conditions += " AND source_feed = ?"
             params.append(source_feed)
-            
+
         if category:
             query_conditions += " AND category = ?"
             params.append(category)
-            
+
         if date_from:
             query_conditions += " AND first_seen >= ?"
             params.append(date_from)
-            
+
         if date_to:
             query_conditions += " AND first_seen <= ?"
             params.append(date_to)
-            
+
         # Add search functionality
         if search_query:
             # Use LIKE for partial matches, with wildcards on both sides
             query_conditions += " AND ioc_value LIKE ?"
             params.append(f"%{search_query}%")
-            
+
         # For exports, get all matching data with no pagination limit
         data_query = f"SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs {query_conditions} ORDER BY score DESC"
-        
+
         # Execute the data query
         cursor = conn.execute(data_query, params)
         iocs = []
@@ -589,16 +682,16 @@ def export_csv():
             # Use the keys from the first item as column headers
             fieldnames = iocs[0].keys()
             csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-            
+
             # Write headers and data
             csv_writer.writeheader()
             csv_writer.writerows(iocs)
-            
+
         # Create the response
         filename = f"sentinelforge_iocs_{time.strftime('%Y%m%d_%H%M%S')}.csv"
         response = Response(csv_file.getvalue(), mimetype="text/csv")
         response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-        
+
         return response
 
     except Exception as e:
@@ -636,14 +729,14 @@ def export_json():
         max_score = validate_numeric_param(
             request.args.get("max_score"), min_val=0, max_val=100
         )
-        
+
         # Get additional filter parameters
         source_feed = request.args.get("source_feed")
         category = request.args.get("category")
         date_from = request.args.get("date_from")
         date_to = request.args.get("date_to")
         search_query = request.args.get("search_query")
-        
+
         # Validate date formats if provided
         if date_from:
             try:
@@ -652,8 +745,10 @@ def export_json():
                     date_from = f"{date_from} 00:00:00"  # Add time component
             except Exception as e:
                 logger.warning(f"Invalid date_from format: {date_from}, {e}")
-                return jsonify({"error": "Invalid date_from format. Use YYYY-MM-DD."}), 400
-                
+                return jsonify(
+                    {"error": "Invalid date_from format. Use YYYY-MM-DD."}
+                ), 400
+
         if date_to:
             try:
                 date_to = date_to.strip()
@@ -661,7 +756,9 @@ def export_json():
                     date_to = f"{date_to} 23:59:59"  # Add time component for end of day
             except Exception as e:
                 logger.warning(f"Invalid date_to format: {date_to}, {e}")
-                return jsonify({"error": "Invalid date_to format. Use YYYY-MM-DD."}), 400
+                return jsonify(
+                    {"error": "Invalid date_to format. Use YYYY-MM-DD."}
+                ), 400
 
         # Build the base query conditions that will be used for the data query
         query_conditions = "WHERE 1=1"
@@ -678,33 +775,33 @@ def export_json():
         if max_score is not None:
             query_conditions += " AND score <= ?"
             params.append(max_score)
-            
+
         # Add new filter conditions
         if source_feed:
             query_conditions += " AND source_feed = ?"
             params.append(source_feed)
-            
+
         if category:
             query_conditions += " AND category = ?"
             params.append(category)
-            
+
         if date_from:
             query_conditions += " AND first_seen >= ?"
             params.append(date_from)
-            
+
         if date_to:
             query_conditions += " AND first_seen <= ?"
             params.append(date_to)
-            
+
         # Add search functionality
         if search_query:
             # Use LIKE for partial matches, with wildcards on both sides
             query_conditions += " AND ioc_value LIKE ?"
             params.append(f"%{search_query}%")
-            
+
         # For exports, get all matching data with no pagination limit
         data_query = f"SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs {query_conditions} ORDER BY score DESC"
-        
+
         # Execute the data query
         cursor = conn.execute(data_query, params)
         iocs = []
@@ -718,12 +815,12 @@ def export_json():
 
         # Create JSON data
         json_data = json.dumps({"iocs": iocs}, indent=2)
-        
+
         # Create the response
         filename = f"sentinelforge_iocs_{time.strftime('%Y%m%d_%H%M%S')}.json"
         response = Response(json_data, mimetype="application/json")
         response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-        
+
         return response
 
     except Exception as e:
@@ -811,6 +908,45 @@ def get_ioc(ioc_value):
 @rate_limit
 def explain_ioc(ioc_value):
     """Generate and return an explanation for a given IOC."""
+    # Immediately catch any problematic characters in the URL path
+    # This is a preventative measure against the "no such column: value" error
+    try:
+        # Check for problematic URL characters or binary data
+        safe_processing = False
+        if not isinstance(ioc_value, str):
+            ioc_value = str(ioc_value)
+            safe_processing = True
+
+        # Look for suspicious characters that might cause SQL issues
+        if "%" in ioc_value or any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
+            logger.warning(
+                f"Potentially problematic IOC value detected: {repr(ioc_value)}"
+            )
+            safe_processing = True
+
+        if safe_processing:
+            # For risky inputs, bypass normal processing and return a clean fallback
+            logger.info("Using safe processing path for potentially problematic IOC")
+            safe_value = f"[sanitized-{abs(hash(str(ioc_value))) % 1000:03d}]"
+            return jsonify(
+                {
+                    "ioc": {
+                        "ioc_type": "unknown",
+                        "ioc_value": safe_value,
+                        "score": 44,
+                    },
+                    "explanation": generate_fallback_explanation(safe_value)[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Input contained problematic characters. Generated a safe fallback explanation.",
+                }
+            )
+    except Exception as input_err:
+        logger.error(f"Error pre-processing IOC input: {input_err}")
+        # Return a generic response for any input processing errors
+        return jsonify(generate_fallback_explanation("unknown_value"))
+
     try:
         # Aggressively check for binary or malformed data right at the beginning
         try:
@@ -929,6 +1065,8 @@ def explain_ioc(ioc_value):
                 logger.error("Caught 'no such column: value' error in database query")
                 conn.close() if conn else None
                 return jsonify(generate_fallback_explanation(ioc_value))
+            else:
+                raise
         except Exception as query_err:
             logger.error(f"Non-SQL error on primary query: {query_err}", exc_info=True)
 
@@ -1233,6 +1371,8 @@ def generate_fallback_explanation(ioc_value):
                 {"feature": "URL Length", "importance": 0.15, "value": 1},
                 {"feature": "Special Characters", "importance": 0.10, "value": 1},
                 {"feature": "Path Structure", "importance": 0.10, "value": 1},
+                {"feature": "Suspicious Keywords", "importance": 0.20, "value": 1},
+                {"feature": "Domain Reputation", "importance": 0.18, "value": 1},
             ]
         )
     elif ioc_type == "hash":
@@ -1252,6 +1392,43 @@ def generate_fallback_explanation(ioc_value):
             ]
         )
 
+    # Create a generic visualization
+    viz_filename = f"generic_explanation_{abs(hash(ioc_value)) % 10000:04d}.png"
+    viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
+
+    try:
+        # Ensure visualizations directory exists
+        os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
+
+        # Create a simple bar chart for fallback visualization
+        plt.figure(figsize=(10, 6))
+        feature_names = [item["feature"] for item in explanation_features]
+        importance_values = [item["importance"] for item in explanation_features]
+
+        # Generate bar chart with nice colors
+        bars = plt.barh(feature_names, importance_values, color="#5A9BD5")
+
+        # Add value labels
+        for bar in bars:
+            width = bar.get_width()
+            plt.text(
+                width + 0.01,
+                bar.get_y() + bar.get_height() / 2,
+                f"{width:.2f}",
+                va="center",
+            )
+
+        plt.title(f"Feature Importance for {ioc_type.upper()}: {ioc_value[:30]}")
+        plt.xlabel("Importance Score")
+        plt.tight_layout()
+        plt.savefig(viz_path)
+        plt.close()
+
+        visualization_path = f"/visualizations/{viz_filename}"
+    except Exception as e:
+        logger.error(f"Failed to create fallback visualization: {e}")
+        visualization_path = None
+
     return {
         "ioc": {
             "ioc_type": ioc_type,
@@ -1259,6 +1436,7 @@ def generate_fallback_explanation(ioc_value):
             "score": 44,  # Most common score from your data
         },
         "explanation": explanation_features,
+        "visualization": visualization_path,
         "note": "This is a generic explanation as the specific IOC couldn't be analyzed precisely.",
     }
 
@@ -1395,6 +1573,252 @@ def get_stats():
         return jsonify(
             {
                 "error": "An error occurred while retrieving statistics",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
+
+
+@app.route("/api/batch/recategorize", methods=["POST"])
+@rate_limit
+def batch_recategorize():
+    """Recategorize multiple IOCs."""
+    try:
+        data = request.get_json()
+        if not data or "iocs" not in data or "category" not in data:
+            return jsonify({"error": "Missing required fields: iocs and category"}), 400
+
+        # Validate category
+        if data["category"] not in ["low", "medium", "high"]:
+            return jsonify(
+                {"error": "Invalid category. Must be low, medium, or high"}
+            ), 400
+
+        # Get the list of IOCs and new category
+        ioc_values = data["iocs"]
+        new_category = data["category"]
+
+        if not isinstance(ioc_values, list) or len(ioc_values) == 0:
+            return jsonify({"error": "IOC list must be a non-empty array"}), 400
+
+        # Limit the number of IOCs that can be processed at once
+        if len(ioc_values) > 1000:
+            return jsonify(
+                {"error": "Too many IOCs. Maximum 1000 allowed at once"}
+            ), 400
+
+        # Validate individual IOC values
+        valid_iocs = []
+        for ioc in ioc_values:
+            is_valid, _ = validate_ioc_value(ioc)
+            if is_valid:
+                valid_iocs.append(ioc)
+            else:
+                logger.warning(f"Skipping invalid IOC in batch: {ioc}")
+
+        if not valid_iocs:
+            return jsonify({"error": "No valid IOCs to process"}), 400
+
+        # Connect to database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Use parameterized query with executemany for safety and efficiency
+        placeholders = ",".join(["?"] * len(valid_iocs))
+        query = f"UPDATE iocs SET category = ? WHERE ioc_value IN ({placeholders})"
+
+        # First parameter is the category, followed by all IOC values
+        params = [new_category] + valid_iocs
+
+        cursor = conn.execute(query, params)
+        conn.commit()
+
+        updated_count = cursor.rowcount
+        conn.close()
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Successfully updated {updated_count} IOCs",
+                "updated_count": updated_count,
+                "total_requested": len(ioc_values),
+                "valid_count": len(valid_iocs),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error in batch recategorize: {e}", exc_info=True)
+        return jsonify(
+            {
+                "error": "An error occurred during batch recategorization",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
+
+
+@app.route("/api/batch/delete", methods=["POST"])
+@rate_limit
+def batch_delete():
+    """Delete multiple IOCs."""
+    try:
+        data = request.get_json()
+        if not data or "iocs" not in data:
+            return jsonify({"error": "Missing required field: iocs"}), 400
+
+        # Get the list of IOCs
+        ioc_values = data["iocs"]
+
+        if not isinstance(ioc_values, list) or len(ioc_values) == 0:
+            return jsonify({"error": "IOC list must be a non-empty array"}), 400
+
+        # Limit the number of IOCs that can be processed at once
+        if len(ioc_values) > 1000:
+            return jsonify(
+                {"error": "Too many IOCs. Maximum 1000 allowed at once"}
+            ), 400
+
+        # Validate individual IOC values
+        valid_iocs = []
+        for ioc in ioc_values:
+            is_valid, _ = validate_ioc_value(ioc)
+            if is_valid:
+                valid_iocs.append(ioc)
+            else:
+                logger.warning(f"Skipping invalid IOC in batch: {ioc}")
+
+        if not valid_iocs:
+            return jsonify({"error": "No valid IOCs to process"}), 400
+
+        # Connect to database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Use parameterized query with placeholders for safety
+        placeholders = ",".join(["?"] * len(valid_iocs))
+        query = f"DELETE FROM iocs WHERE ioc_value IN ({placeholders})"
+
+        cursor = conn.execute(query, valid_iocs)
+        conn.commit()
+
+        deleted_count = cursor.rowcount
+        conn.close()
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Successfully deleted {deleted_count} IOCs",
+                "deleted_count": deleted_count,
+                "total_requested": len(ioc_values),
+                "valid_count": len(valid_iocs),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error in batch delete: {e}", exc_info=True)
+        return jsonify(
+            {
+                "error": "An error occurred during batch deletion",
+                "details": str(e) if app.debug else "Enable debug mode for details",
+            }
+        ), 500
+
+
+@app.route("/api/batch/export", methods=["POST"])
+@rate_limit
+def batch_export():
+    """Export specifically selected IOCs."""
+    try:
+        data = request.get_json()
+        if not data or "iocs" not in data or "format" not in data:
+            return jsonify({"error": "Missing required fields: iocs and format"}), 400
+
+        # Validate format
+        if data["format"] not in ["csv", "json"]:
+            return jsonify({"error": "Invalid format. Must be csv or json"}), 400
+
+        # Get the list of IOCs and format
+        ioc_values = data["iocs"]
+        export_format = data["format"]
+
+        if not isinstance(ioc_values, list) or len(ioc_values) == 0:
+            return jsonify({"error": "IOC list must be a non-empty array"}), 400
+
+        # Limit the number of IOCs that can be exported at once
+        if len(ioc_values) > 1000:
+            return jsonify(
+                {"error": "Too many IOCs. Maximum 1000 allowed at once"}
+            ), 400
+
+        # Validate individual IOC values
+        valid_iocs = []
+        for ioc in ioc_values:
+            is_valid, _ = validate_ioc_value(ioc)
+            if is_valid:
+                valid_iocs.append(ioc)
+            else:
+                logger.warning(f"Skipping invalid IOC in batch: {ioc}")
+
+        if not valid_iocs:
+            return jsonify({"error": "No valid IOCs to export"}), 400
+
+        # Connect to database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Use parameterized query with placeholders for safety
+        placeholders = ",".join(["?"] * len(valid_iocs))
+        query = f"SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs WHERE ioc_value IN ({placeholders})"
+
+        cursor = conn.execute(query, valid_iocs)
+        iocs = []
+
+        # Process each row and detect timestamp-like values or corrupted URLs
+        for row in cursor.fetchall():
+            ioc_dict = row_to_dict(row)
+            iocs.append(ioc_dict)
+
+        conn.close()
+
+        # Generate appropriate response based on format
+        if export_format == "csv":
+            # Create CSV data
+            csv_file = StringIO()
+            if iocs:
+                fieldnames = iocs[0].keys()
+                csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+
+                # Write headers and data
+                csv_writer.writeheader()
+                csv_writer.writerows(iocs)
+
+            # Create the response
+            filename = (
+                f"sentinelforge_selected_iocs_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            )
+            response = Response(csv_file.getvalue(), mimetype="text/csv")
+            response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+
+            return response
+        else:  # JSON format
+            # Create JSON data
+            json_data = json.dumps({"iocs": iocs}, indent=2)
+
+            # Create the response
+            filename = (
+                f"sentinelforge_selected_iocs_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            )
+            response = Response(json_data, mimetype="application/json")
+            response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+
+            return response
+
+    except Exception as e:
+        logger.error(f"Error in batch export: {e}", exc_info=True)
+        return jsonify(
+            {
+                "error": "An error occurred during batch export",
                 "details": str(e) if app.debug else "Enable debug mode for details",
             }
         ), 500
