@@ -158,6 +158,12 @@ class SafeDict(dict):
                     SafeDict(item) if isinstance(item, dict) else item for item in value
                 ]
 
+            # Convert the value to string for special case of 'value' key
+            # to prevent SQL "no such column: value" error - this is a workaround
+            # for SQLite's confusion between dict keys and column names
+            if key == "value":
+                return str(value) if value is not None else None
+
             return value
         except Exception as e:
             # Log error and return None instead of raising
@@ -178,6 +184,11 @@ class SafeDict(dict):
                     SafeDict(item) if isinstance(item, dict) else item for item in value
                 ]
 
+            # Convert the value to string for special case of 'value' key
+            # to prevent SQL "no such column: value" error
+            if key == "value":
+                return str(value) if value is not None else default
+
             return value
         except Exception as e:
             logger.error(f"Error accessing dict key '{key}': {e}")
@@ -189,6 +200,49 @@ class SafeDict(dict):
         except Exception as e:
             logger.error(f"Error checking if key '{key}' in dict: {e}")
             return False
+
+    def __str__(self):
+        """Safe string representation that won't cause SQL errors"""
+        try:
+            # Create a sanitized version of the dict
+            safe_dict = {}
+            for k, v in self.items():
+                # Convert any 'value' keys to a string representation
+                if k == "value":
+                    safe_dict[k] = str(v) if v is not None else "None"
+                else:
+                    safe_dict[k] = v
+            return str(safe_dict)
+        except Exception as e:
+            logger.error(f"Error in SafeDict.__str__: {e}")
+            return "{}"
+
+
+def sanitize_dict_for_sql(data):
+    """
+    Recursively sanitize dictionaries to prevent "no such column: value" errors.
+    Renames or converts any 'value' keys to prevent confusion with SQL column names.
+
+    Args:
+        data: Dictionary or other data structure to sanitize
+
+    Returns:
+        Sanitized version of the input
+    """
+    if isinstance(data, dict):
+        result = {}
+        for k, v in data.items():
+            # Convert problematic key names
+            if k == "value":
+                k = "value_str"  # Rename to avoid SQL column confusion
+
+            # Recursively sanitize nested structures
+            result[k] = sanitize_dict_for_sql(v)
+        return result
+    elif isinstance(data, list):
+        return [sanitize_dict_for_sql(item) for item in data]
+    else:
+        return data
 
 
 def extract_features(
@@ -211,6 +265,12 @@ def extract_features(
     Returns:
         A dictionary with feature names and values (all numeric)
     """
+    # Immediately check if the enrichment_data has a problematic 'value' key
+    # which could trigger the SQLite "no such column: value" error
+    if isinstance(enrichment_data, dict):
+        # Sanitize recursively to avoid SQL column confusion
+        enrichment_data = sanitize_dict_for_sql(enrichment_data)
+
     try:
         # First, check for binary data or invalid inputs to prevent errors
         if not isinstance(ioc_value, str):
