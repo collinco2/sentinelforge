@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const maxScoreInput = document.getElementById('max-score');
     const minScoreValue = document.getElementById('min-score-value');
     const maxScoreValue = document.getElementById('max-score-value');
+    // New filter elements
+    const sourceFeedSelect = document.getElementById('source-feed');
+    const categorySelect = document.getElementById('category');
+    const dateFromInput = document.getElementById('date-from');
+    const dateToInput = document.getElementById('date-to');
+    const resetFiltersBtn = document.getElementById('reset-filters');
 
     // Pagination variables
     let currentPage = 1;
@@ -58,6 +64,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    if (resetFiltersBtn) {
+        resetFiltersBtn.addEventListener('click', function() {
+            // Reset all filter inputs
+            if (iocTypeSelect) iocTypeSelect.value = '';
+            if (sourceFeedSelect) sourceFeedSelect.value = '';
+            if (categorySelect) categorySelect.value = '';
+            if (minScoreInput) minScoreInput.value = 0;
+            if (maxScoreInput) maxScoreInput.value = 100;
+            if (minScoreValue) minScoreValue.textContent = '0';
+            if (maxScoreValue) maxScoreValue.textContent = '100';
+            if (dateFromInput) dateFromInput.value = '';
+            if (dateToInput) dateToInput.value = '';
+            
+            // Reload with reset filters
+            currentPage = 1;
+            loadingOverlay.style.display = 'flex';
+            loadIocs();
+        });
+    }
+
     if (minScoreInput) {
         minScoreInput.addEventListener('input', function() {
             minScoreValue.textContent = this.value;
@@ -90,6 +116,8 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(data => {
                 displayStats(data);
+                // Populate source feed dropdown with data from stats
+                populateSourceFeedOptions(data);
                 // Hide loading indicator once all data is loaded
                 hideLoadingWhenReady();
             })
@@ -107,6 +135,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Hide loading on error too
                 hideLoadingWhenReady();
             });
+    }
+    
+    // Populate source feed dropdown from stats data
+    function populateSourceFeedOptions(data) {
+        if (!sourceFeedSelect) return;
+        
+        // Get unique source feeds from the data
+        let sourceFeeds = [];
+        if (data && data.by_source_feed) {
+            sourceFeeds = Object.keys(data.by_source_feed);
+        }
+        
+        // If no data from stats, try to extract from existing IOCs
+        if (sourceFeeds.length === 0 && data && data.iocs && Array.isArray(data.iocs)) {
+            const sources = new Set();
+            data.iocs.forEach(ioc => {
+                if (ioc.source_feed) {
+                    sources.add(ioc.source_feed);
+                }
+            });
+            sourceFeeds = Array.from(sources);
+        }
+        
+        // Sort source feeds alphabetically
+        sourceFeeds.sort();
+        
+        // Save current selection
+        const currentSelection = sourceFeedSelect.value;
+        
+        // Clear existing options except first "All Sources" option
+        while (sourceFeedSelect.options.length > 1) {
+            sourceFeedSelect.remove(1);
+        }
+        
+        // Add new options
+        sourceFeeds.forEach(feed => {
+            const option = document.createElement('option');
+            option.value = feed;
+            option.textContent = feed;
+            sourceFeedSelect.appendChild(option);
+        });
+        
+        // Restore selection if it still exists, otherwise default to "All Sources"
+        if (currentSelection && sourceFeeds.includes(currentSelection)) {
+            sourceFeedSelect.value = currentSelection;
+        }
     }
 
     // Display statistics
@@ -163,6 +237,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const iocType = iocTypeSelect ? iocTypeSelect.value : '';
         const minScore = minScoreInput ? minScoreInput.value : 0;
         const maxScore = maxScoreInput ? maxScoreInput.value : 100;
+        const sourceFeed = sourceFeedSelect ? sourceFeedSelect.value : '';
+        const category = categorySelect ? categorySelect.value : '';
+        const dateFrom = dateFromInput ? dateFromInput.value : '';
+        const dateTo = dateToInput ? dateToInput.value : '';
         const offset = (currentPage - 1) * itemsPerPage;
         
         // Show loading state
@@ -186,6 +264,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (iocType) params.append('type', iocType);
         if (minScore) params.append('min_score', minScore);
         if (maxScore !== '100') params.append('max_score', maxScore);
+        if (sourceFeed) params.append('source_feed', sourceFeed);
+        if (category) params.append('category', category);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
         
         // Fetch IOCs
         fetch(`/api/iocs?${params.toString()}`)
@@ -196,8 +278,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 return response.json();
             })
             .then(data => {
-                displayIocs(data);
-                updatePagination();
+                // Updated for the new response format with pagination
+                if (data.iocs && Array.isArray(data.iocs)) {
+                    displayIocs(data.iocs);
+                    
+                    // Set totalPages from the API response
+                    if (data.pagination) {
+                        totalPages = data.pagination.total_pages || 1;
+                        currentPage = data.pagination.current_page || 1;
+                    }
+                    
+                    updatePagination(data.pagination);
+                } else {
+                    // Backward compatibility with old format
+                    displayIocs(data);
+                    updatePagination();
+                }
+                
                 // Hide loading when ready
                 hideLoadingWhenReady();
             })
@@ -330,8 +427,145 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Update pagination controls
-    function updatePagination() {
-        // Placeholder for now - will implement if needed
+    function updatePagination(paginationData) {
+        if (!paginationElement) return;
+        
+        // Clear existing pagination
+        paginationElement.innerHTML = '';
+        
+        // Also remove any existing page info containers
+        const existingPageInfo = document.querySelectorAll('.pagination-info');
+        existingPageInfo.forEach(el => el.remove());
+        
+        // If no pagination data, don't show controls
+        if (!paginationData || paginationData.total_pages <= 1) {
+            return;
+        }
+        
+        // Get pagination values
+        const currentPage = paginationData.current_page;
+        const totalPages = paginationData.total_pages;
+        const hasNext = paginationData.has_next;
+        const hasPrev = paginationData.has_prev;
+        
+        // Create Previous button
+        const prevBtn = document.createElement('li');
+        prevBtn.className = `page-item ${!hasPrev ? 'disabled' : ''}`;
+        prevBtn.innerHTML = `
+            <a class="page-link" href="#" aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+            </a>
+        `;
+        
+        if (hasPrev) {
+            prevBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                goToPage(currentPage - 1);
+            });
+        }
+        
+        paginationElement.appendChild(prevBtn);
+        
+        // Create page number buttons
+        // We'll show up to 5 page numbers centered around the current page
+        const pagesArray = createPaginationArray(currentPage, totalPages);
+        
+        pagesArray.forEach(pageNum => {
+            if (pageNum === '...') {
+                // This is an ellipsis
+                const ellipsis = document.createElement('li');
+                ellipsis.className = 'page-item disabled';
+                ellipsis.innerHTML = '<span class="page-link">...</span>';
+                paginationElement.appendChild(ellipsis);
+            } else {
+                // This is a page number
+                const pageItem = document.createElement('li');
+                pageItem.className = `page-item ${pageNum === currentPage ? 'active' : ''}`;
+                pageItem.innerHTML = `<a class="page-link" href="#">${pageNum}</a>`;
+                
+                if (pageNum !== currentPage) {
+                    pageItem.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        goToPage(pageNum);
+                    });
+                }
+                
+                paginationElement.appendChild(pageItem);
+            }
+        });
+        
+        // Create Next button
+        const nextBtn = document.createElement('li');
+        nextBtn.className = `page-item ${!hasNext ? 'disabled' : ''}`;
+        nextBtn.innerHTML = `
+            <a class="page-link" href="#" aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+            </a>
+        `;
+        
+        if (hasNext) {
+            nextBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                goToPage(currentPage + 1);
+            });
+        }
+        
+        paginationElement.appendChild(nextBtn);
+        
+        // Add page info text with a specific class for easy identification
+        const pageInfoContainer = document.createElement('div');
+        pageInfoContainer.className = 'mt-2 text-center text-muted small pagination-info';
+        pageInfoContainer.innerHTML = `Page ${currentPage} of ${totalPages} (${paginationData.total_count} items)`;
+        paginationElement.parentNode.appendChild(pageInfoContainer);
+    }
+    
+    // Helper function to create a pagination array with ellipsis for large page counts
+    function createPaginationArray(currentPage, totalPages) {
+        if (totalPages <= 7) {
+            // If there are 7 or fewer pages, show all page numbers
+            return Array.from({ length: totalPages }, (_, i) => i + 1);
+        }
+        
+        const pages = [];
+        
+        // Always show first page
+        pages.push(1);
+        
+        if (currentPage > 3) {
+            // Add ellipsis if current page is far from the start
+            pages.push('...');
+        }
+        
+        // Show pages around current page
+        const rangeStart = Math.max(2, currentPage - 1);
+        const rangeEnd = Math.min(totalPages - 1, currentPage + 1);
+        
+        for (let i = rangeStart; i <= rangeEnd; i++) {
+            pages.push(i);
+        }
+        
+        if (currentPage < totalPages - 2) {
+            // Add ellipsis if current page is far from the end
+            pages.push('...');
+        }
+        
+        // Always show last page
+        pages.push(totalPages);
+        
+        return pages;
+    }
+    
+    // Navigate to a specific page
+    function goToPage(page) {
+        currentPage = page;
+        showGlobalLoading();
+        loadIocs();
+        
+        // Scroll to the top of the table
+        const tableEl = document.getElementById('ioc-table');
+        if (tableEl) {
+            tableEl.scrollIntoView({ behavior: 'smooth' });
+        }
     }
 
     // View IOC details
@@ -904,6 +1138,18 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Force hide after a timeout regardless of state
         forceHideLoading();
+    }
+    
+    // Shows the global loading overlay
+    function showGlobalLoading() {
+        // Reset loading flags
+        statsLoaded = false;
+        iocsLoaded = false;
+        
+        // Show the loading overlay
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'flex';
+        }
     }
     
     // Forces the removal of the loading indicator after a reasonable timeout

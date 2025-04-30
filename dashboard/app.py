@@ -347,27 +347,82 @@ def get_iocs():
             request.args.get("max_score"), min_val=0, max_val=100
         )
 
-        # Build the query - explicitly select columns to ensure correct order
-        query = "SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs WHERE 1=1"
+        # Get additional filter parameters
+        source_feed = request.args.get("source_feed")
+        category = request.args.get("category")
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+
+        # Validate date formats if provided
+        if date_from:
+            try:
+                # Try to parse to ensure it's a valid date format
+                date_from = date_from.strip()
+                if len(date_from) == 10:  # Only date like "2025-04-30"
+                    date_from = f"{date_from} 00:00:00"  # Add time component
+            except Exception as e:
+                logger.warning(f"Invalid date_from format: {date_from}, {e}")
+                return jsonify(
+                    {"error": "Invalid date_from format. Use YYYY-MM-DD."}
+                ), 400
+
+        if date_to:
+            try:
+                # Try to parse to ensure it's a valid date format
+                date_to = date_to.strip()
+                if len(date_to) == 10:  # Only date like "2025-04-30"
+                    date_to = f"{date_to} 23:59:59"  # Add time component for end of day
+            except Exception as e:
+                logger.warning(f"Invalid date_to format: {date_to}, {e}")
+                return jsonify(
+                    {"error": "Invalid date_to format. Use YYYY-MM-DD."}
+                ), 400
+
+        # Build the base query conditions that will be used for both the count and data queries
+        query_conditions = "WHERE 1=1"
         params = []
 
         if ioc_type:
-            query += " AND ioc_type = ?"
+            query_conditions += " AND ioc_type = ?"
             params.append(ioc_type)
 
         if min_score is not None:
-            query += " AND score >= ?"
+            query_conditions += " AND score >= ?"
             params.append(min_score)
 
         if max_score is not None:
-            query += " AND score <= ?"
+            query_conditions += " AND score <= ?"
             params.append(max_score)
 
-        query += " ORDER BY score DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
+        # Add new filter conditions
+        if source_feed:
+            query_conditions += " AND source_feed = ?"
+            params.append(source_feed)
 
-        # Execute the query
-        cursor = conn.execute(query, params)
+        if category:
+            query_conditions += " AND category = ?"
+            params.append(category)
+
+        if date_from:
+            query_conditions += " AND first_seen >= ?"
+            params.append(date_from)
+
+        if date_to:
+            query_conditions += " AND first_seen <= ?"
+            params.append(date_to)
+
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) as total FROM iocs {query_conditions}"
+        cursor = conn.execute(count_query, params)
+        total_count = cursor.fetchone()["total"]
+        total_pages = (total_count + limit - 1) // limit  # Ceiling division
+
+        # Build the data query with pagination
+        data_query = f"SELECT ioc_type, ioc_value, source_feed, first_seen, last_seen, score, category FROM iocs {query_conditions} ORDER BY score DESC LIMIT ? OFFSET ?"
+        data_params = params + [limit, offset]
+
+        # Execute the data query
+        cursor = conn.execute(data_query, data_params)
         iocs = []
 
         # Process each row and detect timestamp-like values or corrupted URLs
@@ -395,7 +450,20 @@ def get_iocs():
 
         conn.close()
 
-        return jsonify(iocs)
+        # Return data with pagination metadata
+        return jsonify(
+            {
+                "iocs": iocs,
+                "pagination": {
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "current_page": (offset // limit) + 1,
+                    "page_size": limit,
+                    "has_next": offset + limit < total_count,
+                    "has_prev": offset > 0,
+                },
+            }
+        )
 
     except Exception as e:
         logger.error(f"Error retrieving IOCs: {e}")
@@ -961,6 +1029,15 @@ def get_stats():
             row["category"]: row["count"] for row in cursor.fetchall()
         }
 
+        # Count by source_feed
+        cursor = conn.execute(
+            "SELECT source_feed, COUNT(*) as count FROM iocs GROUP BY source_feed"
+        )
+        # Convert SQLite Row objects to standard Python dictionaries
+        stats["by_source_feed"] = {
+            row["source_feed"]: row["count"] for row in cursor.fetchall()
+        }
+
         # Score distribution
         cursor = conn.execute(
             "SELECT MIN(score) as min, MAX(score) as max, AVG(score) as avg FROM iocs"
@@ -1044,6 +1121,7 @@ def get_stats():
                 "total": sum(stats["by_type"].values()),
                 "by_type": stats["by_type"],
                 "by_category": stats["by_category"],
+                "by_source_feed": stats["by_source_feed"],
                 "score_stats": score_stats,
                 "visualizations": stats.get(
                     "visualizations", {"error": "No visualization data"}

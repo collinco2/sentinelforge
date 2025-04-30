@@ -52,6 +52,27 @@
                                     <option value="hash">Hash</option>
                                 </select>
                             </div>
+                            
+                            <!-- New Source Feed filter -->
+                            <div class="mb-3">
+                                <label for="source-feed" class="form-label">Source Feed</label>
+                                <select class="form-select" id="source-feed">
+                                    <option value="">All Sources</option>
+                                    <!-- Will be populated dynamically -->
+                                </select>
+                            </div>
+                            
+                            <!-- New Category filter -->
+                            <div class="mb-3">
+                                <label for="category" class="form-label">Category</label>
+                                <select class="form-select" id="category">
+                                    <option value="">All Categories</option>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                            
                             <div class="mb-3">
                                 <label for="min-score" class="form-label">Min Score</label>
                                 <input type="range" class="form-range" id="min-score" min="0" max="100" value="0">
@@ -62,7 +83,19 @@
                                 <input type="range" class="form-range" id="max-score" min="0" max="100" value="100">
                                 <span id="max-score-value">100</span>
                             </div>
+                            
+                            <!-- Date Range filters -->
+                            <div class="mb-3">
+                                <label for="date-from" class="form-label">First Seen After</label>
+                                <input type="date" class="form-control" id="date-from">
+                            </div>
+                            <div class="mb-3">
+                                <label for="date-to" class="form-label">First Seen Before</label>
+                                <input type="date" class="form-control" id="date-to">
+                            </div>
+                            
                             <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                            <button type="button" id="reset-filters" class="btn btn-outline-secondary w-100 mt-2">Reset Filters</button>
                         </form>
                     </div>
                 </div>
