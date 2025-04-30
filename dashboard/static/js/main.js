@@ -19,16 +19,41 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentPage = 1;
     const itemsPerPage = 10;
     let totalPages = 1;
-
-    // Initialize
-    loadStats();
-    loadIocs();
-
+    
+    // SIMPLER LOADING INDICATOR IMPLEMENTATION
+    // Create the loading indicator once at startup
+    const loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'globalLoadingOverlay';
+    loadingOverlay.style.position = 'fixed';
+    loadingOverlay.style.top = '0';
+    loadingOverlay.style.left = '0';
+    loadingOverlay.style.width = '100%';
+    loadingOverlay.style.height = '100%';
+    loadingOverlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
+    loadingOverlay.style.display = 'flex';
+    loadingOverlay.style.justifyContent = 'center';
+    loadingOverlay.style.alignItems = 'center';
+    loadingOverlay.style.zIndex = '9999';
+    
+    loadingOverlay.innerHTML = `
+        <div class="card p-4 shadow">
+            <div class="d-flex flex-column align-items-center">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mb-0">Loading data...</p>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(loadingOverlay);
+    
     // Add event listeners
     if (filterForm) {
         filterForm.addEventListener('submit', function(e) {
             e.preventDefault();
             currentPage = 1;
+            loadingOverlay.style.display = 'flex';
             loadIocs();
         });
     }
@@ -47,19 +72,40 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load statistics
     function loadStats() {
+        statsContainer.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading statistics...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading statistics...</p>
+            </div>
+        `;
+        
         fetch('/api/stats')
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Failed to load stats');
+                    throw new Error(`Failed to load stats: ${response.status} ${response.statusText}`);
                 }
                 return response.json();
             })
             .then(data => {
                 displayStats(data);
+                // Hide loading indicator once all data is loaded
+                hideLoadingWhenReady();
             })
             .catch(error => {
                 console.error('Error loading stats:', error);
-                statsContainer.innerHTML = `<div class="alert alert-danger">Error loading statistics: ${error.message}</div>`;
+                statsContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Error loading statistics: ${error.message}
+                        <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadStats()">
+                            <i class="bi bi-arrow-clockwise"></i> Retry
+                        </button>
+                    </div>
+                `;
+                // Hide loading on error too
+                hideLoadingWhenReady();
             });
     }
 
@@ -122,10 +168,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Show loading state
         iocTableBody.innerHTML = `
             <tr>
-                <td colspan="5" class="text-center">
+                <td colspan="5" class="text-center py-4">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
+                        <span class="visually-hidden">Loading IOCs...</span>
                     </div>
+                    <p class="mt-2 text-muted">Loading IOC data...</p>
                 </td>
             </tr>
         `;
@@ -144,23 +191,33 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/api/iocs?${params.toString()}`)
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Failed to load IOCs');
+                    throw new Error(`Failed to load IOCs: ${response.status} ${response.statusText}`);
                 }
                 return response.json();
             })
             .then(data => {
                 displayIocs(data);
                 updatePagination();
+                // Hide loading when ready
+                hideLoadingWhenReady();
             })
             .catch(error => {
                 console.error('Error loading IOCs:', error);
                 iocTableBody.innerHTML = `
                     <tr>
                         <td colspan="5" class="text-center">
-                            <div class="alert alert-danger">Error: ${error.message}</div>
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                Error: ${error.message}
+                                <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadIocs()">
+                                    <i class="bi bi-arrow-clockwise"></i> Retry
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `;
+                // Hide loading on error too
+                hideLoadingWhenReady();
             });
     }
 
@@ -178,20 +235,32 @@ document.addEventListener('DOMContentLoaded', function() {
         let html = '';
         data.forEach((ioc, index) => {
             const riskClass = getRiskBadgeClass(ioc.score);
+            
+            // Improved handling of undefined or malformed values
+            let displayValue = "Unknown";
+            let actionId = `ioc-${index}`;
+            
             // Make sure we're always using ioc_value, not first_seen or other fields
-            const displayValue = (ioc.ioc_value && ioc.ioc_value !== "undefined") ? 
-                ioc.ioc_value : `IOC-${index+1}`;
-            // Store the actual database ID or some unique identifier for actions
-            const actionId = (ioc.ioc_value && ioc.ioc_value !== "undefined") ? 
-                ioc.ioc_value : `${ioc.ioc_type}-${index}`;
+            if (ioc.ioc_value && ioc.ioc_value !== "undefined") {
+                displayValue = ioc.ioc_value;
+                actionId = ioc.ioc_value;
+            } else if (ioc.ioc_type) {
+                // Fallback: use type and index if value is not available
+                displayValue = `${ioc.ioc_type}-${index+1}`;
+                actionId = `${ioc.ioc_type}-${index}`;
+            }
             
             // Add warning icon if the value has a warning flag
             const warningIcon = ioc.value_warning ? 
                 `<i class="bi bi-exclamation-triangle-fill text-warning" title="${ioc.value_warning}"></i> ` : '';
             
+            // Add special indication for undefined values
+            const undefinedWarning = (!ioc.ioc_value || ioc.ioc_value === "undefined") ?
+                `<span class="badge bg-warning text-dark">Malformed</span> ` : '';
+            
             html += `
                 <tr data-ioc="${actionId}" class="ioc-row">
-                    <td>${warningIcon}${displayValue}</td>
+                    <td>${warningIcon}${undefinedWarning}${displayValue}</td>
                     <td>${ioc.ioc_type || 'Unknown'}</td>
                     <td>${ioc.category || 'N/A'}</td>
                     <td><span class="badge ${riskClass}">${ioc.score}</span></td>
@@ -213,17 +282,34 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.view-ioc').forEach((button, idx) => {
             button.addEventListener('click', function() {
                 const iocValue = this.getAttribute('data-ioc');
-                // If the IOC value is "undefined", use the row index
-                const idToUse = (iocValue === "undefined") ? `row-${idx}` : iocValue;
-                viewIocDetails(idToUse);
+                // Don't attempt to use undefined values
+                if (iocValue && iocValue !== "undefined") {
+                    viewIocDetails(iocValue);
+                } else {
+                    // Show a generic message
+                    const modal = new bootstrap.Modal(document.getElementById('ioc-detail-modal'));
+                    const modalContent = document.getElementById('ioc-detail-content');
+                    
+                    modalContent.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h5>No IOC Value Available</h5>
+                            <p>The system couldn't determine a valid IOC value to display.</p>
+                            <p>This typically happens with malformed data in the database.</p>
+                        </div>
+                    `;
+                    modal.show();
+                }
             });
         });
         
         document.querySelectorAll('.explain-ioc').forEach((button, idx) => {
             button.addEventListener('click', function() {
                 const iocValue = this.getAttribute('data-ioc');
-                // If the IOC value is "undefined", use a different approach
-                if (iocValue === "undefined") {
+                
+                // Don't attempt to use undefined values
+                if (iocValue && iocValue !== "undefined") {
+                    explainIoc(iocValue);
+                } else {
                     // Find the actual table row
                     const row = this.closest('tr');
                     const cells = row.querySelectorAll('td');
@@ -234,10 +320,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         const iocType = cells.length >= 2 ? cells[1].textContent.trim() : 'unknown';
                         // Generate an explanation based on the table row data
                         showGeneratedExplanation(displayedValue, iocType, parseInt(cells[3].textContent.trim()));
-                        return;
+                    } else {
+                        // Fallback if we can't get any data
+                        showGeneratedExplanation("Unknown", "unknown", 50);
                     }
                 }
-                explainIoc(iocValue);
             });
         });
     }
@@ -249,6 +336,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // View IOC details
     function viewIocDetails(iocValue) {
+        // Check for undefined or empty values
+        if (!iocValue || iocValue === "undefined") {
+            // Show a user-friendly message instead of making the API call
+            const modal = new bootstrap.Modal(document.getElementById('ioc-detail-modal'));
+            const modalContent = document.getElementById('ioc-detail-content');
+            
+            modalContent.innerHTML = `
+                <div class="alert alert-warning">
+                    <h5>No IOC Value Available</h5>
+                    <p>The system couldn't determine a valid IOC value to display.</p>
+                    <p>This typically happens with malformed data in the database.</p>
+                </div>
+            `;
+            modal.show();
+            return;
+        }
+        
         // Get the modal element
         const modal = new bootstrap.Modal(document.getElementById('ioc-detail-modal'));
         const modalContent = document.getElementById('ioc-detail-content');
@@ -286,9 +390,23 @@ document.addEventListener('DOMContentLoaded', function() {
                         `;
                     }
                     
+                    // Determine if this is likely a hash or other IOC type
+                    const valueClass = data.ioc_type === 'hash' || 
+                                      (data.ioc_value && data.ioc_value.length > 32 && /^[a-f0-9]+$/i.test(data.ioc_value)) ? 
+                                      'hash-value' : 'ioc-value';
+                    
+                    // Add copy button for hash values
+                    const copyButton = (valueClass === 'hash-value') ? 
+                        `<button class="btn btn-sm btn-outline-secondary ms-2 copy-btn" data-clipboard="${data.ioc_value || iocValue}">
+                            <i class="bi bi-clipboard"></i> Copy
+                         </button>` : '';
+                    
                     // Display generic info
                     content += `
-                        <h4>${data.ioc_value || iocValue}</h4>
+                        <div class="d-flex align-items-start">
+                            <h4 class="${valueClass}">${data.ioc_value || iocValue}</h4>
+                            ${copyButton}
+                        </div>
                         <div class="row">
                             <div class="col-md-6">
                                 <p><strong>Type:</strong> ${data.ioc_type || 'Unknown'}</p>
@@ -304,12 +422,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                     
                     modalContent.innerHTML = content;
+                    addCopyButtonListeners();
                     return;
                 }
                 
+                // Determine if this is likely a hash or other IOC type
+                const valueClass = data.ioc_type === 'hash' || 
+                                  (data.ioc_value && data.ioc_value.length > 32 && /^[a-f0-9]+$/i.test(data.ioc_value)) ? 
+                                  'hash-value' : 'ioc-value';
+                
+                // Add copy button for hash values
+                const copyButton = (valueClass === 'hash-value') ? 
+                    `<button class="btn btn-sm btn-outline-secondary ms-2 copy-btn" data-clipboard="${data.ioc_value || iocValue}">
+                        <i class="bi bi-clipboard"></i> Copy
+                     </button>` : '';
+                
                 // Display IOC details in modal
                 modalContent.innerHTML = `
-                    <h4>${data.ioc_value || iocValue}</h4>
+                    <div class="d-flex align-items-start">
+                        <h4 class="${valueClass}">${data.ioc_value || iocValue}</h4>
+                        ${copyButton}
+                    </div>
                     <div class="row">
                         <div class="col-md-6">
                             <p><strong>Type:</strong> ${data.ioc_type || 'Unknown'}</p>
@@ -324,9 +457,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="mt-3">
                         <h5>Raw Data</h5>
-                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                        <pre class="json-data">${JSON.stringify(data, null, 2)}</pre>
                     </div>
                 `;
+                
+                addCopyButtonListeners();
             })
             .catch(error => {
                 console.error('Error getting IOC details:', error);
@@ -335,7 +470,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <h5>Information Limited</h5>
                         <p>We encountered an issue retrieving complete details for this IOC. Here's what we know:</p>
                     </div>
-                    <h4>${iocValue}</h4>
+                    <h4 class="ioc-value">${iocValue}</h4>
                     <p><strong>Type:</strong> ${iocValue.includes(".") ? "domain" : 
                          iocValue.length > 32 ? "hash" : "unknown"}</p>
                     <p><strong>Note:</strong> This is limited information based on the displayed value.</p>
@@ -343,8 +478,56 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    // Add event listeners to the copy buttons
+    function addCopyButtonListeners() {
+        document.querySelectorAll('.copy-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const text = this.getAttribute('data-clipboard');
+                navigator.clipboard.writeText(text).then(() => {
+                    // Temporarily change button text to show success
+                    const originalHtml = this.innerHTML;
+                    this.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                    this.classList.add('btn-success');
+                    this.classList.remove('btn-outline-secondary');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        this.innerHTML = originalHtml;
+                        this.classList.remove('btn-success');
+                        this.classList.add('btn-outline-secondary');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Could not copy text: ', err);
+                    alert('Failed to copy to clipboard');
+                });
+            });
+        });
+    }
+
     // Explain IOC
     function explainIoc(iocValue) {
+        // Check for undefined or empty values
+        if (!iocValue || iocValue === "undefined") {
+            // Show a generic explanation in the UI without making the API call
+            const explanationContainer = document.getElementById('explanation-container');
+            const noIocSelected = document.getElementById('no-ioc-selected');
+            const explanationIocValue = document.getElementById('explanation-ioc-value');
+            const explanationContent = document.getElementById('explanation-content');
+            
+            explanationContainer.classList.remove('d-none');
+            noIocSelected.classList.add('d-none');
+            explanationIocValue.textContent = "Unknown IOC";
+            
+            explanationContent.innerHTML = `
+                <div class="alert alert-warning">
+                    <h5>No Valid IOC Value</h5>
+                    <p>The system couldn't determine a valid IOC value to analyze.</p>
+                    <p>This typically happens with malformed data in the database.</p>
+                </div>
+            `;
+            return;
+        }
+        
         const explanationContainer = document.getElementById('explanation-container');
         const noIocSelected = document.getElementById('no-ioc-selected');
         const explanationIocValue = document.getElementById('explanation-ioc-value');
@@ -700,4 +883,41 @@ document.addEventListener('DOMContentLoaded', function() {
         if (score < 90) return 'bg-danger';
         return 'bg-danger';
     }
+
+    // This keeps track of data loading completion
+    let statsLoaded = false;
+    let iocsLoaded = false;
+    
+    // Helper function to hide loading overlay when both data sources are loaded
+    function hideLoadingWhenReady() {
+        // Set a flag indicating this data source is loaded
+        if (this === loadStats) {
+            statsLoaded = true;
+        } else {
+            iocsLoaded = true;
+        }
+        
+        // If both data sources are loaded, hide the overlay
+        if (statsLoaded && iocsLoaded) {
+            loadingOverlay.style.display = 'none';
+        }
+        
+        // Force hide after a timeout regardless of state
+        forceHideLoading();
+    }
+    
+    // Forces the removal of the loading indicator after a reasonable timeout
+    // This ensures it doesn't get stuck even if there are issues
+    function forceHideLoading() {
+        setTimeout(function() {
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
+        }, 2000); // 2 seconds max loading time
+    }
+    
+    // Start loading data and force hide loading after timeout
+    loadStats.call(loadStats); 
+    loadIocs.call(loadIocs);
+    forceHideLoading();
 }); 

@@ -55,6 +55,22 @@ body {
     color: white;
 }
 
+/* Long hash and IOC value handling */
+.modal-title, .modal-body {
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.hash-value, .ioc-value {
+    font-family: monospace;
+    font-size: 0.9rem;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-all;
+    max-width: 100%;
+}
+
 /* JSON Data Display */
 .json-data {
     background-color: #f8f9fa;
@@ -64,6 +80,8 @@ body {
     overflow-y: auto;
     font-family: monospace;
     font-size: 0.9rem;
+    word-wrap: break-word;
+    word-break: break-all;
 }
 
 /* Explanation Text */
