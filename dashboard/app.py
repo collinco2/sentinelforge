@@ -20,6 +20,7 @@ import matplotlib
 from functools import wraps
 from collections import defaultdict
 import urllib.parse
+import pandas as pd
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import seaborn as sns
@@ -465,20 +466,49 @@ def explain_ioc(ioc_value):
 
         # Check if the IOC value contains binary or non-printable characters
         # This is a frequent cause of the "no such column: value" error
-        if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value if isinstance(c, str)):
-            logger.warning("IOC value contains binary data, using fallback explanation")
+        try:
+            is_binary = False
+            # Check if string contains binary or non-printable characters
+            if isinstance(ioc_value, str):
+                is_binary = any(ord(c) < 32 or ord(c) > 126 for c in ioc_value)
+            else:
+                # If not a string or contains non-string elements, treat as binary
+                is_binary = True
+
+            if is_binary:
+                logger.warning(
+                    "IOC value contains binary data, using fallback explanation"
+                )
+                safe_value = f"[binary-data-{abs(hash(str(ioc_value))) % 1000:03d}]"
+                return jsonify(
+                    {
+                        "ioc": {
+                            "ioc_type": "unknown",
+                            "ioc_value": safe_value,
+                            "score": 44,
+                        },
+                        "explanation": generate_fallback_explanation(safe_value)[
+                            "explanation"
+                        ],
+                        "visualization": None,
+                        "note": "Binary data detected in IOC value, generated fallback explanation",
+                    }
+                )
+        except Exception as binary_err:
+            # If we can't even check for binary data, it's likely corrupted
+            logger.error(f"Error checking for binary data: {binary_err}")
             return jsonify(
                 {
                     "ioc": {
                         "ioc_type": "unknown",
-                        "ioc_value": f"[binary-data-{hash(str(ioc_value)) % 1000:03d}]",
+                        "ioc_value": f"[corrupted-data-{abs(hash(str(ioc_value))) % 1000:03d}]",
                         "score": 44,
                     },
-                    "explanation": generate_fallback_explanation(ioc_value)[
+                    "explanation": generate_fallback_explanation("corrupted_data")[
                         "explanation"
                     ],
                     "visualization": None,
-                    "note": "Binary data detected in IOC value, generated fallback explanation",
+                    "note": "Corrupted data detected, generated fallback explanation",
                 }
             )
 
@@ -854,7 +884,9 @@ def get_stats():
         scores = [float(row[0]) for row in cursor.fetchall() if row[0] is not None]
 
         plt.figure(figsize=(10, 6))
-        sns.histplot(scores, kde=True, bins=20)
+        # Create a pandas DataFrame for better seaborn integration
+        score_df = pd.DataFrame({"score": scores})
+        sns.histplot(data=score_df, x="score", kde=True, bins=20)
         plt.title("IOC Score Distribution")
         plt.xlabel("Score")
         plt.ylabel("Frequency")

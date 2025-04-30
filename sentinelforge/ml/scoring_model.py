@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 
 # Import ML libraries with error handling
 try:
-    import numpy as np
+    import numpy as np  # noqa: F401
 
     # Only import pandas and sklearn when needed for type checking
     import pandas as pd  # noqa: F401
@@ -301,19 +301,22 @@ def predict_score(features: Dict[str, Any]) -> float:
             # Default to first 34 features if model doesn't have feature_names_in_
             model_features = EXPECTED_FEATURES_FULL[:34]
 
-        # Prepare feature vector in the correct order using model features
-        # This ensures we match exactly what the model was trained with
-        feature_vector = [features.get(name, 0) for name in model_features]
+        # Create a proper pandas DataFrame with feature names to avoid sklearn warnings
+        import pandas as pd
 
-        # Reshape for scikit-learn (assuming single sample)
-        feature_array = np.array([feature_vector])
+        # Prepare feature vector with correct names
+        feature_dict = {name: features.get(name, 0) for name in model_features}
+        feature_df = pd.DataFrame([feature_dict])
+
+        # Ensure all expected features are present with the right order
+        feature_df = feature_df[model_features]
 
         # Get probability of malicious class (second column of predict_proba output)
         with (
             open(os.devnull, "w") as f,
             contextlib.redirect_stderr(f),
         ):  # Suppress warnings
-            prediction = _model.predict_proba(feature_array)[0, 1]
+            prediction = _model.predict_proba(feature_df)[0, 1]
 
         logger.debug(f"ML model predicted score: {prediction}")
         return float(prediction)
