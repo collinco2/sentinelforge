@@ -463,6 +463,25 @@ def explain_ioc(ioc_value):
                 }
             ), 400
 
+        # Check if the IOC value contains binary or non-printable characters
+        # This is a frequent cause of the "no such column: value" error
+        if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value if isinstance(c, str)):
+            logger.warning("IOC value contains binary data, using fallback explanation")
+            return jsonify(
+                {
+                    "ioc": {
+                        "ioc_type": "unknown",
+                        "ioc_value": f"[binary-data-{hash(str(ioc_value)) % 1000:03d}]",
+                        "score": 44,
+                    },
+                    "explanation": generate_fallback_explanation(ioc_value)[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Binary data detected in IOC value, generated fallback explanation",
+                }
+            )
+
         conn = get_db_connection()
         if not conn:
             logger.error("Database connection failed")
@@ -544,16 +563,28 @@ def explain_ioc(ioc_value):
         # If we have a valid explanation, create visualization and return
         if explanation:
             try:
-                # Create visualization from the explanation
+                # Create visualization
                 plt.figure(figsize=(10, 6))
                 feature_names = [item["feature"] for item in explanation]
                 importance_values = [item["importance"] for item in explanation]
 
-                colors = ["red" if imp < 0 else "green" for imp in importance_values]
-                sns.barplot(x=importance_values, y=feature_names, palette=colors)
+                # Create a 'direction' column for the hue parameter
+                directions = [
+                    "negative" if imp < 0 else "positive" for imp in importance_values
+                ]
+
+                # Use hue parameter correctly to avoid FutureWarning
+                sns.barplot(
+                    x=importance_values,
+                    y=feature_names,
+                    hue=directions,
+                    palette={"positive": "green", "negative": "red"},
+                    legend=False,
+                )
                 plt.title("Feature Importance")
                 plt.xlabel("SHAP Value (Impact on Score)")
                 plt.tight_layout()
+
                 plt.savefig(viz_path)
                 plt.close()
 
@@ -651,11 +682,23 @@ def explain_ioc(ioc_value):
                 feature_names = [item["feature"] for item in explanation]
                 importance_values = [item["importance"] for item in explanation]
 
-                colors = ["red" if imp < 0 else "green" for imp in importance_values]
-                sns.barplot(x=importance_values, y=feature_names, palette=colors)
+                # Create a 'direction' column for the hue parameter
+                directions = [
+                    "negative" if imp < 0 else "positive" for imp in importance_values
+                ]
+
+                # Use hue parameter correctly to avoid FutureWarning
+                sns.barplot(
+                    x=importance_values,
+                    y=feature_names,
+                    hue=directions,
+                    palette={"positive": "green", "negative": "red"},
+                    legend=False,
+                )
                 plt.title("Feature Importance")
                 plt.xlabel("SHAP Value (Impact on Score)")
                 plt.tight_layout()
+
                 plt.savefig(viz_path)
                 plt.close()
 
@@ -774,12 +817,14 @@ def get_stats():
         cursor = conn.execute(
             "SELECT ioc_type, COUNT(*) as count FROM iocs GROUP BY ioc_type"
         )
+        # Convert SQLite Row objects to standard Python dictionaries
         stats["by_type"] = {row["ioc_type"]: row["count"] for row in cursor.fetchall()}
 
         # Count by category
         cursor = conn.execute(
             "SELECT category, COUNT(*) as count FROM iocs GROUP BY category"
         )
+        # Convert SQLite Row objects to standard Python dictionaries
         stats["by_category"] = {
             row["category"]: row["count"] for row in cursor.fetchall()
         }
@@ -789,7 +834,7 @@ def get_stats():
             "SELECT MIN(score) as min, MAX(score) as max, AVG(score) as avg FROM iocs"
         )
         score_row = cursor.fetchone()
-        # Convert SQLite Row to dict and ensure all values are serializable
+        # Convert SQLite Row to a regular dict with serializable values
         score_stats = {
             "min": float(score_row["min"])
             if score_row and score_row["min"] is not None
@@ -805,6 +850,7 @@ def get_stats():
 
         # Create score distribution visualization
         cursor = conn.execute("SELECT score FROM iocs")
+        # Convert SQLite Row objects to standard Python values
         scores = [float(row[0]) for row in cursor.fetchall() if row[0] is not None]
 
         plt.figure(figsize=(10, 6))
