@@ -145,6 +145,16 @@ class SafeDict(dict):
 
     def __getitem__(self, key):
         try:
+            # First, if the key is 'value', the most problematic case, redirect to 'ioc_value'
+            if key == "value":
+                # Try ioc_value first, then value with str conversion, then None
+                if "ioc_value" in self:
+                    return str(super().get("ioc_value"))
+                elif super().get("value") is not None:
+                    return str(super().get("value"))
+                else:
+                    return None
+
             # Safely retrieve value without raising error for missing keys
             value = super().get(key)
 
@@ -158,13 +168,8 @@ class SafeDict(dict):
                     SafeDict(item) if isinstance(item, dict) else item for item in value
                 ]
 
-            # Convert the value to string for special case of 'value' key
-            # to prevent SQL "no such column: value" error - this is a workaround
-            # for SQLite's confusion between dict keys and column names
-            if key == "value":
-                return str(value) if value is not None else None
-
-            return value
+            # Return the value, ensuring it's never None
+            return value if value is not None else None
         except Exception as e:
             # Log error and return None instead of raising
             logger.error(f"Error accessing dict key '{key}': {e}")
@@ -172,6 +177,15 @@ class SafeDict(dict):
 
     def get(self, key, default=None):
         try:
+            # Special handling for the 'value' key to redirect to 'ioc_value'
+            if key == "value":
+                if "ioc_value" in self:
+                    return str(super().get("ioc_value"))
+                elif super().get("value") is not None:
+                    return str(super().get("value"))
+                else:
+                    return default
+
             value = super().get(key, default)
 
             # If value is another dict, wrap it in SafeDict
@@ -183,11 +197,6 @@ class SafeDict(dict):
                 return [
                     SafeDict(item) if isinstance(item, dict) else item for item in value
                 ]
-
-            # Convert the value to string for special case of 'value' key
-            # to prevent SQL "no such column: value" error
-            if key == "value":
-                return str(value) if value is not None else default
 
             return value
         except Exception as e:
@@ -216,6 +225,22 @@ class SafeDict(dict):
         except Exception as e:
             logger.error(f"Error in SafeDict.__str__: {e}")
             return "{}"
+
+    def keys(self):
+        """Safe implementation of keys that won't raise errors"""
+        try:
+            return super().keys()
+        except Exception as e:
+            logger.error(f"Error accessing dict keys: {e}")
+            return []
+
+    def items(self):
+        """Safe implementation of items that won't raise errors"""
+        try:
+            return super().items()
+        except Exception as e:
+            logger.error(f"Error accessing dict items: {e}")
+            return []
 
 
 def sanitize_dict_for_sql(data):

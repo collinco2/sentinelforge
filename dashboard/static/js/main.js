@@ -1038,194 +1038,280 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Explain IOC
+    // Function to sanitize IOC values before sending to the server
+    function sanitizeIocValue(iocValue) {
+        if (!iocValue) return "";
+        
+        // Handle undefined explicitly
+        if (iocValue === undefined || iocValue === "undefined") {
+            return "undefined";
+        }
+        
+        // Convert to string if not already
+        iocValue = String(iocValue);
+        
+        // Check for binary or non-printable characters
+        const hasBinaryData = [...iocValue].some(char => {
+            const code = char.charCodeAt(0);
+            return code < 32 || code > 126;
+        });
+        
+        if (hasBinaryData) {
+            // If binary data is detected, return a safe placeholder
+            return `binary-data-${Math.abs(hashString(iocValue) % 1000).toString().padStart(3, '0')}`;
+        }
+        
+        // Remove potentially problematic characters and truncate if too long
+        return iocValue
+            .replace(/[<>"'%;)(&+]/g, '_')
+            .substring(0, 2048)
+            .trim();
+    }
+
+    // Simple string hash function
+    function hashString(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0; // Convert to 32bit integer
+        }
+        return hash;
+    }
+
+    // Enhanced fetch function with better error handling
+    function fetchWithErrorHandling(url, options = {}) {
+        // Add a timeout to the fetch call
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+        
+        // Clone options and add the signal
+        const fetchOptions = { 
+            ...options,
+            signal: controller.signal
+        };
+        
+        return fetch(url, fetchOptions)
+            .then(response => {
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    // Try to parse error as JSON first
+                    return response.json()
+                        .then(errorData => {
+                            throw new Error(errorData.error || errorData.message || `Request failed with status ${response.status}`);
+                        })
+                        .catch(e => {
+                            // If JSON parsing fails, throw a generic error
+                            if (e instanceof SyntaxError) {
+                                throw new Error(`Request failed with status ${response.status}`);
+                            }
+                            throw e;
+                        });
+                }
+                
+                return response.json();
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+                
+                // Handle network errors, timeouts, and aborts
+                if (error.name === 'AbortError') {
+                    showNotification('Request timed out. Please try again.', 'error');
+                    throw new Error('Request timed out');
+                } else if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+                    showNotification('Network error. Please check your connection.', 'error');
+                    throw new Error('Network error');
+                }
+                
+                throw error;
+            });
+    }
+
+    // Use the sanitization and enhanced fetch in the explain IOC function
     function explainIoc(iocValue) {
-        // Check for undefined or empty values more thoroughly
-        if (!iocValue || iocValue === "undefined" || iocValue === undefined || iocValue === null) {
-            // Show a generic explanation in the UI without making the API call
-            const explanationContainer = document.getElementById('explanation-container');
-            const noIocSelected = document.getElementById('no-ioc-selected');
-            const explanationIocValue = document.getElementById('explanation-ioc-value');
-            const featureImportanceContainer = document.getElementById('feature-importance');
-            
-            explanationContainer.classList.remove('d-none');
-            noIocSelected.classList.add('d-none');
-            explanationIocValue.textContent = "Unknown IOC";
-            
-            featureImportanceContainer.innerHTML = `
-                <div class="alert alert-warning">
-                    <h5>No Valid IOC Value</h5>
-                    <p>The system couldn't determine a valid IOC value to analyze.</p>
-                    <p>This typically happens with malformed data in the database.</p>
-                </div>
-            `;
-            
-            // Create score chart with generic data
-            createGenericScoreChart();
+        // More aggressive validation to prevent invalid requests
+        if (!iocValue) {
+            showNotification('No IOC value provided', 'warning');
             return;
         }
-
-        const explanationContainer = document.getElementById('explanation-container');
-        const noIocSelected = document.getElementById('no-ioc-selected');
-        const explanationIocValue = document.getElementById('explanation-ioc-value');
+        
+        // Clear previous results
         const featureImportanceContainer = document.getElementById('feature-importance');
+        featureImportanceContainer.innerHTML = '<div class="d-flex justify-content-center my-5"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
         
-        // Show loading state
-        explanationContainer.classList.remove('d-none');
-        noIocSelected.classList.add('d-none');
-        explanationIocValue.textContent = `Analyzing ${truncateIocValue(iocValue)}...`;
-        featureImportanceContainer.innerHTML = `
-            <div class="text-center">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="mt-2">Generating explanation...</p>
-            </div>
-        `;
+        // Show the explanation modal
+        const modal = new bootstrap.Modal(document.getElementById('explanation-modal'));
+        modal.show();
         
-        // Create score chart with loading state
-        createScoreChart(50);
+        // Sanitize and encode the IOC value for URL safety
+        const sanitizedValue = sanitizeIocValue(iocValue);
         
-        // Sanitize the IOC value for URL safety
-        const sanitizedIoc = encodeURIComponent(iocValue);
+        if (sanitizedValue === "") {
+            showExplanationFallback(iocValue, "The IOC value appears to be empty or invalid.");
+            return;
+        }
         
-        // Fetch explanation - wrap in try/catch to ensure we never show raw errors
-        try {
-            fetch(`/api/explain/${sanitizedIoc}`)
-                .then(response => {
-                    // Always parse JSON, even for error responses
-                    return response.json().catch(err => {
-                        // If we can't parse JSON, create a synthetic error response
-                        return {
-                            error: "Failed to parse response",
-                            note: "The server returned an invalid response format."
-                        };
-                    });
-                })
-                .then(data => {
-                    // Handle the explanation data
-                    const featureImportanceContainer = document.getElementById('feature-importance');
-                    const explanationIocValue = document.getElementById('explanation-ioc-value');
-                    
-                    // Create score chart with actual data or fallback
-                    const score = data.ioc?.score || 44;
-                    createScoreChart(score);
-                    
-                    // Update the IOC value display - truncate if too long
-                    explanationIocValue.textContent = truncateIocValue(iocValue);
-                    
-                    // Check for errors or missing explanation
-                    if (data.error || !data.explanation) {
-                        featureImportanceContainer.innerHTML = `
-                            <div class="alert alert-warning">
-                                ${data.note || 'Limited explanation available for this IOC'}
-                            </div>
-                            <p>Basic analysis based on IOC patterns:</p>
-                            <ul>
-                                <li>IOC Type: ${data.ioc?.ioc_type || 'Unknown'}</li>
-                                <li>Risk Category: ${data.ioc?.category || 'Unknown'}</li>
-                                <li>Score: ${data.ioc?.score || 'N/A'}</li>
-                            </ul>
-                        `;
-                        return;
-                    }
-                    
-                    // Render the explanation visualization if available
-                    let explanationHtml = '';
-                    
-                    if (data.visualization) {
-                        explanationHtml += `
-                            <div class="mb-4">
-                                <h5>Feature Importance</h5>
-                                <img src="${data.visualization}" class="img-fluid border rounded" alt="Feature Importance">
-                            </div>
-                        `;
-                    }
-                    
-                    // Render the explanation details
-                    explanationHtml += `
-                        <div class="mb-4">
-                            <h5>Feature Breakdown</h5>
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>Feature</th>
-                                        <th>Importance</th>
-                                        <th>Value</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
-                    
-                    data.explanation.forEach(feature => {
-                        const valueDisplay = feature.value !== undefined ? feature.value : 'N/A';
-                        explanationHtml += `
-                            <tr>
-                                <td>${feature.feature}</td>
-                                <td>${feature.importance.toFixed(3)}</td>
-                                <td>${valueDisplay}</td>
-                            </tr>
-                        `;
-                    });
-                    
-                    explanationHtml += `
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                    
-                    // Add the explanation summary
-                    explanationHtml += `
-                        <div class="alert alert-info">
-                            <h5>Analysis Summary</h5>
-                            <p>This IOC received a score of <strong>${data.ioc?.score || 'Unknown'}</strong>.</p>
-                            <p>${data.note || 'The score is based on the features shown above.'}</p>
-                        </div>
-                    `;
-                    
-                    featureImportanceContainer.innerHTML = explanationHtml;
-                })
-                .catch(error => {
-                    console.error('Error getting explanation:', error);
-                    const featureImportanceContainer = document.getElementById('feature-importance');
-                    const explanationIocValue = document.getElementById('explanation-ioc-value');
-                    
-                    // Create generic chart even on error
+        const encodedIoc = encodeURIComponent(sanitizedValue);
+        
+        // Use our enhanced fetching function
+        fetchWithErrorHandling(`/api/explain/${encodedIoc}`)
+            .then(data => {
+                // Handle the explanation data
+                const featureImportanceContainer = document.getElementById('feature-importance');
+                const explanationIocValue = document.getElementById('explanation-ioc-value');
+                
+                // Update the display with the original IOC value
+                explanationIocValue.textContent = truncateIocValue(iocValue);
+                
+                // Check for API errors
+                if (data.error) {
                     createGenericScoreChart();
-                    
-                    explanationIocValue.textContent = truncateIocValue(iocValue);
                     featureImportanceContainer.innerHTML = `
-                        <div class="alert alert-danger">
-                            <h5>Error</h5>
-                            <p>We encountered an issue generating an explanation for this IOC.</p>
-                            <p>This may be due to the IOC containing special characters or being in an unsupported format.</p>
+                        <div class="alert alert-warning">
+                            <h5>Error Retrieving Explanation</h5>
+                            <p>${data.message || 'The server encountered an error generating the explanation.'}</p>
                         </div>
                         <p>Basic analysis based on IOC patterns:</p>
                         <ul>
                             <li>IOC Type: ${detectIocType(iocValue)}</li>
                             <li>Risk Category: Medium (assumed)</li>
-                            <li>Score: N/A</li>
+                            <li>Score: Unknown</li>
                         </ul>
                     `;
+                    return;
+                }
+                
+                // Create score chart with actual data or fallback to a default
+                createScoreChart(data.ioc?.score || 44);
+                
+                // Check for missing explanation
+                if (!data.explanation) {
+                    featureImportanceContainer.innerHTML = `
+                        <div class="alert alert-warning">
+                            ${data.note || 'Limited explanation available for this IOC'}
+                        </div>
+                        <p>Basic analysis based on IOC patterns:</p>
+                        <ul>
+                            <li>IOC Type: ${data.ioc?.ioc_type || detectIocType(iocValue)}</li>
+                            <li>Risk Category: ${data.ioc?.category || 'Unknown'}</li>
+                            <li>Score: ${data.ioc?.score || 'N/A'}</li>
+                        </ul>
+                    `;
+                    return;
+                }
+                
+                // Render the explanation visualization if available
+                let explanationHtml = '';
+                
+                if (data.visualization) {
+                    explanationHtml += `
+                        <div class="mb-4">
+                            <h5>Feature Importance</h5>
+                            <img src="${data.visualization}" class="img-fluid border rounded" alt="Feature Importance" 
+                                 onerror="this.onerror=null; this.src='/static/img/fallback_chart.png'; this.alt='Visualization not available';">
+                        </div>
+                    `;
+                }
+                
+                // Render the explanation details
+                explanationHtml += `
+                    <div class="mb-4">
+                        <h5>Feature Breakdown</h5>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Feature</th>
+                                    <th>Importance</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.explanation.forEach(feature => {
+                    const valueDisplay = feature.value !== undefined ? feature.value : 'N/A';
+                    explanationHtml += `
+                        <tr>
+                            <td>${feature.feature}</td>
+                            <td>${feature.importance.toFixed(3)}</td>
+                            <td>${valueDisplay}</td>
+                        </tr>
+                    `;
                 });
-        } catch (e) {
-            console.error('Exception in explain function:', e);
-            const featureImportanceContainer = document.getElementById('feature-importance');
-            const explanationIocValue = document.getElementById('explanation-ioc-value');
-            
-            // Create generic chart even on error
-            createGenericScoreChart();
-            
-            explanationIocValue.textContent = truncateIocValue(iocValue);
-            featureImportanceContainer.innerHTML = `
-                <div class="alert alert-danger">
-                    <h5>Error</h5>
-                    <p>An unexpected error occurred while processing this IOC.</p>
-                </div>
-            `;
-        }
+                
+                explanationHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                // Add the explanation summary
+                explanationHtml += `
+                    <div class="alert alert-info">
+                        <h5>Analysis Summary</h5>
+                        <p>This IOC received a score of <strong>${data.ioc?.score || 'Unknown'}</strong>.</p>
+                        <p>${data.note || 'The score is based on the features shown above.'}</p>
+                    </div>
+                `;
+                
+                featureImportanceContainer.innerHTML = explanationHtml;
+            })
+            .catch(error => {
+                console.error('Error getting explanation:', error);
+                showExplanationFallback(iocValue, "We encountered an unexpected error processing this IOC.");
+            });
     }
-    
+
+    // Helper function to detect suspicious characters that might cause errors
+    function containsSuspiciousCharacters(value) {
+        if (!value) return false;
+        
+        // Count percent signs (common in URL encoding)
+        const percentCount = (value.match(/%/g) || []).length;
+        if (percentCount > 3) return true;
+        
+        // Check for non-printable ASCII characters
+        if (/[\x00-\x1F\x7F]/.test(value)) return true;
+        
+        // Check for very long values which are often problematic
+        if (value.length > 255) return true;
+        
+        // Check for extremely unusual character combinations
+        const specialCharRatio = (value.match(/[^a-zA-Z0-9.\-_]/g) || []).length / value.length;
+        if (specialCharRatio > 0.3) return true;  // More than 30% special characters
+        
+        return false;
+    }
+
+    // Consolidated function to show a fallback explanation
+    function showExplanationFallback(iocValue, message) {
+        const explanationContainer = document.getElementById('explanation-container');
+        const noIocSelected = document.getElementById('no-ioc-selected');
+        const explanationIocValue = document.getElementById('explanation-ioc-value');
+        const featureImportanceContainer = document.getElementById('feature-importance');
+        
+        explanationContainer.classList.remove('d-none');
+        noIocSelected.classList.add('d-none');
+        explanationIocValue.textContent = truncateIocValue(iocValue);
+        
+        // Create generic chart
+        createGenericScoreChart();
+        
+        featureImportanceContainer.innerHTML = `
+            <div class="alert alert-warning">
+                <h5>Limited Analysis Available</h5>
+                <p>${message}</p>
+            </div>
+            <p>Basic analysis based on IOC patterns:</p>
+            <ul>
+                <li>IOC Type: ${detectIocType(iocValue)}</li>
+                <li>Risk Category: Medium (assumed)</li>
+                <li>Score: N/A</li>
+            </ul>
+        `;
+    }
+
     // Helper function to truncate IOC values for display
     function truncateIocValue(iocValue) {
         if (!iocValue) return "Unknown";
@@ -1243,7 +1329,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // For other long values, show the beginning and end
         return iocValue.substring(0, 20) + '...' + iocValue.substring(iocValue.length - 10);
     }
-
+    
     // Helper function to detect IOC type
     function detectIocType(value) {
         if (!value) return "unknown";
@@ -1255,7 +1341,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         return "other";
     }
-
+    
     // Create a score chart with actual data
     function createScoreChart(score) {
         const scoreChartCanvas = document.getElementById('score-chart');
@@ -1304,7 +1390,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
-
+    
     // Create a generic score chart
     function createGenericScoreChart() {
         const scoreChartCanvas = document.getElementById('score-chart');
@@ -1336,183 +1422,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
-    }
-    
-    // Create a generic explanation HTML
-    function createGenericExplanation(iocValue) {
-        // Determine likely IOC type based on value
-        let iocType = "unknown";
-        if (iocValue.length > 32 && /^[a-f0-9]+$/i.test(iocValue.replace(/[^a-f0-9]/gi, ''))) {
-            iocType = "hash";
-        } else if (iocValue.includes(".") && !iocValue.includes(" ")) {
-            if (/^\d+\.\d+\.\d+\.\d+$/.test(iocValue)) {
-                iocType = "ip";
-            } else {
-                iocType = "domain";
-            }
-        } else if (iocValue.includes("?") || iocValue.includes("://") || iocValue.includes("/")) {
-            iocType = "url";
-        }
-        
-        return `
-            <div class="alert alert-info mb-3">
-                This is a generic explanation based on typical patterns for ${iocType} values.
-                The actual ML model features couldn't be calculated.
-            </div>
-            
-            <ul class="list-group">
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>IOC Type (${iocType})</span>
-                        <span>0.3500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 35%" aria-valuenow="35" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>Source Feed</span>
-                        <span>0.2500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 25%" aria-valuenow="25" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>Length (${iocValue.length} characters)</span>
-                        <span>0.1500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 15%" aria-valuenow="15" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>Special Characters</span>
-                        <span>0.1000</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 10%" aria-valuenow="10" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>Pattern Recognition</span>
-                        <span>0.0500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 5%" aria-valuenow="5" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-            </ul>
-        `;
-    }
-
-    // Display a generated explanation when we can't call the API with the corrupted value
-    function showGeneratedExplanation(iocValue, iocType, score) {
-        const explanationContainer = document.getElementById('explanation-container');
-        const noIocSelected = document.getElementById('no-ioc-selected');
-        const explanationIocValue = document.getElementById('explanation-ioc-value');
-        
-        // Show loading state
-        explanationContainer.classList.remove('d-none');
-        noIocSelected.classList.add('d-none');
-        explanationIocValue.textContent = `Analysis for ${iocValue}`;
-        
-        // Create generic explanation content
-        const featureImportanceContainer = document.getElementById('feature-importance');
-        let html = `
-            <div class="alert alert-info">
-                <strong>Note:</strong> This is a generic explanation for this IOC type. 
-                The actual model features couldn't be calculated due to data encoding issues.
-            </div>
-            
-            <ul class="list-group">
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>IOC Type (${iocType})</span>
-                        <span>0.3500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 35%" aria-valuenow="35" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>Source Feed</span>
-                        <span>0.2500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 25%" aria-valuenow="25" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-                <li class="list-group-item">
-                    <div class="d-flex justify-content-between">
-                        <span>Score (${score})</span>
-                        <span>0.1500</span>
-                    </div>
-                    <div class="progress mt-1">
-                        <div class="progress-bar bg-success" role="progressbar" 
-                             style="width: 15%" aria-valuenow="15" 
-                             aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </li>
-            </ul>
-        `;
-        
-        featureImportanceContainer.innerHTML = html;
-        
-        // Create score chart
-        const scoreChartCanvas = document.getElementById('score-chart');
-        if (scoreChartCanvas) {
-            const ctx = scoreChartCanvas.getContext('2d');
-            
-            // Clear any existing chart
-            if (window.scoreChart) {
-                window.scoreChart.destroy();
-            }
-            
-            window.scoreChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['ML Score', 'Rule Score'],
-                    datasets: [{
-                        data: [30, 70], // Example values
-                        backgroundColor: ['#0d6efd', '#20c997']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Scroll to the insights section
-        document.getElementById('model-insights').scrollIntoView({
-            behavior: 'smooth'
-        });
     }
 
     // Helper Functions
