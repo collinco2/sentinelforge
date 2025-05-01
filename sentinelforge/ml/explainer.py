@@ -10,7 +10,14 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from sentinelforge.ml.scoring_model import _model, EXPECTED_FEATURES
+# Try to import _model and EXPECTED_FEATURES with error handling
+try:
+    from sentinelforge.ml.scoring_model import _model, EXPECTED_FEATURES
+except (ImportError, FileNotFoundError) as e:
+    logging.warning(f"Failed to import from scoring_model: {e}")
+    # Create mock values for testing
+    _model = None
+    EXPECTED_FEATURES = []
 
 logger = logging.getLogger(__name__)
 
