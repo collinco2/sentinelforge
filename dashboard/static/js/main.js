@@ -41,6 +41,55 @@ document.addEventListener('DOMContentLoaded', function() {
     const itemsPerPage = 10;
     let totalPages = 1;
     
+    // API request caching system to prevent redundant calls
+    const API_CACHE = {
+        _data: {},
+        _timestamps: {},
+        _pendingRequests: {},
+        EXPIRY_TIME: 5000, // Cache valid for 5 seconds
+        
+        get: function(key) {
+            const currentTime = Date.now();
+            // Return cached data if it exists and hasn't expired
+            if (this._data[key] && (currentTime - this._timestamps[key] < this.EXPIRY_TIME)) {
+                return Promise.resolve(this._data[key]);
+            }
+            
+            // Return pending request if one is in progress
+            if (this._pendingRequests[key]) {
+                return this._pendingRequests[key];
+            }
+            
+            // No cached data or it's expired
+            return null;
+        },
+        
+        set: function(key, dataPromise) {
+            // Store the pending request
+            this._pendingRequests[key] = dataPromise;
+            
+            // When request completes, cache the result and remove from pending
+            dataPromise.then(data => {
+                this._data[key] = data;
+                this._timestamps[key] = Date.now();
+                delete this._pendingRequests[key];
+                return data;
+            }).catch(error => {
+                // On error, remove from pending
+                delete this._pendingRequests[key];
+                throw error;
+            });
+            
+            return dataPromise;
+        },
+        
+        clear: function() {
+            this._data = {};
+            this._timestamps = {};
+            // Don't clear pending requests to avoid hanging promises
+        }
+    };
+    
     // SIMPLER LOADING INDICATOR IMPLEMENTATION
     // Create the loading indicator once at startup
     const loadingOverlay = document.createElement('div');
@@ -75,6 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             currentPage = 1;
             loadingOverlay.style.display = 'flex';
+            // Clear the cache when filters change
+            API_CACHE.clear();
             loadIocs();
         });
     }
@@ -96,6 +147,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Reload with reset filters
             currentPage = 1;
             loadingOverlay.style.display = 'flex';
+            // Clear the cache when filters reset
+            API_CACHE.clear();
             loadIocs();
         });
     }
@@ -107,6 +160,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Trigger search if there was a value before clearing
                 currentPage = 1;
                 loadingOverlay.style.display = 'flex';
+                // Clear cache on search change
+                API_CACHE.clear();
                 loadIocs();
             }
         });
@@ -371,16 +426,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load statistics
     function loadStats() {
-        statsContainer.innerHTML = `
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading statistics...</span>
+        // Display loading state if no cached data
+        if (!API_CACHE.get('stats')) {
+            statsContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading statistics...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading statistics...</p>
                 </div>
-                <p class="mt-2 text-muted">Loading statistics...</p>
-            </div>
-        `;
+            `;
+        }
         
-        fetch('/api/stats')
+        // Check cache first
+        const cachedData = API_CACHE.get('stats');
+        if (cachedData) {
+            cachedData.then(data => {
+                displayStats(data);
+                populateSourceFeedOptions(data);
+                hideLoadingWhenReady();
+            }).catch(error => {
+                console.error('Error loading stats from cache:', error);
+                // Don't display error, just continue with fetch
+            });
+            return;
+        }
+        
+        // Fetch fresh data
+        const dataPromise = fetch('/api/stats')
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load stats: ${response.status} ${response.statusText}`);
@@ -389,10 +462,9 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(data => {
                 displayStats(data);
-                // Populate source feed dropdown with data from stats
                 populateSourceFeedOptions(data);
-                // Hide loading indicator once all data is loaded
                 hideLoadingWhenReady();
+                return data;  // Return data for caching
             })
             .catch(error => {
                 console.error('Error loading stats:', error);
@@ -405,9 +477,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                     </div>
                 `;
-                // Hide loading on error too
                 hideLoadingWhenReady();
+                throw error;  // Rethrow to prevent caching errors
             });
+            
+        // Store in cache
+        API_CACHE.set('stats', dataPromise);
     }
     
     // Populate source feed dropdown from stats data
@@ -517,35 +592,66 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchQuery = searchQueryInput ? searchQueryInput.value : '';
         const offset = (currentPage - 1) * itemsPerPage;
         
-        // Show loading state
-        iocTableBody.innerHTML = `
-            <tr>
-                <td colspan="5" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading IOCs...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Loading IOC data...</p>
-                </td>
-            </tr>
-        `;
-        
-        // Build query params
-        const params = new URLSearchParams({
+        // Build query string for cache key
+        const queryParams = new URLSearchParams({
             limit: itemsPerPage,
             offset: offset
         });
         
-        if (iocType) params.append('type', iocType);
-        if (minScore) params.append('min_score', minScore);
-        if (maxScore !== '100') params.append('max_score', maxScore);
-        if (sourceFeed) params.append('source_feed', sourceFeed);
-        if (category) params.append('category', category);
-        if (dateFrom) params.append('date_from', dateFrom);
-        if (dateTo) params.append('date_to', dateTo);
-        if (searchQuery) params.append('search_query', searchQuery);
+        if (iocType) queryParams.append('type', iocType);
+        if (minScore) queryParams.append('min_score', minScore);
+        if (maxScore !== '100') queryParams.append('max_score', maxScore);
+        if (sourceFeed) queryParams.append('source_feed', sourceFeed);
+        if (category) queryParams.append('category', category);
+        if (dateFrom) queryParams.append('date_from', dateFrom);
+        if (dateTo) queryParams.append('date_to', dateTo);
+        if (searchQuery) queryParams.append('search_query', searchQuery);
         
-        // Fetch IOCs
-        fetch(`/api/iocs?${params.toString()}`)
+        const cacheKey = `iocs-${queryParams.toString()}`;
+        
+        // Show loading state if no cached data
+        if (!API_CACHE.get(cacheKey)) {
+            iocTableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading IOCs...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading IOC data...</p>
+                    </td>
+                </tr>
+            `;
+        }
+        
+        // Check cache first
+        const cachedData = API_CACHE.get(cacheKey);
+        if (cachedData) {
+            cachedData.then(data => {
+                if (data.iocs && Array.isArray(data.iocs)) {
+                    displayIocs(data.iocs);
+                    
+                    if (data.pagination) {
+                        totalPages = data.pagination.total_pages || 1;
+                        currentPage = data.pagination.current_page || 1;
+                    }
+                    
+                    updatePagination(data.pagination);
+                } else {
+                    // Backward compatibility with old format
+                    displayIocs(data);
+                    updatePagination();
+                }
+                
+                hideLoadingWhenReady();
+            }).catch(error => {
+                console.error('Error loading IOCs from cache:', error);
+                // Don't display error, just continue with fetch
+            });
+            return;
+        }
+        
+        // Fetch fresh data
+        const dataPromise = fetch(`/api/iocs?${queryParams.toString()}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load IOCs: ${response.status} ${response.statusText}`);
@@ -572,12 +678,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Hide loading when ready
                 hideLoadingWhenReady();
+                return data;  // Return data for caching
             })
             .catch(error => {
                 console.error('Error loading IOCs:', error);
                 iocTableBody.innerHTML = `
                     <tr>
-                        <td colspan="5" class="text-center">
+                        <td colspan="6" class="text-center">
                             <div class="alert alert-danger">
                                 <i class="bi bi-exclamation-triangle-fill me-2"></i>
                                 Error: ${error.message}
@@ -590,7 +697,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
                 // Hide loading on error too
                 hideLoadingWhenReady();
+                throw error;  // Rethrow to prevent caching errors
             });
+            
+        // Store in cache
+        API_CACHE.set(cacheKey, dataPromise);
     }
 
     // Display IOCs in the table
@@ -1154,113 +1265,121 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const encodedIoc = encodeURIComponent(sanitizedValue);
         
+        // Build cache key
+        const cacheKey = `explain-${encodedIoc}`;
+        
+        // Check cache first
+        const cachedData = API_CACHE.get(cacheKey);
+        if (cachedData) {
+            cachedData.then(data => {
+                renderExplanation(data, iocValue);
+            }).catch(error => {
+                console.error('Error loading explanation from cache:', error);
+                // Continue with fetch on cache error
+            });
+            return;
+        }
+        
         // Use our enhanced fetching function
-        fetchWithErrorHandling(`/api/explain/${encodedIoc}`)
+        const dataPromise = fetchWithErrorHandling(`/api/explain/${encodedIoc}`)
             .then(data => {
-                // Handle the explanation data
-                const featureImportanceContainer = document.getElementById('feature-importance');
-                const explanationIocValue = document.getElementById('explanation-ioc-value');
-                
-                // Update the display with the original IOC value
-                explanationIocValue.textContent = truncateIocValue(iocValue);
-                
-                // Check for API errors
-                if (data.error) {
-                    createGenericScoreChart();
-                    featureImportanceContainer.innerHTML = `
-                        <div class="alert alert-warning">
-                            <h5>Error Retrieving Explanation</h5>
-                            <p>${data.message || 'The server encountered an error generating the explanation.'}</p>
-                        </div>
-                        <p>Basic analysis based on IOC patterns:</p>
-                        <ul>
-                            <li>IOC Type: ${detectIocType(iocValue)}</li>
-                            <li>Risk Category: Medium (assumed)</li>
-                            <li>Score: Unknown</li>
-                        </ul>
-                    `;
-                    return;
-                }
-                
-                // Create score chart with actual data or fallback to a default
-                createScoreChart(data.ioc?.score || 44);
-                
-                // Check for missing explanation
-                if (!data.explanation) {
-                    featureImportanceContainer.innerHTML = `
-                        <div class="alert alert-warning">
-                            ${data.note || 'Limited explanation available for this IOC'}
-                        </div>
-                        <p>Basic analysis based on IOC patterns:</p>
-                        <ul>
-                            <li>IOC Type: ${data.ioc?.ioc_type || detectIocType(iocValue)}</li>
-                            <li>Risk Category: ${data.ioc?.category || 'Unknown'}</li>
-                            <li>Score: ${data.ioc?.score || 'N/A'}</li>
-                        </ul>
-                    `;
-                    return;
-                }
-                
-                // Render the explanation visualization if available
-                let explanationHtml = '';
-                
-                if (data.visualization) {
-                    explanationHtml += `
-                        <div class="mb-4">
-                            <h5>Feature Importance</h5>
-                            <img src="${data.visualization}" class="img-fluid border rounded" alt="Feature Importance" 
-                                 onerror="this.onerror=null; this.src='/static/img/fallback_chart.png'; this.alt='Visualization not available';">
-                        </div>
-                    `;
-                }
-                
-                // Render the explanation details
-                explanationHtml += `
-                    <div class="mb-4">
-                        <h5>Feature Breakdown</h5>
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Feature</th>
-                                    <th>Importance</th>
-                                    <th>Value</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                
-                data.explanation.forEach(feature => {
-                    const valueDisplay = feature.value !== undefined ? feature.value : 'N/A';
-                    explanationHtml += `
-                        <tr>
-                            <td>${feature.feature}</td>
-                            <td>${feature.importance.toFixed(3)}</td>
-                            <td>${valueDisplay}</td>
-                        </tr>
-                    `;
-                });
-                
-                explanationHtml += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
-                // Add the explanation summary
-                explanationHtml += `
-                    <div class="alert alert-info">
-                        <h5>Analysis Summary</h5>
-                        <p>This IOC received a score of <strong>${data.ioc?.score || 'Unknown'}</strong>.</p>
-                        <p>${data.note || 'The score is based on the features shown above.'}</p>
-                    </div>
-                `;
-                
-                featureImportanceContainer.innerHTML = explanationHtml;
+                renderExplanation(data, iocValue);
+                return data; // Return for caching
             })
             .catch(error => {
                 console.error('Error getting explanation:', error);
                 showExplanationFallback(iocValue, "We encountered an unexpected error processing this IOC.");
+                throw error; // Prevent caching errors
             });
+            
+        // Store in cache
+        API_CACHE.set(cacheKey, dataPromise);
+    }
+    
+    // Render the explanation with client-side charts
+    function renderExplanation(data, iocValue) {
+        // Handle the explanation data
+        const featureImportanceContainer = document.getElementById('feature-importance');
+        const explanationIocValue = document.getElementById('explanation-ioc-value');
+        
+        // Update the display with the original IOC value
+        explanationIocValue.textContent = truncateIocValue(iocValue);
+        
+        // Check for API errors
+        if (data.error) {
+            createGenericScoreChart();
+            featureImportanceContainer.innerHTML = `
+                <div class="alert alert-warning">
+                    <h5>Error Retrieving Explanation</h5>
+                    <p>${data.message || 'The server encountered an error generating the explanation.'}</p>
+                </div>
+                <p>Basic analysis based on IOC patterns:</p>
+                <ul>
+                    <li>IOC Type: ${detectIocType(iocValue)}</li>
+                    <li>Risk Category: Medium (assumed)</li>
+                    <li>Score: Unknown</li>
+                </ul>
+            `;
+            return;
+        }
+        
+        // Create score chart with actual data or fallback to a default
+        createScoreChart(data.ioc?.score || 44);
+        
+        // Check for missing explanation
+        if (!data.explanation) {
+            featureImportanceContainer.innerHTML = `
+                <div class="alert alert-warning">
+                    ${data.note || 'Limited explanation available for this IOC'}
+                </div>
+                <p>Basic analysis based on IOC patterns:</p>
+                <ul>
+                    <li>IOC Type: ${data.ioc?.ioc_type || detectIocType(iocValue)}</li>
+                    <li>Risk Category: ${data.ioc?.category || 'Unknown'}</li>
+                    <li>Score: ${data.ioc?.score || 'N/A'}</li>
+                </ul>
+            `;
+            return;
+        }
+        
+        // Render the feature importance chart client-side
+        featureImportanceContainer.innerHTML = `
+            <div class="mb-4" id="feature-chart-container">
+                <h5>Feature Importance</h5>
+                <!-- Chart will be rendered here -->
+            </div>
+            
+            <div class="mb-4">
+                <h5>Feature Breakdown</h5>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Importance</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.explanation.map(feature => `
+                            <tr>
+                                <td>${feature.feature}</td>
+                                <td>${feature.importance.toFixed(3)}</td>
+                                <td>${feature.value !== undefined ? feature.value : 'N/A'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="alert alert-info">
+                <h5>Analysis Summary</h5>
+                <p>This IOC received a score of <strong>${data.ioc?.score || 'Unknown'}</strong>.</p>
+                <p>${data.note || 'The score is based on the features shown above.'}</p>
+            </div>
+        `;
+        
+        // Create the chart in the container
+        createFeatureImportanceChart(data.explanation, 'feature-chart-container');
     }
 
     // Helper function to detect suspicious characters that might cause errors
@@ -1389,6 +1508,74 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+    }
+    
+    // Create a client-side feature importance visualization
+    function createFeatureImportanceChart(features, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        // Create canvas element
+        const canvas = document.createElement('canvas');
+        canvas.id = `feature-chart-${Math.random().toString(36).substring(2, 9)}`;
+        container.appendChild(canvas);
+        
+        // Get feature data
+        const featureNames = features.map(f => f.feature);
+        const importanceValues = features.map(f => f.importance);
+        const colors = importanceValues.map(val => val >= 0 ? '#28a745' : '#dc3545');
+        
+        // Create chart
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: featureNames,
+                datasets: [{
+                    label: 'Feature Importance',
+                    data: importanceValues.map(Math.abs), // Use absolute values for bar length
+                    backgroundColor: colors,
+                    borderColor: colors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',  // Horizontal bar chart
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                // Show original value (not absolute)
+                                const originalValue = importanceValues[context.dataIndex];
+                                return `Importance: ${originalValue.toFixed(3)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Impact on Score'
+                        },
+                        ticks: {
+                            beginAtZero: true
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Feature'
+                        }
+                    }
+                }
+            }
+        });
+        
+        return canvas;
     }
     
     // Create a generic score chart

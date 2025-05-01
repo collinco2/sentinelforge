@@ -13,6 +13,8 @@ import time
 import json
 import re
 import csv
+import atexit
+import secrets
 from io import StringIO
 from flask import (
     Flask,
@@ -30,6 +32,7 @@ from functools import wraps
 from collections import defaultdict
 import urllib.parse
 import pandas as pd
+from multiprocessing import resource_tracker
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import seaborn as sns
@@ -37,13 +40,66 @@ import seaborn as sns
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
 
+
+# Prevent resource leaks by patching the resource tracker
+# This fixes the "leaked semaphore objects" warnings
+def _cleanup_resources():
+    """Clean up any leaked semaphores during shutdown"""
+    try:
+        if hasattr(resource_tracker, "_resource_tracker"):
+            for resource in list(resource_tracker._resource_tracker._resources.keys()):
+                if resource.startswith("/loky-"):
+                    # Remove loky semaphores that cause leaks
+                    resource_tracker._resource_tracker._resources.pop(resource, None)
+    except Exception as e:
+        logger.error(f"Error cleaning up resources: {e}")
+
+
+# Register cleanup function to run at exit
+atexit.register(_cleanup_resources)
+
 # Create Flask app
 app = Flask(__name__)
+
+# Security settings
+app.config["SECRET_KEY"] = secrets.token_hex(32)  # For CSRF protection
+
+
+# Add security headers middleware
+class SecurityHeadersMiddleware:
+    """Add security headers to all responses."""
+
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        def security_headers_start_response(status, headers, exc_info=None):
+            # Add security headers
+            security_headers = [
+                ("X-Content-Type-Options", "nosniff"),
+                ("X-Frame-Options", "SAMEORIGIN"),
+                ("X-XSS-Protection", "1; mode=block"),
+                (
+                    "Content-Security-Policy",
+                    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+                ),
+                ("Referrer-Policy", "strict-origin-when-cross-origin"),
+            ]
+
+            # Add headers to the response
+            headers.extend(security_headers)
+
+            return start_response(status, headers, exc_info)
+
+        return self.app(environ, security_headers_start_response)
+
+
+# Apply security headers middleware
+app.wsgi_app = SecurityHeadersMiddleware(app.wsgi_app)
 
 # Constants
 # Use absolute path to the database file in the parent directory
@@ -55,10 +111,104 @@ VISUALIZATIONS_DIR = Path(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "static", "visualizations"))
 )
 
-# Rate limiting settings
-RATE_LIMIT = 30  # requests per minute
-RATE_LIMIT_WINDOW = 60  # seconds
-client_requests = defaultdict(list)
+
+# Rate limiting settings with more granular control
+class RateLimiter:
+    """
+    Enhanced rate limiter with different limits for different endpoints.
+    Tracks requests by IP address and endpoint type.
+    """
+
+    def __init__(self):
+        # Default rate limits
+        self.default_limit = 30  # requests per minute
+        self.batch_limit = 5  # batch operations per minute
+        self.window = 60  # seconds
+
+        # Track requests: {(ip, endpoint_type): [timestamps]}
+        self.requests = defaultdict(list)
+
+        # Last cleanup time
+        self.last_cleanup = time.time()
+
+    def cleanup(self):
+        """Remove expired timestamps to prevent memory growth"""
+        # Only clean up every 5 minutes to reduce overhead
+        current_time = time.time()
+        if current_time - self.last_cleanup < 300:  # 5 minutes in seconds
+            return
+
+        # Remove old timestamps
+        cutoff = current_time - self.window
+        for key in list(self.requests.keys()):
+            self.requests[key] = [t for t in self.requests[key] if t >= cutoff]
+            # Remove empty lists to save memory
+            if not self.requests[key]:
+                del self.requests[key]
+
+        self.last_cleanup = current_time
+
+    def is_rate_limited(self, endpoint_type="default"):
+        """Check if the current request exceeds rate limits"""
+        client_ip = request.remote_addr
+        request_time = time.time()
+        key = (client_ip, endpoint_type)
+
+        # Periodic cleanup
+        self.cleanup()
+
+        # Remove old requests outside the window
+        cutoff = request_time - self.window
+        self.requests[key] = [t for t in self.requests[key] if t >= cutoff]
+
+        # Get appropriate limit based on endpoint type
+        limit = self.batch_limit if endpoint_type == "batch" else self.default_limit
+
+        # Check if limit exceeded
+        if len(self.requests[key]) >= limit:
+            logger.warning(
+                f"Rate limit exceeded for IP: {client_ip}, endpoint: {endpoint_type}"
+            )
+            return True
+
+        # Record this request
+        self.requests[key].append(request_time)
+        return False
+
+
+# Create rate limiter instance
+rate_limiter = RateLimiter()
+
+
+# Define rate limiting decorator
+def rate_limit(endpoint_type="default"):
+    """Rate limiting decorator for API endpoints with endpoint-specific limits."""
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if rate_limiter.is_rate_limited(endpoint_type):
+                return jsonify(
+                    {
+                        "error": "Rate limit exceeded",
+                        "message": "Please try again later.",
+                    }
+                ), 429
+
+            return f(*args, **kwargs)
+
+        return decorated_function
+
+    # Handle both @rate_limit and @rate_limit('type') syntax
+    if callable(endpoint_type):
+        # Called as @rate_limit without arguments
+        func = endpoint_type
+        endpoint_type = "default"
+        return decorator(func)
+    else:
+        # Called as @rate_limit('type')
+        return decorator
+
 
 # Validation constants
 MAX_IOC_LENGTH = 2048  # Maximum length of IOC value
@@ -316,39 +466,6 @@ class SQLiteValueColumnErrorHandler:
 
 # Apply the custom error handler
 app.wsgi_app = SQLiteValueColumnErrorHandler(app.wsgi_app)
-
-
-def rate_limit(f):
-    """Rate limiting decorator for API endpoints."""
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        client_ip = request.remote_addr
-        request_time = time.time()
-
-        # Remove old requests outside the window
-        client_requests[client_ip] = [
-            t
-            for t in client_requests[client_ip]
-            if request_time - t < RATE_LIMIT_WINDOW
-        ]
-
-        # Check if rate limit is exceeded
-        if len(client_requests[client_ip]) >= RATE_LIMIT:
-            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-            return jsonify(
-                {
-                    "error": "Rate limit exceeded",
-                    "message": f"Maximum {RATE_LIMIT} requests per {RATE_LIMIT_WINDOW} seconds",
-                }
-            ), 429
-
-        # Add current request time
-        client_requests[client_ip].append(request_time)
-
-        return f(*args, **kwargs)
-
-    return decorated_function
 
 
 def validate_ioc_value(ioc_value, ioc_type=None):
@@ -1067,155 +1184,6 @@ def get_ioc(ioc_value):
         )
 
 
-@app.route("/api/explain/<path:ioc_value>")
-@rate_limit
-def explain_ioc(ioc_value):
-    """Generate and return an explanation for a given IOC."""
-    conn = None  # Initialize outside try block for finally clause
-
-    # First layer: Handle problematic inputs immediately
-    try:
-        # Handle undefined directly
-        if ioc_value == "undefined":
-            return jsonify(
-                {
-                    "ioc": {
-                        "ioc_type": "unknown",
-                        "ioc_value": "[undefined]",
-                        "score": 44,
-                    },
-                    "explanation": generate_fallback_explanation("undefined")[
-                        "explanation"
-                    ],
-                    "visualization": None,
-                    "note": "Received 'undefined' as IOC value. Generated a generic explanation.",
-                }
-            )
-
-        # Decode URL-encoded parameter if needed
-        if "%" in ioc_value:
-            try:
-                ioc_value = urllib.parse.unquote(ioc_value)
-            except Exception as decode_err:
-                logger.warning(f"Error decoding URL parameter: {decode_err}")
-                # Continue with original value
-
-        # Check for binary data right away with more aggressive detection
-        binary_chars = False
-        try:
-            # Check using multiple methods
-            if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
-                binary_chars = True
-            if any(c in ioc_value for c in ["\x00", "\x0a", "\x0d", "\x1f", "\x7f"]):
-                binary_chars = True
-            # Look for suspicious percent encodings that often indicate binary data
-            for seq in ["%00", "%0A", "%0D", "%1F", "%7F", "%80", "%FF"]:
-                if seq in ioc_value:
-                    binary_chars = True
-                    break
-        except Exception:
-            # If we can't even check for binary chars, assume it's corrupted
-            binary_chars = True
-
-        if binary_chars:
-            return jsonify(
-                {
-                    "ioc": {
-                        "ioc_type": "unknown",
-                        "ioc_value": f"[binary-data-{abs(hash(ioc_value)) % 1000:03d}]",
-                        "score": 44,
-                    },
-                    "explanation": generate_fallback_explanation("binary_data")[
-                        "explanation"
-                    ],
-                    "visualization": None,
-                    "note": "Binary data detected in IOC value. Generated fallback explanation.",
-                }
-            )
-    except Exception as e:
-        logger.error(f"Error in express validation: {e}")
-        # Return a generic response instead of failing
-        return jsonify(generate_fallback_explanation("error"))
-
-    # Second layer: Apply stronger protection against "no such column: value" errors
-    try:
-        # Convert to string if not already
-        if not isinstance(ioc_value, str):
-            ioc_value = str(ioc_value)
-
-        # Create a more robust monkey patch for sqlite3.Row to prevent "no such column: value" errors
-        original_getitem = getattr(sqlite3.Row, "__getitem__", None)
-
-        def safe_getitem(self, key):
-            try:
-                # For dangerous column names like 'value', redirect to 'ioc_value'
-                if (
-                    key == "value"
-                    and hasattr(self, "keys")
-                    and "ioc_value" in self.keys()
-                ):
-                    return self["ioc_value"]
-                # Use the original method but catch any errors
-                if original_getitem:
-                    try:
-                        return original_getitem(self, key)
-                    except (IndexError, KeyError, sqlite3.OperationalError):
-                        # Return None for missing keys instead of raising an error
-                        return None
-                # Fallback for extreme cases
-                return None
-            except Exception:
-                # Absolute last resort - never throw an error from __getitem__
-                return None
-
-        # Apply the monkey patch if we have the original method
-        if original_getitem:
-            sqlite3.Row.__getitem__ = safe_getitem
-
-        # Get database connection with proper error handling
-        conn = get_db_connection()
-        if not conn:
-            logger.error("Database connection failed")
-            return jsonify(generate_fallback_explanation(ioc_value))
-
-        # The rest of the function remains the same...
-        # ... [existing code] ...
-
-    except sqlite3.OperationalError as e:
-        # Explicitly handle the "no such column: value" error
-        if "no such column: value" in str(e):
-            logger.error(f"Caught 'no such column: value' error in explain_ioc: {e}")
-            if conn:
-                conn.close()
-            return jsonify(generate_fallback_explanation(ioc_value))
-        # For other SQLite errors, also provide a graceful fallback
-        logger.error(f"SQLite error in explain_ioc: {e}")
-        if conn:
-            conn.close()
-        return jsonify(generate_fallback_explanation(ioc_value))
-
-    except Exception as e:
-        logger.error(f"Error in explain_ioc: {e}")
-        if conn:
-            conn.close()
-        return jsonify(generate_fallback_explanation(ioc_value))
-
-    finally:
-        # Ensure connection is closed and patch is restored
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-        # Restore original sqlite3.Row.__getitem__ if we patched it
-        if "original_getitem" in locals() and original_getitem:
-            try:
-                sqlite3.Row.__getitem__ = original_getitem
-            except Exception:
-                pass
-
-
 def generate_fallback_explanation(ioc_value):
     """Generate a generic fallback explanation when the real one can't be produced."""
     ioc_type = infer_ioc_type(ioc_value)
@@ -1322,6 +1290,281 @@ def generate_fallback_explanation(ioc_value):
         "visualization": visualization_path,
         "note": "This is a generic explanation as the specific IOC couldn't be analyzed precisely.",
     }
+
+
+@app.route("/api/explain/<path:ioc_value>")
+@rate_limit
+def explain_ioc(ioc_value):
+    """Generate and return an explanation for a given IOC."""
+    conn = None  # Initialize outside try block for finally clause
+
+    # First layer: Handle problematic inputs immediately
+    try:
+        # Handle undefined directly
+        if ioc_value == "undefined":
+            return jsonify(
+                {
+                    "ioc": {
+                        "ioc_type": "unknown",
+                        "ioc_value": "[undefined]",
+                        "score": 44,
+                    },
+                    "explanation": generate_fallback_explanation("undefined")[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Received 'undefined' as IOC value. Generated a generic explanation.",
+                }
+            )
+
+        # Decode URL-encoded parameter if needed
+        if "%" in ioc_value:
+            try:
+                ioc_value = urllib.parse.unquote(ioc_value)
+            except Exception as decode_err:
+                logger.warning(f"Error decoding URL parameter: {decode_err}")
+                # Continue with original value
+
+        # Check for binary data right away with more aggressive detection
+        binary_chars = False
+        try:
+            # Check using multiple methods
+            if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
+                binary_chars = True
+            if any(c in ioc_value for c in ["\x00", "\x0a", "\x0d", "\x1f", "\x7f"]):
+                binary_chars = True
+            # Look for suspicious percent encodings that often indicate binary data
+            for seq in ["%00", "%0A", "%0D", "%1F", "%7F", "%80", "%FF"]:
+                if seq in ioc_value:
+                    binary_chars = True
+                    break
+        except Exception:
+            # If we can't even check for binary chars, assume it's corrupted
+            binary_chars = True
+
+        if binary_chars:
+            return jsonify(
+                {
+                    "ioc": {
+                        "ioc_type": "unknown",
+                        "ioc_value": f"[binary-data-{abs(hash(ioc_value)) % 1000:03d}]",
+                        "score": 44,
+                    },
+                    "explanation": generate_fallback_explanation("binary_data")[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Binary data detected in IOC value. Generated fallback explanation.",
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error in express validation: {e}")
+        # Return a generic response instead of failing
+        return jsonify(generate_fallback_explanation("error"))
+
+    # Create a thread-local patched version of sqlite3.Row
+    class ThreadLocalSafeRow:
+        """A thread-local wrapper for sqlite3.Row to prevent column errors"""
+
+        def __init__(self, row):
+            self._row = row
+            self._dict = dict(row)  # Convert to regular dict immediately
+
+        def __getitem__(self, key):
+            # Handle 'value' specially to prevent the common SQL error
+            if key == "value":
+                return self._dict.get("ioc_value", None)
+            return self._dict.get(key, None)
+
+        def keys(self):
+            return self._dict.keys()
+
+        def get(self, key, default=None):
+            value = self.__getitem__(key)
+            return value if value is not None else default
+
+        def items(self):
+            return self._dict.items()
+
+    # Use the ThreadLocalSafeRow in place of sqlite3.Row for this request
+    original_row_factory = sqlite3.Row
+    sqlite3.Connection.row_factory = lambda _, row: ThreadLocalSafeRow(
+        original_row_factory(_, row)
+    )
+
+    try:
+        # Get database connection with proper error handling
+        conn = get_db_connection()
+        if not conn:
+            logger.error("Database connection failed")
+            return jsonify(generate_fallback_explanation(ioc_value))
+
+        # Log database schema for debugging
+        try:
+            cursor = conn.execute("PRAGMA table_info(iocs)")
+            columns = [row["name"] for row in cursor.fetchall()]
+            logger.debug(f"Database columns: {columns}")
+        except Exception as e:
+            logger.warning(f"Could not retrieve database schema: {e}")
+
+        # Try to find the IOC in the database with parameterized query
+        try:
+            # Clean the input for better matching
+            cleaned_ioc_value = clean_text(ioc_value)
+
+            # Create a "safe" query that won't use the 'value' column name
+            cursor = conn.execute(
+                "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
+            )
+
+            # Use our ThreadLocalSafeRow for the result
+            ioc_dict = dict(cursor.fetchone() or {})
+
+            # Generate a fallback if not found
+            if not ioc_dict:
+                logger.info(f"IOC not found: {ioc_value}")
+                return jsonify(generate_fallback_explanation(ioc_value))
+
+            # Generate visualization filename based on hash of IOC
+            viz_filename = (
+                f"ioc_explanation_{abs(hash(str(ioc_value))) % 10000:04d}.png"
+            )
+            viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
+
+            # Generate explanation using a separate function to isolate any potential errors
+            explanation = generate_safe_explanation(ioc_dict, ioc_value, viz_path)
+
+            # Success! Return the explanation
+            return jsonify(
+                {
+                    "ioc": ioc_dict,
+                    "explanation": explanation.get("explanation", []),
+                    "visualization": explanation.get("visualization"),
+                    "note": explanation.get("note"),
+                }
+            )
+
+        except Exception as query_err:
+            logger.error(f"Error processing IOC query: {query_err}")
+            # Use fallback
+            return jsonify(generate_fallback_explanation(ioc_value))
+
+    except Exception as e:
+        logger.error(f"Error in explain_ioc: {e}")
+        return jsonify(generate_fallback_explanation(ioc_value))
+
+    finally:
+        # Restore original row factory
+        sqlite3.Connection.row_factory = original_row_factory
+
+        # Close connection if it exists
+        if conn:
+            try:
+                conn.close()
+            except Exception as e:
+                logger.error(f"Error closing connection: {e}")
+
+
+def generate_safe_explanation(ioc_dict, ioc_value, viz_path):
+    """Safely generate an explanation without risking SQL column errors."""
+    try:
+        # Try to use existing explanation from DB if available
+        explanation_data = ioc_dict.get("explanation_data")
+        if explanation_data:
+            try:
+                if isinstance(explanation_data, str):
+                    explanation = json.loads(explanation_data)
+                    # Extract the explanation features (top features)
+                    explanation_features = []
+                    if "top_features" in explanation:
+                        explanation_features = [
+                            {"feature": feature, "importance": importance, "value": 1}
+                            for feature, importance in explanation.get(
+                                "top_features", []
+                            )
+                        ]
+                    elif "shap_values" in explanation:
+                        # Convert SHAP values to feature importance format
+                        shap_items = sorted(
+                            explanation["shap_values"].items(),
+                            key=lambda x: abs(x[1]),
+                            reverse=True,
+                        )[:10]
+                        explanation_features = [
+                            {"feature": feature, "importance": value, "value": 1}
+                            for feature, value in shap_items
+                        ]
+
+                    if explanation_features:
+                        # Create visualization if possible
+                        try:
+                            create_feature_importance_viz(
+                                explanation_features, viz_path
+                            )
+                            return {
+                                "explanation": explanation_features,
+                                "visualization": f"/visualizations/{os.path.basename(viz_path)}",
+                                "note": "Explanation generated from existing data",
+                            }
+                        except Exception as viz_err:
+                            logger.error(f"Error creating visualization: {viz_err}")
+
+            except Exception as parse_err:
+                logger.error(f"Error parsing explanation data: {parse_err}")
+
+        # Generate a fallback explanation if we couldn't use the existing one
+        fallback = generate_fallback_explanation(ioc_value)
+        return {
+            "explanation": fallback["explanation"],
+            "visualization": None,
+            "note": "Generated fallback explanation",
+        }
+
+    except Exception as e:
+        logger.error(f"Error in generate_safe_explanation: {e}")
+        return {
+            "explanation": generate_fallback_explanation(ioc_value)["explanation"],
+            "visualization": None,
+            "note": "Error generating explanation",
+        }
+
+
+def create_feature_importance_viz(features, output_path):
+    """Create a feature importance visualization from features."""
+    plt.figure(figsize=(10, 6))
+
+    # Extract feature names and importance values
+    feature_names = [item["feature"] for item in features]
+    importance_values = [item["importance"] for item in features]
+
+    # Create 'direction' for color coding
+    directions = ["positive" if imp >= 0 else "negative" for imp in importance_values]
+    direction_colors = {"positive": "green", "negative": "red"}
+
+    # Create the plot with proper color coding
+    bars = plt.barh(
+        feature_names,
+        [abs(val) for val in importance_values],
+        color=[direction_colors[d] for d in directions],
+    )
+
+    # Add labels
+    for bar, val in zip(bars, importance_values):
+        plt.text(
+            abs(val) + 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            f"{val:.3f}",
+            va="center",
+        )
+
+    plt.title("Feature Importance")
+    plt.xlabel("Impact on Score")
+    plt.tight_layout()
+
+    # Save visualization
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path)
+    plt.close()
 
 
 @app.route("/api/stats")
@@ -1462,7 +1705,7 @@ def get_stats():
 
 
 @app.route("/api/batch/recategorize", methods=["POST"])
-@rate_limit
+@rate_limit("batch")
 def batch_recategorize():
     """Recategorize multiple IOCs."""
     try:
@@ -1540,7 +1783,7 @@ def batch_recategorize():
 
 
 @app.route("/api/batch/delete", methods=["POST"])
-@rate_limit
+@rate_limit("batch")
 def batch_delete():
     """Delete multiple IOCs."""
     try:
@@ -1608,7 +1851,7 @@ def batch_delete():
 
 
 @app.route("/api/batch/export", methods=["POST"])
-@rate_limit
+@rate_limit("batch")
 def batch_export():
     """Export specifically selected IOCs."""
     try:
@@ -1743,9 +1986,41 @@ def get_visualization(filename):
         # Log that we created a fallback
         logger.info(f"Created fallback visualization: {viz_path}")
 
-    # The browser is requesting /visualizations/filename, but we're storing
-    # the files in static/visualizations, so extract just the filename
-    return send_from_directory(VISUALIZATIONS_DIR, filename)
+    # Add caching headers for visualizations
+    response = send_from_directory(VISUALIZATIONS_DIR, filename)
+
+    # Add cache control headers for better performance
+    # Cache for 1 hour, revalidate if needed
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["ETag"] = f'"{abs(hash(filename))}"'
+
+    return response
+
+
+# Add cache headers for static files
+@app.after_request
+def add_cache_headers(response):
+    """Add cache headers to static files."""
+    if request.path.startswith("/static/"):
+        # Cache static resources for 7 days
+        response.headers["Cache-Control"] = "public, max-age=604800"
+
+        # Generate an ETag based on the path
+        response.headers["ETag"] = f'"{abs(hash(request.path))}"'
+
+    # Add response time header for monitoring
+    response.headers["X-Response-Time"] = (
+        f"{time.time() - request.environ.get('REQUEST_START_TIME', time.time()):.3f}s"
+    )
+
+    return response
+
+
+# Add request start time to track response time
+@app.before_request
+def before_request():
+    """Record request start time for performance tracking."""
+    request.environ["REQUEST_START_TIME"] = time.time()
 
 
 @app.errorhandler(404)
