@@ -1064,7 +1064,7 @@ document.addEventListener('DOMContentLoaded', function() {
             createGenericScoreChart();
             return;
         }
-        
+
         const explanationContainer = document.getElementById('explanation-container');
         const noIocSelected = document.getElementById('no-ioc-selected');
         const explanationIocValue = document.getElementById('explanation-ioc-value');
@@ -1073,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Show loading state
         explanationContainer.classList.remove('d-none');
         noIocSelected.classList.add('d-none');
-        explanationIocValue.textContent = `Analyzing ${iocValue}...`;
+        explanationIocValue.textContent = `Analyzing ${truncateIocValue(iocValue)}...`;
         featureImportanceContainer.innerHTML = `
             <div class="text-center">
                 <div class="spinner-border text-primary" role="status">
@@ -1086,26 +1086,35 @@ document.addEventListener('DOMContentLoaded', function() {
         // Create score chart with loading state
         createScoreChart(50);
         
-        // URL encode the IOC value
-        const encodedIoc = encodeURIComponent(iocValue);
+        // Sanitize the IOC value for URL safety
+        const sanitizedIoc = encodeURIComponent(iocValue);
         
         // Fetch explanation - wrap in try/catch to ensure we never show raw errors
         try {
-            fetch(`/api/explain/${encodedIoc}`)
+            fetch(`/api/explain/${sanitizedIoc}`)
                 .then(response => {
-                    return response.json();
+                    // Always parse JSON, even for error responses
+                    return response.json().catch(err => {
+                        // If we can't parse JSON, create a synthetic error response
+                        return {
+                            error: "Failed to parse response",
+                            note: "The server returned an invalid response format."
+                        };
+                    });
                 })
                 .then(data => {
                     // Handle the explanation data
                     const featureImportanceContainer = document.getElementById('feature-importance');
                     const explanationIocValue = document.getElementById('explanation-ioc-value');
                     
-                    // Create score chart with actual data
-                    createScoreChart(data.ioc?.score || 44);
+                    // Create score chart with actual data or fallback
+                    const score = data.ioc?.score || 44;
+                    createScoreChart(score);
                     
-                    // Update the IOC value display
-                    explanationIocValue.textContent = iocValue;
+                    // Update the IOC value display - truncate if too long
+                    explanationIocValue.textContent = truncateIocValue(iocValue);
                     
+                    // Check for errors or missing explanation
                     if (data.error || !data.explanation) {
                         featureImportanceContainer.innerHTML = `
                             <div class="alert alert-warning">
@@ -1182,9 +1191,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     const explanationIocValue = document.getElementById('explanation-ioc-value');
                     
                     // Create generic chart even on error
-                    createScoreChart(44);
+                    createGenericScoreChart();
                     
-                    explanationIocValue.textContent = iocValue;
+                    explanationIocValue.textContent = truncateIocValue(iocValue);
                     featureImportanceContainer.innerHTML = `
                         <div class="alert alert-danger">
                             <h5>Error</h5>
@@ -1193,8 +1202,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <p>Basic analysis based on IOC patterns:</p>
                         <ul>
-                            <li>IOC Type: ${iocValue.includes(".") ? "domain" : 
-                                 iocValue.length > 32 ? "hash" : "unknown"}</li>
+                            <li>IOC Type: ${detectIocType(iocValue)}</li>
                             <li>Risk Category: Medium (assumed)</li>
                             <li>Score: N/A</li>
                         </ul>
@@ -1206,9 +1214,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const explanationIocValue = document.getElementById('explanation-ioc-value');
             
             // Create generic chart even on error
-            createScoreChart(44);
+            createGenericScoreChart();
             
-            explanationIocValue.textContent = iocValue;
+            explanationIocValue.textContent = truncateIocValue(iocValue);
             featureImportanceContainer.innerHTML = `
                 <div class="alert alert-danger">
                     <h5>Error</h5>
@@ -1218,6 +1226,36 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Helper function to truncate IOC values for display
+    function truncateIocValue(iocValue) {
+        if (!iocValue) return "Unknown";
+        
+        // If it's already shorter than the limit, return as is
+        if (iocValue.length <= 40) return iocValue;
+        
+        // If it's a URL, try to preserve the domain part
+        if (iocValue.includes('://')) {
+            const urlParts = iocValue.split('/');
+            const domain = urlParts[2] || '';
+            return urlParts[0] + '//' + domain + '/...';
+        }
+        
+        // For other long values, show the beginning and end
+        return iocValue.substring(0, 20) + '...' + iocValue.substring(iocValue.length - 10);
+    }
+
+    // Helper function to detect IOC type
+    function detectIocType(value) {
+        if (!value) return "unknown";
+        
+        if (value.includes("://")) return "url";
+        if (value.match(/^[a-f0-9]{32,64}$/i)) return "hash";
+        if (value.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) return "ip";
+        if (value.includes(".") && !value.includes(" ")) return "domain";
+        
+        return "other";
+    }
+
     // Create a score chart with actual data
     function createScoreChart(score) {
         const scoreChartCanvas = document.getElementById('score-chart');

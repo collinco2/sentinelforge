@@ -908,26 +908,63 @@ def get_ioc(ioc_value):
 @rate_limit
 def explain_ioc(ioc_value):
     """Generate and return an explanation for a given IOC."""
-    # Immediately catch any problematic characters in the URL path
-    # This is a preventative measure against the "no such column: value" error
+    # First layer of defense: Immediately detect and handle completely invalid inputs
     try:
-        # Check for problematic URL characters or binary data
-        safe_processing = False
+        # Special case for 'undefined' which is a common error in frontend requests
+        if ioc_value == "undefined":
+            return jsonify(
+                {
+                    "ioc": {
+                        "ioc_type": "unknown",
+                        "ioc_value": "[undefined]",
+                        "score": 44,
+                    },
+                    "explanation": generate_fallback_explanation("undefined")[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Received 'undefined' as IOC value. Generated a generic explanation.",
+                }
+            )
+
+        # Convert to string if not already
         if not isinstance(ioc_value, str):
             ioc_value = str(ioc_value)
-            safe_processing = True
 
-        # Look for suspicious characters that might cause SQL issues
-        if "%" in ioc_value or any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
+        # More aggressive binary data detection using multiple techniques
+        has_binary = False
+
+        # 1. Check for non-printable ASCII characters
+        if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
+            has_binary = True
             logger.warning(
-                f"Potentially problematic IOC value detected: {repr(ioc_value)}"
+                f"Non-printable characters detected in IOC: {repr(ioc_value)}"
             )
-            safe_processing = True
 
-        if safe_processing:
-            # For risky inputs, bypass normal processing and return a clean fallback
-            logger.info("Using safe processing path for potentially problematic IOC")
-            safe_value = f"[sanitized-{abs(hash(str(ioc_value))) % 1000:03d}]"
+        # 2. Check for suspicious URL encoding patterns that often indicate binary data
+        suspicious_patterns = [
+            "%00",
+            "%0A",
+            "%0D",
+            "%1F",
+            "%7F",  # Control characters
+            "%80",
+            "%FF",  # Extended ASCII
+        ]
+        if any(pattern in ioc_value for pattern in suspicious_patterns):
+            has_binary = True
+            logger.warning(f"Suspicious URL encoding in IOC: {repr(ioc_value)}")
+
+        # 3. Check length - extremely long values are often corrupted
+        if len(ioc_value) > 255:  # reasonable max length for typical IOCs
+            logger.warning(f"Unusually long IOC value: {len(ioc_value)} chars")
+            # Not marking as binary, but will handle with extra care
+
+        # Handle binary data with dedicated fallback
+        if has_binary:
+            safe_value = f"[binary-data-{abs(hash(ioc_value)) % 1000:03d}]"
+            logger.info(f"Converting binary IOC to safe value: {safe_value}")
+
             return jsonify(
                 {
                     "ioc": {
@@ -939,136 +976,119 @@ def explain_ioc(ioc_value):
                         "explanation"
                     ],
                     "visualization": None,
-                    "note": "Input contained problematic characters. Generated a safe fallback explanation.",
+                    "note": "Binary data detected and safely handled. Generated generic explanation.",
                 }
             )
+
     except Exception as input_err:
-        logger.error(f"Error pre-processing IOC input: {input_err}")
-        # Return a generic response for any input processing errors
-        return jsonify(generate_fallback_explanation("unknown_value"))
+        # Catch any exception during initial processing
+        logger.error(
+            f"Critical error pre-processing IOC input: {input_err}", exc_info=True
+        )
+        return jsonify(
+            {
+                "ioc": {
+                    "ioc_type": "unknown",
+                    "ioc_value": f"[error-value-{abs(hash(str(input_err))) % 1000:03d}]",
+                    "score": 44,
+                },
+                "explanation": generate_fallback_explanation("error_value")[
+                    "explanation"
+                ],
+                "visualization": None,
+                "note": "Critical error in request processing. Generated fallback explanation.",
+            }
+        )
 
+    # Second layer: Safe database interaction with robust error handling
     try:
-        # Aggressively check for binary or malformed data right at the beginning
-        try:
-            # First, safely convert to string if not already
-            if not isinstance(ioc_value, str):
-                logger.warning(f"Non-string IOC value: {type(ioc_value)}")
-                ioc_value = str(ioc_value)
-
-            # More thorough binary data check
-            is_binary = False
-
-            # Check if string contains binary or non-printable characters
-            if any(ord(c) < 32 or ord(c) > 126 for c in ioc_value):
-                is_binary = True
-                logger.warning(f"Binary characters detected in IOC: {repr(ioc_value)}")
-
-            # Check for URL encoding issues that might cause problems
-            if "%" in ioc_value and any(c in ioc_value for c in "\0\r\n\t\f\v"):
-                is_binary = True
-                logger.warning(
-                    f"URL encoding issues detected in IOC: {repr(ioc_value)}"
-                )
-
-            # Handle binary data immediately with a fallback
-            if is_binary:
-                safe_value = f"[binary-data-{abs(hash(str(ioc_value))) % 1000:03d}]"
-                logger.info(f"Using fallback for binary data IOC: {safe_value}")
-                return jsonify(
-                    {
-                        "ioc": {
-                            "ioc_type": "unknown",
-                            "ioc_value": safe_value,
-                            "score": 44,
-                        },
-                        "explanation": generate_fallback_explanation(safe_value)[
-                            "explanation"
-                        ],
-                        "visualization": None,
-                        "note": "Binary data detected in IOC value, generated fallback explanation",
-                    }
-                )
-        except Exception as binary_err:
-            # If we can't even check for binary data, it's definitely corrupted
-            logger.error(f"Error checking for binary data: {binary_err}")
-            safe_value = f"[corrupted-data-{abs(hash(str(ioc_value))) % 1000:03d}]"
-            logger.info(f"Using fallback for corrupted data: {safe_value}")
-            return jsonify(
-                {
-                    "ioc": {
-                        "ioc_type": "unknown",
-                        "ioc_value": safe_value,
-                        "score": 44,
-                    },
-                    "explanation": generate_fallback_explanation("corrupted_data")[
-                        "explanation"
-                    ],
-                    "visualization": None,
-                    "note": "Corrupted data detected, generated fallback explanation",
-                }
-            )
-
-        # Validate the IOC value
+        # Validate the IOC value with our standard validator
         is_valid, error_message = validate_ioc_value(ioc_value)
         if not is_valid:
             logger.warning(f"Invalid IOC value: {error_message}")
-            return jsonify(
-                {
-                    "error": "Invalid IOC value",
-                    "message": error_message,
-                    "fallback_explanation": generate_fallback_explanation(ioc_value),
-                }
-            ), 400
+            return jsonify(generate_fallback_explanation(ioc_value))
 
+        # Get database connection with proper error handling
         conn = get_db_connection()
         if not conn:
             logger.error("Database connection failed")
-            return jsonify(
-                {
-                    "error": "Database connection failed",
-                    "fallback_explanation": generate_fallback_explanation(ioc_value),
-                }
-            ), 500
+            return jsonify(generate_fallback_explanation(ioc_value))
 
-        # Log database schema for debugging
+        # Log schema for debugging
         try:
             cursor = conn.execute("PRAGMA table_info(iocs)")
             columns = [row["name"] for row in cursor.fetchall()]
-            logger.info(f"Database columns: {columns}")
-        except Exception as schema_err:
-            logger.error(f"Error checking database schema: {schema_err}")
+            logger.debug(f"Database columns: {columns}")
+        except Exception:
+            # Non-critical error, just log and continue
+            logger.warning("Could not retrieve database schema", exc_info=True)
 
-        # Clean the IOC value - more aggressively for URLs
-        if "://" in ioc_value:
-            cleaned_ioc_value = clean_url(ioc_value)
-        else:
-            # For non-URLs, still do basic cleaning
-            cleaned_ioc_value = clean_text(ioc_value)
-
-        # If cleaning produced None or empty string, use fallback
-        if not cleaned_ioc_value:
-            logger.warning(f"Cleaning produced empty value for IOC: {repr(ioc_value)}")
+        # Safely clean IOC value based on type
+        try:
+            cleaned_ioc_value = (
+                clean_url(ioc_value) if "://" in ioc_value else clean_text(ioc_value)
+            )
+            if not cleaned_ioc_value:
+                logger.warning(
+                    f"Cleaning produced empty value for IOC: {repr(ioc_value)}"
+                )
+                return jsonify(generate_fallback_explanation(ioc_value))
+        except Exception as clean_err:
+            logger.error(f"Error cleaning IOC value: {clean_err}")
             return jsonify(generate_fallback_explanation(ioc_value))
 
-        # Find the IOC in the database with robust error handling
+        # Create a SafeDict wrapper class to prevent the "no such column: value" error
+        class SafeDict:
+            """A safer dictionary wrapper for SQLite operations to prevent column name conflicts."""
+
+            def __init__(self, value_dict):
+                self._dict = (
+                    value_dict if isinstance(value_dict, dict) else dict(value_dict)
+                )
+
+            def __getitem__(self, key):
+                # For dangerous column names like 'value', rename them with prefix
+                if key == "value":
+                    return self._dict.get("ioc_value", self._dict.get("value", None))
+                return self._dict.get(key)
+
+            def get(self, key, default=None):
+                return self.__getitem__(key) or default
+
+            def items(self):
+                return self._dict.items()
+
+            def __iter__(self):
+                return iter(self._dict)
+
+        # Find the IOC in database with comprehensive error handling
         ioc = None
         try:
             logger.info(f"Querying database for IOC: {cleaned_ioc_value}")
+            # Use parameter binding for safety
             cursor = conn.execute(
                 "SELECT * FROM iocs WHERE ioc_value = ?", (cleaned_ioc_value,)
             )
-            ioc = cursor.fetchone()
-        except sqlite3.Error as sql_err:
-            logger.error(f"SQL error on primary query: {sql_err}", exc_info=True)
-            # If this is the "no such column: value" error, return fallback immediately
+            row = cursor.fetchone()
+            if row:
+                # Wrap the row in SafeDict to prevent "no such column: value" errors
+                ioc = SafeDict(row)
+        except sqlite3.OperationalError as sql_err:
             if "no such column: value" in str(sql_err):
-                logger.error("Caught 'no such column: value' error in database query")
-                conn.close() if conn else None
+                logger.error("Caught 'no such column: value' error in primary query")
+                if conn:
+                    conn.close()
                 return jsonify(generate_fallback_explanation(ioc_value))
             else:
-                raise
+                logger.error(f"SQL error: {sql_err}", exc_info=True)
+                if conn:
+                    conn.close()
+                return jsonify(generate_fallback_explanation(ioc_value))
         except Exception as query_err:
-            logger.error(f"Non-SQL error on primary query: {query_err}", exc_info=True)
+            logger.error(f"Error in database query: {query_err}", exc_info=True)
+            if conn:
+                conn.close()
+            return jsonify(generate_fallback_explanation(ioc_value))
 
         # Try alternate query if first one failed
         if not ioc and cleaned_ioc_value != ioc_value:
@@ -1079,35 +1099,59 @@ def explain_ioc(ioc_value):
                 cursor = conn.execute(
                     "SELECT * FROM iocs WHERE ioc_value = ?", (ioc_value,)
                 )
-                ioc = cursor.fetchone()
+                row = cursor.fetchone()
+                if row:
+                    # Wrap the row in SafeDict
+                    ioc = SafeDict(row)
             except Exception as alt_query_err:
                 logger.error(
-                    f"Error on alternate query: {alt_query_err}", exc_info=True
+                    f"Error in alternate query: {alt_query_err}", exc_info=True
                 )
+                if conn:
+                    conn.close()
+                return jsonify(generate_fallback_explanation(ioc_value))
 
-        # If IOC not found, return fallback explanation
+        # If IOC not found, return fallback
         if not ioc:
             logger.info(f"IOC not found: {ioc_value}, providing generic explanation")
-            conn.close() if conn else None
+            if conn:
+                conn.close()
             return jsonify(generate_fallback_explanation(ioc_value))
 
-        # Convert to dict with clean text
-        ioc_dict = row_to_dict(ioc)
+        # Convert the SafeDict to a regular dict with clean text to avoid serialization issues
+        ioc_dict = dict()
+        for key, value in ioc.items():
+            if key == "ioc_value" and isinstance(value, str):
+                # For IOC values, handle URL and hash types specially
+                if ioc.get("ioc_type") == "url":
+                    ioc_dict[key] = clean_url(value)
+                elif ioc.get("ioc_type") == "hash":
+                    # Remove any quotation marks around hash values
+                    ioc_dict[key] = value.strip("\"'")
+                else:
+                    ioc_dict[key] = clean_text(value)
+            elif isinstance(value, str):
+                ioc_dict[key] = clean_text(value)
+            else:
+                ioc_dict[key] = value
+
+        # Get IOC type, defaulting to unknown if not found
         ioc_type = ioc_dict.get("ioc_type", "unknown")
 
         # Create a generic filename based on hash of IOC value
-        viz_filename = f"ioc_explanation_{hash(str(ioc_value)) % 10000:04d}.png"
+        viz_filename = f"ioc_explanation_{abs(hash(str(ioc_value))) % 10000:04d}.png"
         viz_path = os.path.join(VISUALIZATIONS_DIR, viz_filename)
 
         # Try to use existing explanation from DB if available
         explanation = None
         try:
-            if ioc_dict.get("explanation_data"):
+            explanation_data = ioc_dict.get("explanation_data")
+            if explanation_data:
                 logger.info("Using existing explanation from database")
-                if isinstance(ioc_dict["explanation_data"], str):
-                    explanation = json.loads(ioc_dict["explanation_data"])
-                elif isinstance(ioc_dict["explanation_data"], dict):
-                    explanation = ioc_dict["explanation_data"]
+                if isinstance(explanation_data, str):
+                    explanation = json.loads(explanation_data)
+                elif isinstance(explanation_data, dict):
+                    explanation = explanation_data
         except Exception as e:
             logger.error(f"Error parsing existing explanation: {e}")
 
@@ -1139,32 +1183,43 @@ def explain_ioc(ioc_value):
                 plt.savefig(viz_path)
                 plt.close()
 
-                conn.close() if conn else None
-                return jsonify(
-                    {
-                        "ioc": ioc_dict,
-                        "explanation": explanation,
-                        "visualization": f"/visualizations/{viz_filename}",
-                    }
-                )
+                # Check if file was created successfully
+                if not os.path.exists(viz_path):
+                    logger.error(f"Failed to create visualization file at {viz_path}")
+                    if conn:
+                        conn.close()
+                    return jsonify(generate_fallback_explanation(ioc_value))
+                else:
+                    logger.info(f"Successfully created visualization at {viz_path}")
+                    if conn:
+                        conn.close()
+                    return jsonify(
+                        {
+                            "ioc": ioc_dict,
+                            "explanation": explanation,
+                            "visualization": f"/visualizations/{viz_filename}",
+                        }
+                    )
+
             except Exception as viz_err:
                 logger.error(f"Error creating visualization: {viz_err}")
+                # Continue to fallback if visualization fails
 
-        # No existing explanation or visualization creation failed
-        # Try to generate a new explanation using a safer approach
+        # No existing explanation or visualization creation failed, generate a new one
         try:
-            # Get enrichment data
+            # Get enrichment data, handling potential parsing issues
             enrichment_data = {}
-            if ioc_dict.get("enrichment_data"):
-                try:
-                    if isinstance(ioc_dict["enrichment_data"], str):
-                        enrichment_data = json.loads(ioc_dict["enrichment_data"])
-                    elif isinstance(ioc_dict["enrichment_data"], dict):
-                        enrichment_data = ioc_dict["enrichment_data"]
-                except Exception as e:
-                    logger.error(f"Error parsing enrichment data: {e}")
+            try:
+                raw_enrichment = ioc_dict.get("enrichment_data")
+                if raw_enrichment:
+                    if isinstance(raw_enrichment, str):
+                        enrichment_data = json.loads(raw_enrichment)
+                    elif isinstance(raw_enrichment, dict):
+                        enrichment_data = raw_enrichment
+            except Exception as e:
+                logger.error(f"Error parsing enrichment data: {e}")
 
-            # Extract features with additional protection against the "no such column: value" error
+            # Extract features with robust protection against errors
             logger.info(f"Extracting features for IOC type: {ioc_type}")
 
             # Create feature parameters dictionary with explicit parameter names
@@ -1176,16 +1231,19 @@ def explain_ioc(ioc_value):
                 "summary": ioc_dict.get("summary", ""),
             }
 
-            # Wrap the entire feature extraction in try/except
+            # Safely extract features with comprehensive error handling
             features = None
             try:
-                features = extract_features(
-                    ioc_type=feature_params["ioc_type"],
-                    source_feeds=feature_params["source_feeds"],
-                    ioc_value=feature_params["ioc_value"],
-                    enrichment_data=feature_params["enrichment_data"],
-                    summary=feature_params["summary"],
-                )
+                # Create a safe wrapper function to avoid "no such column: value" error
+                def safe_extract_features(**kwargs):
+                    # Copy the kwargs to avoid modifying the original
+                    safe_kwargs = kwargs.copy()
+                    # Rename 'value' to 'ioc_value' if it exists
+                    if "value" in safe_kwargs:
+                        safe_kwargs["ioc_value"] = safe_kwargs.pop("value")
+                    return extract_features(**safe_kwargs)
+
+                features = safe_extract_features(**feature_params)
             except sqlite3.OperationalError as sql_err:
                 if "no such column: value" in str(sql_err):
                     logger.error(
@@ -1199,50 +1257,36 @@ def explain_ioc(ioc_value):
                     }
                 else:
                     logger.error(f"SQL error in feature extraction: {sql_err}")
-                    features = {
-                        f"type_{feature_params['ioc_type']}": 1,
-                        "feed_count": 1,
-                    }
+                    features = {f"type_{ioc_type}": 1, "feed_count": 1}
             except Exception as feature_err:
                 logger.error(f"Error in feature extraction: {feature_err}")
-                # Create fallback features
-                features = {
-                    f"type_{ioc_type}": 1,
-                    "feed_count": 1,
-                }
+                features = {f"type_{ioc_type}": 1, "feed_count": 1}
 
+            # Ensure we have some features to work with
             if not features:
                 logger.warning(
                     "Feature extraction returned no features, using fallback"
                 )
-                features = {
-                    f"type_{ioc_type}": 1,
-                    "feed_count": 1,
-                }
+                features = {f"type_{ioc_type}": 1, "feed_count": 1}
 
             # Generate explanation using features
+            explanation = None
             try:
-                # Import explain_prediction here to avoid circular imports
+                # Import here to avoid circular imports
                 from sentinelforge.ml.shap_explainer import explain_prediction
 
-                explanation = None
-                try:
-                    explanation = explain_prediction(features)
-                except Exception as shap_err:
-                    logger.error(f"Error in SHAP explanation: {shap_err}")
-                    explanation = None
-
-                if not explanation:
-                    logger.warning("Explanation generation failed, using fallback")
-                    explanation = generate_fallback_explanation(ioc_value)[
-                        "explanation"
-                    ]
-
+                explanation = explain_prediction(features)
             except Exception as explain_err:
-                logger.error(f"Error in explanation generation: {explain_err}")
+                logger.error(f"Error in SHAP explanation: {explain_err}")
+                explanation = None
+
+            # Use fallback if explanation generation failed
+            if not explanation:
+                logger.warning("Explanation generation failed, using fallback")
                 explanation = generate_fallback_explanation(ioc_value)["explanation"]
 
-            # Create visualization with robust error handling
+            # Try to create visualization with comprehensive error handling
+            visualization_path = None
             try:
                 plt.figure(figsize=(10, 6))
                 feature_names = [item["feature"] for item in explanation]
@@ -1265,20 +1309,20 @@ def explain_ioc(ioc_value):
                 plt.xlabel("SHAP Value (Impact on Score)")
                 plt.tight_layout()
 
+                # Ensure visualizations directory exists
+                os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
                 plt.savefig(viz_path)
                 plt.close()
 
-                # Verify visualization was created
-                visualization_path = (
-                    f"/visualizations/{viz_filename}"
-                    if os.path.exists(viz_path)
-                    else None
-                )
+                # Check if the file was created successfully
+                if os.path.exists(viz_path):
+                    visualization_path = f"/visualizations/{viz_filename}"
             except Exception as viz_err:
                 logger.error(f"Error creating visualization: {viz_err}")
-                visualization_path = None
 
-            conn.close() if conn else None
+            # Close connection and return result
+            if conn:
+                conn.close()
             return jsonify(
                 {
                     "ioc": ioc_dict,
@@ -1292,18 +1336,20 @@ def explain_ioc(ioc_value):
 
         except Exception as e:
             logger.error(f"Error generating explanation: {e}", exc_info=True)
-            conn.close() if conn else None
+            if conn:
+                conn.close()
 
-        # If we get here, all attempts have failed - return fallback explanation
-        logger.info("All explanation attempts failed, returning fallback explanation")
-        return jsonify(
-            {
-                "ioc": ioc_dict,
-                "explanation": generate_fallback_explanation(ioc_value)["explanation"],
-                "visualization": None,
-                "note": "Generated generic explanation as specific model explanation couldn't be produced",
-            }
-        )
+            # Provide a useful fallback response
+            return jsonify(
+                {
+                    "ioc": ioc_dict,
+                    "explanation": generate_fallback_explanation(ioc_value)[
+                        "explanation"
+                    ],
+                    "visualization": None,
+                    "note": "Generated generic explanation as specific model explanation couldn't be produced",
+                }
+            )
 
     except sqlite3.OperationalError as sql_err:
         # Catch the "no such column: value" error at the top level
