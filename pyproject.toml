@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinelforge"
+version = "0.0.1"
+description = "AI‑powered threat‑intel aggregator"
+authors = [{name = "Collin", email = "collinsorizu@gmail.com"}]
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.20",
+    "sqlalchemy>=2.0",
+    "pyyaml>=6.0",
+    "transformers>=4.0.0",
+    "fastapi>=0.95.0",
+    "uvicorn[standard]>=0.22.0",
+    "stix2>=3.0.0",
+    "medallion>=3.0.0",
+    "slack-sdk>=3.20.0",
+    "scikit-learn>=1.0",
+    "torch>=2.0.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "email-validator>=2.0.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "joblib>=1.2.0",
+]
+
+# Add project.scripts section
+[project.scripts]
+sentinel-ingest = "sentinelforge.ingestion.main:run_ingestion_pipeline"
+sentinel-dashboard = "sentinelforge.cli.dashboard:app"
+sentinel-api = "sentinelforge.api.taxii:start_api_server"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-mock>=3.10",
+  "requests-mock>=1.9",
+  "httpx>=0.25.0",
+  "ruff>=0.3.3",
+  "black>=24.3.0",
+  "pre-commit>=3.6",
+  "taxii2-client>=2.3.0",
+  "python-whois>=0.7.3",
+  "geoip2>=4.6.0",
+  "typer>=0.15.0",
+  "rich>=13.0",
+  "slack-sdk>=3.20.0",
+]
+
+# Added tool.setuptools section for package finding
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sentinelforge*"]
+exclude = ["feeds*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "explainability: marks tests that check ML model explanation functionality",
+]
