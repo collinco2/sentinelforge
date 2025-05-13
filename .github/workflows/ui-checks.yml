@@ -1,0 +1,38 @@
+name: React UI CI
+
+on:
+  push:
+    paths:
+      - 'sentinelforge-ui/**'
+  pull_request:
+    paths:
+      - 'sentinelforge-ui/**'
+
+jobs:
+  react-ui-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinelforge-ui
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 🟢 Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🧹 Lint code with ESLint
+        run: npx eslint . --ext .js,.ts,.jsx,.tsx
+
+      - name: 🏗️ Build React app
+        run: npm run build
+
+      # Optional: Run tests (if added later)
+      # - name: 🧪 Run tests
+      #   run: npm test 
