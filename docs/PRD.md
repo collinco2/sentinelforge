@@ -60,9 +60,9 @@ without manual feed-hopping.
 
 •
 
-Leverage the platform's scoring and deduplication to reduce alert 
+Leverage the platform’s scoring and deduplication to reduce alert 
 
-fatigue.
+fatigue.
 3.
 •
 CTI analysts.
@@ -120,7 +120,7 @@ Ability to support a quick MVP (2–4 weeks to initial launch).
 Scope Out:
 Full SOAR functionality (automated playbooks) – we will only provide 
 
-minimal "alert forwarding" at MVP.
+minimal “alert forwarding” at MVP.
 
 •
 
@@ -150,7 +150,7 @@ CISA AIS, AlienVault OTX, Abuse.ch, PhishTank, etc.).
 
 •
 
-Each connector must handle the source's native format (JSON, STIX/
+Each connector must handle the source’s native format (JSON, STIX/
 
 TAXII, CSV, RSS/XML).
 
@@ -160,7 +160,7 @@ dashboards.
 •
 •
 
-multiple feeds.
+multiple feeds.
 
 •
 and analysis.
@@ -215,7 +215,7 @@ aggregated score.
 •
 •
 
-Use heuristics (e.g., "seen in multiple reputable feeds => +X points").
+Use heuristics (e.g., “seen in multiple reputable feeds => +X points”).
 Provide default thresholds (e.g., 0–100 scale, with low/medium/high 
 
 classification) to guide triage.
@@ -267,17 +267,17 @@ Provide CSV/JSON output endpoints for custom ingestion.
 STIX feeds.
 •
 
-•
+•
 2.
 •
 •
 
 Optionally push to external systems via webhooks or direct API calls.
 Slack/Email Notifications
-Support basic "alerting" channels for new critical or high-scoring IOCs.
+Support basic “alerting” channels for new critical or high-scoring IOCs.
 Slack: Use incoming webhook with a short summary plus a link to the 
 
-aggregator's IOC page.
+aggregator’s IOC page.
 
 Email: Daily or real-time digests for designated recipients.
 
@@ -291,7 +291,7 @@ quick filtering (e.g., only IPs > 80 score).
 
 Provide exportable lists (CSV, PDF) of all high-scoring IOCs or weekly 
 
-"top emerging threats."
+“top emerging threats.”
 
 4.4 User Experience & Access Control
 
@@ -309,7 +309,7 @@ Include basic filtering (e.g., date range, type: IP/domain/hash).
 IOC Drill-Down
 Let users click on an IOC to see feed provenance, scoring rationale, and 
 
-any correlation (e.g., "This IP has been flagged by X feed with confidence 90").
+any correlation (e.g., “This IP has been flagged by X feed with confidence 90”).
 Show enrichment details (domain WHOIS, geolocation, references to 
 
 •
@@ -369,7 +369,7 @@ lookups (VirusTotal, WHOIS, DNS, etc.) if needed.
 
 Storage: Store processed IOCs in a scalable, query-friendly database 
 
-(e.g., Elasticsearch or a NoSQL store).
+(e.g., Elasticsearch or a NoSQL store).
 
 2. API & Output Layer
 •
@@ -382,7 +382,7 @@ Provide a REST/GraphQL API for internal UI and external consumers.
 Optionally run an OpenTAXII server for STIX feeds.
 Slack/email integration for alerting.
 
-Single-page web app or simple front-end served by the aggregator's 
+Single-page web app or simple front-end served by the aggregator’s 
 
 API.
 
@@ -456,7 +456,7 @@ gapped solutions.
 
 Potential approach: containerized aggregator with local data store, plus 
 
-a "relay" for external feeds in a DMZ.
+a “relay” for external feeds in a DMZ.
 
 •
 
@@ -466,7 +466,7 @@ version.
 
 ⸻
 
-7. Timeline and Roadmap
+7. Timeline and Roadmap
 
 MVP (2–4 Week Build Cycle)
 
@@ -545,7 +545,7 @@ anomaly detection (new or rare threat patterns).
 
 •
 
-Potentially introduce a "community sharing" feature (like OTX pulses or 
+Potentially introduce a “community sharing” feature (like OTX pulses or 
 
 ThreatConnect CAL) where aggregator users can share anonymized intel.
 
@@ -559,7 +559,7 @@ ThreatConnect CAL) where aggregator users can share anonymized intel.
 Noise Reduction:
 Percentage of aggregated IOCs that are duplicates or low-confidence 
 
-and get filtered out.
+and get filtered out.
 
 •
 
@@ -621,7 +621,7 @@ compliance for any feed we bundle in our aggregator.
 
 AI Accuracy: Over-reliance on AI can introduce false positives or 
 
-"hallucinated" context. Keep a feedback loop so analysts can correct or downvote 
+“hallucinated” context. Keep a feedback loop so analysts can correct or downvote 
 suspicious classifications.
 
 •
@@ -642,12 +642,12 @@ release processes.
 10. Conclusion
 
 This Threat Intelligence Aggregator aligns with the executive brainstorm for a 
-"noise-reduced, quickly deployable, AI-powered threat feed." By leveraging 
+“noise-reduced, quickly deployable, AI-powered threat feed.” By leveraging 
 existing open-source feeds, standardized ingestion, and a flexible architecture, we 
 can deliver immediate value (MVP in ~4 weeks) to small and mid-sized security 
 teams, MSSPs, and vCISOs.
 
-Key differentiators will be:
+Key differentiators will be:
 
 •
 •
@@ -677,30 +677,5 @@ both immediate market needs (fast, consolidated threat intel) and future demands
 ⸻
 
 End of Document
-
-# Example Environment Variables for SentinelForge
-# Rename this file to .env and replace values as needed.
-
-# --- Core ---
-# DATABASE_URL=sqlite:///./ioc_store.db # Default
-# SCORING_RULES_PATH=scoring_rules.yaml # Default
-
-# --- API ---
-# Required for authenticated API endpoints (/export/*)
-SENTINELFORGE_API_KEY="super-secret-token" # CHANGE THIS!
-
-# --- Enrichment ---
-# Required for GeoIP enrichment (download from MaxMind)
-GEOIP_DB_PATH="data/GeoLite2-City.mmdb"
-
-# --- Notifications ---
-# Required for Slack alerts
-SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
-SLACK_ALERT_THRESHOLD=80 # Default
-
-# Required for Email digest
-SENDGRID_API_KEY="SG.xxxxxxxxxxxxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-DIGEST_RECIPIENTS="user1@example.com,user2@example.com"
-DIGEST_FROM="sentinelforge@example.com"
 
 
