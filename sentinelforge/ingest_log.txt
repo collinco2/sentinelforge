@@ -1,0 +1,14 @@
+SLACK_WEBHOOK_URL not set in settings. Slack notifications disabled.
+Device set to use mps:0
+/Users/Collins/sentinelforge/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but RandomForestClassifier was fitted with feature names
+  warnings.warn(
+Your max_length is set to 60, but your input_length is only 47. Since this is a summarization task, where outputs shorter than the input are typically wanted, you might consider decreasing max_length manually, e.g. summarizer('...', max_length=23)
+/Users/Collins/sentinelforge/.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:2739: UserWarning: X does not have valid feature names, but RandomForestClassifier was fitted with feature names
+  warnings.warn(
+[2025-04-27T15:32:15.828533] dummy: fetched 2 unique IOCs (from 2 pre-deduped / 3 raw, 0 duplicates skipped)
+[2025-04-27T15:32:16.273944] urlhaus: fetched 0 unique IOCs (from 0 pre-deduped / 10089 raw, 0 duplicates skipped)
+[2025-04-27T15:32:16.346898] abusech: fetched 0 unique IOCs (from 0 pre-deduped / 3 raw, 0 duplicates skipped)
+---
+Total Raw IOCs Processed: 10095
+Total Duplicates Skipped (by hash): 0
+Total Normalized Unique IOCs: 2

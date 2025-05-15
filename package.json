@@ -1,0 +1,30 @@
+{
+  "name": "sentinelforge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Threat intelligence platform",
+  "scripts": {
+    "prepare": "husky",
+    "ui:start": "cd sentinelforge-ui && npm start",
+    "ui:build": "cd sentinelforge-ui && npm run build"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.6",
+    "@types/react": "^19.1.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "tailwindcss": "^4.1.6"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.py": [
+      "ruff format"
+    ]
+  },
+  "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.11"
+  }
+}

@@ -1,0 +1,33 @@
+name: Daily Digest
+
+on:
+  schedule:
+    # Runs daily at 08:00 UTC
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip' # Cache dependencies
+
+      - name: Install dependencies
+        run: pip install . # Install dependencies from pyproject.toml
+
+      - name: Send Email Digest
+        # Environment variables needed: 
+        # SENDGRID_API_KEY, DIGEST_RECIPIENTS, DIGEST_FROM
+        # Configure these as Secrets in your GitHub repository settings.
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          DIGEST_RECIPIENTS: ${{ secrets.DIGEST_RECIPIENTS }}
+          DIGEST_FROM: ${{ secrets.DIGEST_FROM }}
+        run: python sentinelforge/notifications/email_digest.py --once 

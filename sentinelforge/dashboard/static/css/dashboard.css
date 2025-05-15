@@ -1,0 +1,225 @@
+/* Dashboard Styles */
+body {
+    background-color: #f8f9fa;
+}
+
+/* IOC List Styles */
+#iocList {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+#iocList .list-group-item {
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border-left: 4px solid transparent;
+}
+
+#iocList .list-group-item:hover {
+    background-color: #f0f0f0;
+}
+
+#iocList .list-group-item.active {
+    background-color: #e9f5ff;
+    color: #212529;
+    border-color: #0d6efd;
+    border-left: 4px solid #0d6efd;
+}
+
+.ioc-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.ioc-title {
+    font-weight: 500;
+}
+
+.ioc-meta {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.badge-high {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge-medium {
+    background-color: #fd7e14;
+    color: white;
+}
+
+.badge-low {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* Long hash and IOC value handling */
+.modal-title, .modal-body {
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.hash-value, .ioc-value {
+    font-family: monospace;
+    font-size: 0.9rem;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-all;
+    max-width: 100%;
+}
+
+/* JSON Data Display */
+.json-data {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.9rem;
+    word-wrap: break-word;
+    word-break: break-all;
+}
+
+/* Explanation Text */
+.explanation-text {
+    white-space: pre-line;
+    font-size: 0.95rem;
+}
+
+/* D3 Chart Styling */
+.bar {
+    fill: #0d6efd;
+    transition: fill 0.3s;
+}
+
+.bar:hover {
+    fill: #0a58ca;
+}
+
+.bar-negative {
+    fill: #dc3545;
+}
+
+.bar-negative:hover {
+    fill: #bb2d3b;
+}
+
+.axis text {
+    font-size: 11px;
+}
+
+.axis-label {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Loading Overlay */
+#loadingOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+/* Feature Value Styles */
+.feature-row {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.feature-row:hover {
+    background-color: #f0f0f0;
+}
+
+.feature-name {
+    font-weight: 500;
+}
+
+.feature-value {
+    text-align: right;
+}
+
+.feature-bar-container {
+    height: 6px;
+    background-color: #e9ecef;
+    margin-top: 5px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.feature-bar {
+    height: 100%;
+    transition: width 0.4s;
+}
+
+.feature-bar-positive {
+    background-color: #0d6efd;
+}
+
+.feature-bar-negative {
+    background-color: #dc3545;
+}
+
+/* Feature contribution bars */
+.feature-bar {
+    height: 25px;
+    margin-bottom: 6px;
+    position: relative;
+}
+
+.feature-bar-label {
+    position: absolute;
+    top: 0;
+    left: 5px;
+    line-height: 24px;
+    z-index: 1;
+}
+
+.feature-bar-value {
+    position: absolute;
+    top: 0;
+    right: 5px;
+    line-height: 24px;
+    z-index: 1;
+    font-weight: bold;
+}
+
+/* SHAP visualization */
+#shap svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Risk badges */
+.badge-low {
+    background-color: #28a745;
+}
+
+.badge-medium {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.badge-high {
+    background-color: #dc3545;
+}
+
+.badge-critical {
+    background-color: #6f42c1;
+}
+
+/* Tooltips */
+.tooltip-inner {
+    max-width: 300px;
+} 

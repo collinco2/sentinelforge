@@ -1,0 +1,6 @@
+{
+  "model": "sshleifer/distilbart-cnn-12-6",
+  "max_length": 60,
+  "min_length": 20,
+  "do_sample": false
+} 

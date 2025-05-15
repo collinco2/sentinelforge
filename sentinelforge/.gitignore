@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment variables
+.env
+
+# Database file
+ioc_store.db
+
+# Data files (e.g., GeoIP DBs)
+data/ 
