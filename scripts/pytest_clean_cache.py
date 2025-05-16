@@ -4,7 +4,6 @@ A pytest plugin to clean Python cache files before test collection.
 This helps prevent import mismatch errors during pytest collection.
 """
 
-import pytest
 from pathlib import Path
 import shutil
 import os
