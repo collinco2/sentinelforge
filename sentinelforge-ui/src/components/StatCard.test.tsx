@@ -1,6 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react';
-import { screen } from '@testing-library/dom';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { StatCard } from './StatCard';
 import { ShieldAlert } from 'lucide-react';
