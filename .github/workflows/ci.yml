@@ -4,23 +4,26 @@ on:
   push:
     branches: [main, ci/**, feat/**]
   pull_request:
-  workflow_dispatch:  # Add manual trigger
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  test:
+  python-tests:
+    name: Python Backend Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install deps
+          cache: pip
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e '.[dev]'
           # Install ML-specific dependencies
           pip install -r requirements-ml.txt
-      - name: Lint & format
+      - name: Lint Python code
         run: |
           ruff format . --check
           ruff check .
@@ -29,5 +32,29 @@ jobs:
           # Remove any __pycache__ directories and .pyc files to prevent import conflicts
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -type f -name '*.pyc' -delete
-      - name: Run tests
+      - name: Run Python tests
         run: make test-ci
+
+  node-tests:
+    name: React Frontend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinelforge-ui
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'sentinelforge-ui/package-lock.json'
+      - name: Create .npmrc
+        run: |
+          echo "legacy-peer-deps=true" > .npmrc
+          echo "engine-strict=false" >> .npmrc
+          echo "resolution-mode=highest" >> .npmrc
+      - name: Install Node.js dependencies
+        run: npm install --legacy-peer-deps
+      - name: Run frontend tests
+        run: npm test
