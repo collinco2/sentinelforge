@@ -17,7 +17,7 @@ const createQueryString = (filters: IocFilters): string => {
   const params = new URLSearchParams();
   
   // Add type filters if any are selected
-  const selectedTypes = Object.entries(filters.types)
+  const selectedTypes = Object.entries(filters.types || {})
     .filter(([_, isSelected]) => isSelected)
     .map(([type]) => type);
   
@@ -26,7 +26,7 @@ const createQueryString = (filters: IocFilters): string => {
   }
   
   // Add severity filters if any are selected
-  const selectedSeverities = Object.entries(filters.severities)
+  const selectedSeverities = Object.entries(filters.severities || {})
     .filter(([_, isSelected]) => isSelected)
     .map(([severity]) => severity);
   
@@ -35,12 +35,15 @@ const createQueryString = (filters: IocFilters): string => {
   }
   
   // Add confidence range if not default
-  const [minConfidence, maxConfidence] = filters.confidenceRange;
+  const confidenceRange = filters.confidenceRange || [0, 100];
+  const minConfidence = confidenceRange[0] ?? 0;
+  const maxConfidence = confidenceRange[1] ?? 100;
+  
   if (minConfidence > 0) {
-    params.append('minConfidence', minConfidence.toString());
+    params.append('minConfidence', String(minConfidence));
   }
   if (maxConfidence < 100) {
-    params.append('maxConfidence', maxConfidence.toString());
+    params.append('maxConfidence', String(maxConfidence));
   }
   
   const queryString = params.toString();
@@ -57,7 +60,10 @@ interface UseIocsReturn {
 
 // Main hook function
 export function useIocs(filters: IocFilters): UseIocsReturn {
-  const queryString = createQueryString(filters);
+  // Ensure filters is always defined
+  const safeFilters: IocFilters = filters || {...defaultFilters};
+  
+  const queryString = createQueryString(safeFilters);
   const url = `${API_URL}${queryString}`;
 
   // Mock data for development (remove in production)
@@ -101,7 +107,7 @@ export function useIocs(filters: IocFilters): UseIocsReturn {
         let filteredData = [...mockData];
         
         // Filter by type
-        const activeTypes = Object.entries(filters.types)
+        const activeTypes = Object.entries(safeFilters.types || {})
           .filter(([_, active]) => active)
           .map(([type]) => type);
         
@@ -112,7 +118,7 @@ export function useIocs(filters: IocFilters): UseIocsReturn {
         }
         
         // Filter by severity
-        const activeSeverities = Object.entries(filters.severities)
+        const activeSeverities = Object.entries(safeFilters.severities || {})
           .filter(([_, active]) => active)
           .map(([severity]) => severity);
         
@@ -123,7 +129,10 @@ export function useIocs(filters: IocFilters): UseIocsReturn {
         }
         
         // Filter by confidence
-        const [minConfidence, maxConfidence] = filters.confidenceRange;
+        const confidenceRange = safeFilters.confidenceRange || [0, 100];
+        const minConfidence = confidenceRange[0] ?? 0;
+        const maxConfidence = confidenceRange[1] ?? 100;
+        
         filteredData = filteredData.filter(ioc => 
           ioc.confidence >= minConfidence && ioc.confidence <= maxConfidence
         );
@@ -141,6 +150,24 @@ export function useIocs(filters: IocFilters): UseIocsReturn {
   };
 }
 
+// Default filters - also defined here for use in hook
+const defaultFilters: IocFilters = {
+  types: {
+    domain: false,
+    ip: false,
+    file: false,
+    url: false,
+    email: false,
+  },
+  severities: {
+    critical: false,
+    high: false,
+    medium: false,
+    low: false,
+  },
+  confidenceRange: [0, 100],
+};
+
 // Helper for analyzing IOCs
 export function analyzeIocs(iocs: IOCData[]) {
   if (!iocs || iocs.length === 0) {
@@ -156,30 +183,38 @@ export function analyzeIocs(iocs: IOCData[]) {
   
   // Count by severity
   const bySeverity = iocs.reduce((acc, ioc) => {
-    acc[ioc.severity] = (acc[ioc.severity] || 0) + 1;
+    const severity = ioc.severity || 'unknown';
+    acc[severity] = (acc[severity] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
   
   // Count by type
   const byType = iocs.reduce((acc, ioc) => {
-    acc[ioc.type] = (acc[ioc.type] || 0) + 1;
+    const type = ioc.type || 'unknown';
+    acc[type] = (acc[type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
   
   // Calculate highest confidence
-  const highestConfidence = Math.max(...iocs.map(ioc => ioc.confidence));
+  const confidences = iocs.map(ioc => ioc.confidence ?? 0).filter(Boolean);
+  const highestConfidence = confidences.length ? Math.max(...confidences) : 0;
   
   // Calculate average confidence
-  const avgConfidence = Math.round(
-    iocs.reduce((sum, ioc) => sum + ioc.confidence, 0) / iocs.length
-  );
+  const avgConfidence = confidences.length 
+    ? Math.round(confidences.reduce((sum, val) => sum + val, 0) / confidences.length)
+    : 0;
   
   // Count recent IOCs (last 24 hours)
   const now = new Date();
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const recentCount = iocs.filter(ioc => 
-    new Date(ioc.timestamp) >= oneDayAgo
-  ).length;
+  const recentCount = iocs.filter(ioc => {
+    if (!ioc.timestamp) return false;
+    try {
+      return new Date(ioc.timestamp) >= oneDayAgo;
+    } catch (e) {
+      return false;
+    }
+  }).length;
   
   return {
     total: iocs.length,

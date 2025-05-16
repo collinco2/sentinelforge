@@ -139,7 +139,7 @@ export function Dashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard 
               title="Critical Threats" 
-              value={iocsAnalysis.bySeverity.critical.toString()} 
+              value={String((iocsAnalysis.bySeverity.critical ?? 0))} 
               icon={ShieldAlert}
               variant="critical"
               change={isLoading ? undefined : 0}
@@ -150,10 +150,10 @@ export function Dashboard() {
             
             <StatCard 
               title="Active IOCs" 
-              value={iocsAnalysis.total.toString()} 
+              value={String(iocsAnalysis.total ?? 0)} 
               icon={Eye} 
               variant="default"
-              change={isLoading ? undefined : iocsAnalysis.recentCount}
+              change={isLoading ? undefined : (iocsAnalysis.recentCount ?? 0)}
               changePeriod="added today"
               className="min-h-[96px]"
               isLoading={isLoading}
@@ -161,7 +161,7 @@ export function Dashboard() {
             
             <StatCard 
               title="High Severity" 
-              value={iocsAnalysis.bySeverity.high.toString()} 
+              value={String((iocsAnalysis.bySeverity.high ?? 0))} 
               icon={Flag} 
               variant="warning"
               change={isLoading ? undefined : 0}
@@ -171,7 +171,7 @@ export function Dashboard() {
 
             <StatCard 
               title="Avg Confidence" 
-              value={`${iocsAnalysis.avgConfidence}%`} 
+              value={`${iocsAnalysis.avgConfidence ?? 0}%`} 
               icon={Server} 
               variant="success"
               change={isLoading ? undefined : 0}
