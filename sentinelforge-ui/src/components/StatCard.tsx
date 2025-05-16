@@ -11,6 +11,7 @@ export interface StatCardProps {
   className?: string;
   change?: number;
   changePeriod?: string;
+  isLoading?: boolean;
 }
 
 export function StatCard({
@@ -21,6 +22,7 @@ export function StatCard({
   className,
   change,
   changePeriod = "vs last period",
+  isLoading = false,
 }: StatCardProps) {
   // Determine if change is positive, negative, or neutral
   const isPositive = change && change > 0;
@@ -40,7 +42,12 @@ export function StatCard({
         className
       )}
     >
-      <CardContent className="px-6 py-4">
+      <CardContent className={cn("px-6 py-4", isLoading && "opacity-70")}>
+        {isLoading && (
+          <div className="absolute inset-0 bg-card/30 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
         <div className="flex items-start">
           <div
             className={cn(
@@ -83,7 +90,7 @@ export function StatCard({
                 "text-yellow-500": variant === "warning",
               })}
             >
-              {value}
+              {isLoading ? "—" : value}
             </p>
             
             {change !== undefined && (
@@ -100,7 +107,7 @@ export function StatCard({
                     "text-muted-foreground": !isPositive && !isNegative,
                   })}
                 >
-                  {changeDisplay}%
+                  {isLoading ? "—" : `${changeDisplay}%`}
                   <span className="text-muted-foreground ml-1">
                     {changePeriod}
                   </span>
