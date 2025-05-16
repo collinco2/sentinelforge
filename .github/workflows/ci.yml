@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, ci/**, feat/**]
   pull_request:
+  workflow_dispatch:  # Add manual trigger
 
 jobs:
   test:
