@@ -5,6 +5,17 @@ import os
 import sqlite3
 from unittest.mock import patch, MagicMock
 import numpy as np
+import sys
+from pathlib import Path
+
+
+# Add root to path to ensure proper imports
+@pytest.fixture(scope="session", autouse=True)
+def setup_path():
+    """Add the project root to sys.path to allow proper imports."""
+    root_dir = Path(__file__).parent.parent.parent
+    if str(root_dir) not in sys.path:
+        sys.path.insert(0, str(root_dir))
 
 
 @pytest.fixture
@@ -83,8 +94,8 @@ def mock_db_connection():
 
 def test_extract_db_data(mock_db_connection):
     """Test data extraction from the database."""
-    # Import function from the training script
-    from train_ml_model import extract_db_data
+    # Import function from the training script using absolute import
+    from sentinelforge.ml.train_ml_model import extract_db_data
 
     # Test with our mock database
     df = extract_db_data(db_path=mock_db_connection)
@@ -98,8 +109,8 @@ def test_extract_db_data(mock_db_connection):
 
 def test_prepare_ml_features():
     """Test feature preparation from data."""
-    # Import function from the training script
-    from train_ml_model import prepare_ml_features
+    # Import function from the training script using absolute import
+    from sentinelforge.ml.train_ml_model import prepare_ml_features
 
     # Create a simple test dataframe
     test_df = pd.DataFrame(
@@ -146,13 +157,13 @@ def test_prepare_ml_features():
         assert feature in features_df.columns
 
 
-@patch("train_ml_model.joblib")
-@patch("train_ml_model.cross_val_score")
-@patch("train_ml_model.logger")
+@patch("sentinelforge.ml.train_ml_model.joblib")
+@patch("sentinelforge.ml.train_ml_model.cross_val_score")
+@patch("sentinelforge.ml.train_ml_model.logger")
 def test_train_model(mock_logger, mock_cv_score, mock_joblib):
     """Test model training with a simple dataset."""
     # Import functions from the training script
-    from train_ml_model import train_model
+    from sentinelforge.ml.train_ml_model import train_model
 
     # Set up the mock for cross_val_score to return some reasonable scores
     mock_cv_score.return_value = np.array([0.75, 0.8])
@@ -178,12 +189,12 @@ def test_train_model(mock_logger, mock_cv_score, mock_joblib):
     mock_cv_score.assert_called_once()
 
 
-@patch("train_ml_model.Path")
-@patch("train_ml_model.joblib")
+@patch("sentinelforge.ml.train_ml_model.Path")
+@patch("sentinelforge.ml.train_ml_model.joblib")
 def test_save_model(mock_joblib, mock_path):
     """Test model saving functionality."""
     # Import function from the training script
-    from train_ml_model import save_model
+    from sentinelforge.ml.train_ml_model import save_model
 
     # Create a mock model
     mock_model = MagicMock()

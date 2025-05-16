@@ -61,3 +61,18 @@ exclude = ["feeds*"]
 markers = [
     "explainability: marks tests that check ML model explanation functionality",
 ]
+# Add these configurations to help with test discovery
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+# Use a different cache directory to avoid conflicts
+cache_dir = ".pytest_cache"
+# Ensure plugin paths are properly included
+pythonpath = ["."]
+# Add a custom flag to force clean before tests
+addopts = "--import-mode=importlib"
+
+# Add a pytest plugin to clean cache files before running tests
+[tool.pytest.plugins]
+clean_cache = "scripts.clean_pycache:clean_pycache"

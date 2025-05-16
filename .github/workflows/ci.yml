@@ -23,5 +23,10 @@ jobs:
         run: |
           ruff format . --check
           ruff check .
+      - name: Clean Python cache
+        run: |
+          # Remove any __pycache__ directories and .pyc files to prevent import conflicts
+          find . -type d -name '__pycache__' -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
       - name: Run tests
-        run: pytest -q
+        run: make test-ci

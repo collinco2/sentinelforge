@@ -7,3 +7,13 @@ repos:
     rev: v0.3.3
     # Ensure ruff hook checks formatting and applies fixes
     hooks: [{id: ruff, args: ["--fix", "--show-fixes"]}, {id: ruff-format}]
+    
+  # Clean Python cache files
+  - repo: local
+    hooks:
+      - id: clean-pycache
+        name: Clean Python Cache
+        entry: bash -c 'find . -type d -name "__pycache__" -exec rm -rf {} +; find . -type f -name "*.pyc" -delete'
+        language: system
+        pass_filenames: false
+        always_run: true
