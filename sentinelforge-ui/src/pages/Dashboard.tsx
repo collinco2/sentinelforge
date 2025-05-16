@@ -4,6 +4,7 @@ import { StatCard } from "../components/StatCard";
 import { IocTable } from "../components/IocTable";
 import { ThreatChart } from "../components/ThreatChart";
 import { ThreatTypeChart } from "../components/ThreatTypeChart";
+import { ThreatTimelineChart, TimelineDataPoint } from "../components/ThreatTimelineChart";
 import { FilterSidebar, IocFilters, defaultFilters } from "../components/FilterSidebar";
 import { Card, CardContent } from "../components/ui/card";
 import { ShieldAlert, Eye, Flag, Server, AlertCircle } from "lucide-react";
@@ -45,6 +46,37 @@ export function Dashboard() {
     }
     return threatTypeData;
   }, [threatTypeData]);
+
+  // Generate mock timeline data for the last 14 days
+  const timelineData = useMemo(() => {
+    const data: TimelineDataPoint[] = [];
+    const today = new Date();
+    
+    // Create data for the last 14 days
+    for (let i = 13; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
+      
+      // Generate a somewhat realistic pattern with increasing trend and some randomness
+      let baseCount = 5 + Math.floor(i / 2); // Gradual increase
+      
+      // Add weekly pattern (weekends lower)
+      if (date.getDay() === 0 || date.getDay() === 6) {
+        baseCount = Math.floor(baseCount * 0.7); // Weekend drop
+      }
+      
+      // Add randomness
+      const randomFactor = 0.5 + Math.random();
+      const count = Math.max(1, Math.floor(baseCount * randomFactor));
+      
+      data.push({
+        date: date.toISOString().split('T')[0], // Format as YYYY-MM-DD
+        count
+      });
+    }
+    
+    return data;
+  }, []);
 
   const handleIocRowClick = (ioc: IOCData) => {
     setSelectedIoc(ioc);
@@ -159,6 +191,25 @@ export function Dashboard() {
               </div>
             </div>
           )}
+          
+          {/* Timeline Chart Section */}
+          <Card className="bg-card shadow-sm border-border">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-semibold mb-4">IOC Activity Timeline</h2>
+              <div className={`relative ${isLoading ? 'opacity-50' : ''}`}>
+                <ThreatTimelineChart 
+                  data={timelineData} 
+                  height={250}
+                  className="mt-2"
+                />
+                {isLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/30">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
           
           {/* Chart Section - Grid with two charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
