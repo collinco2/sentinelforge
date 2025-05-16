@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook } from '@testing-library/react-hooks';
+import { waitFor } from '@testing-library/dom';
 import { useIocs, analyzeIocs } from './useIocs';
 import { defaultFilters } from '../components/FilterSidebar';
 import { IOCData } from '../components/IocTable';
