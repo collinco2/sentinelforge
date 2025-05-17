@@ -12,6 +12,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/threat-intel/:iocId" element={<IocDetailPage />} />
+            <Route path="/ioc/:iocId" element={<IocDetailPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

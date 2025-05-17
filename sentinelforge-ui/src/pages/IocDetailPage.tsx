@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../layout/DashboardLayout";
 import { IocDetailModal } from "../components/IocDetailModal";
-import { IOCData } from "../components/IocTable";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import { useIocs } from "../hooks/useIocs";
+import { ArrowLeft, AlertTriangle, Loader2 } from "lucide-react";
+import { useIocDetail } from "../hooks/useIocDetail";
 
 export function IocDetailPage() {
   // Get the IOC ID from the URL
@@ -16,39 +15,12 @@ export function IocDetailPage() {
 
   // From query params
   const sourceContext = searchParams.get("from") || "detail-page";
-  const severityFilter = searchParams.get("severity");
 
-  // State
-  const [ioc, setIoc] = useState<IOCData | null>(null);
+  // State for modal
   const [isModalOpen, setIsModalOpen] = useState(true);
 
-  // Get all IOCs to find the one we need
-  const { iocs, isLoading } = useIocs({
-    types: {
-      domain: false,
-      ip: false,
-      file: false,
-      url: false,
-      email: false,
-    },
-    severities: {
-      critical: false,
-      high: false,
-      medium: false,
-      low: false,
-    },
-    confidenceRange: [0, 100],
-  });
-
-  // Find the IOC that matches the ID
-  useEffect(() => {
-    if (!isLoading && iocs.length > 0 && iocId) {
-      const foundIoc = iocs.find((i) => i.id === iocId);
-      if (foundIoc) {
-        setIoc(foundIoc);
-      }
-    }
-  }, [iocs, iocId, isLoading]);
+  // Get IOC details directly using our new hook
+  const { iocDetail: ioc, isLoading, isError, error } = useIocDetail(iocId);
 
   // Handle modal close
   const handleModalClose = (open: boolean) => {
@@ -64,6 +36,11 @@ export function IocDetailPage() {
     navigate("/");
   };
 
+  // Custom navigation handler for the modal
+  const handleNavigation = (url: string) => {
+    navigate(url);
+  };
+
   return (
     <DashboardLayout title="IOC Details">
       <div className="p-4 md:p-6">
@@ -74,10 +51,34 @@ export function IocDetailPage() {
 
         <Card className="bg-card shadow-sm border-border">
           <CardContent className="p-6">
-            <h1 className="text-2xl font-semibold mb-4">IOC Details</h1>
+            <h1 className="text-2xl font-semibold mb-4">
+              {ioc
+                ? `IOC Details: ${ioc.value.substring(0, 30)}${ioc.value.length > 30 ? "..." : ""}`
+                : "IOC Details"}
+            </h1>
+
             {isLoading ? (
               <div className="h-24 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+                <span className="ml-3 text-gray-400">
+                  Loading IOC details...
+                </span>
+              </div>
+            ) : isError ? (
+              <div className="text-red-400 p-4 bg-red-900/20 rounded-md">
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Error Loading IOC Details</p>
+                    <p className="mt-1 text-sm text-gray-400">
+                      {error?.message ||
+                        `IOC with ID ${iocId} could not be loaded.`}
+                    </p>
+                  </div>
+                </div>
+                <Button className="mt-4" onClick={handleBackClick}>
+                  Return to Dashboard
+                </Button>
               </div>
             ) : ioc ? (
               <div>
@@ -86,21 +87,27 @@ export function IocDetailPage() {
                   <code className="bg-zinc-800 p-1 rounded">{ioc.value}</code>
                 </p>
 
-                {/* Modal rendered here to handle direct URL access */}
+                {/* Modal with iocId instead of pre-fetched object */}
                 <IocDetailModal
-                  ioc={ioc}
+                  iocId={iocId}
                   isOpen={isModalOpen}
                   onOpenChange={handleModalClose}
                   sourceContext={sourceContext}
+                  onNavigate={handleNavigation}
                 />
               </div>
             ) : (
               <div className="text-red-400 p-4 bg-red-900/20 rounded-md">
-                <p>IOC with ID {iocId} not found.</p>
-                <p className="mt-2 text-sm text-gray-400">
-                  The requested indicator of compromise might have been removed
-                  or is not accessible.
-                </p>
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">IOC Not Found</p>
+                    <p className="mt-1 text-sm text-gray-400">
+                      The requested indicator of compromise might have been
+                      removed or is not accessible.
+                    </p>
+                  </div>
+                </div>
                 <Button className="mt-4" onClick={handleBackClick}>
                   Return to Dashboard
                 </Button>

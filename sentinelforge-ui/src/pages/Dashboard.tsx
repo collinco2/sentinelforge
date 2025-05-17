@@ -27,7 +27,7 @@ export function Dashboard() {
 
   // Modal state
   const [isIocModalOpen, setIocModalOpen] = useState(false);
-  const [selectedIoc, setSelectedIoc] = useState<IOCData | null>(null);
+  const [selectedIocId, setSelectedIocId] = useState<string | null>(null);
 
   // Filter state
   const [filters, setFilters] = useState<IocFilters>(defaultFilters);
@@ -45,14 +45,11 @@ export function Dashboard() {
   // Check for IOC ID in query params for direct opening
   useEffect(() => {
     const directIocId = searchParams.get("iocId");
-    if (directIocId && iocs.length > 0) {
-      const iocToShow = iocs.find((ioc) => ioc.id === directIocId);
-      if (iocToShow) {
-        setSelectedIoc(iocToShow);
-        setIocModalOpen(true);
-      }
+    if (directIocId) {
+      setSelectedIocId(directIocId);
+      setIocModalOpen(true);
     }
-  }, [searchParams, iocs]);
+  }, [searchParams]);
 
   // Client-side sorting function
   const sortedIocs = useMemo(() => {
@@ -207,7 +204,7 @@ export function Dashboard() {
   };
 
   const handleIocRowClick = (ioc: IOCData) => {
-    setSelectedIoc(ioc);
+    setSelectedIocId(ioc.id);
     setIocModalOpen(true);
 
     // Update URL with query parameter without navigation
@@ -257,7 +254,7 @@ export function Dashboard() {
     setIocModalOpen(open);
 
     if (!open) {
-      setSelectedIoc(null);
+      setSelectedIocId(null);
 
       // Remove the iocId query parameter when closing the modal
       const newParams = new URLSearchParams(searchParams);
@@ -272,6 +269,11 @@ export function Dashboard() {
           : window.location.pathname,
       );
     }
+  };
+
+  // Custom navigation handler for the modal
+  const handleNavigation = (url: string) => {
+    navigate(url);
   };
 
   return (
@@ -463,15 +465,14 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* IOC Detail Modal - now managed at Dashboard level */}
-      {selectedIoc && (
-        <IocDetailModal
-          ioc={selectedIoc}
-          isOpen={isIocModalOpen}
-          onOpenChange={handleModalClose}
-          sourceContext="dashboard"
-        />
-      )}
+      {/* IOC Detail Modal - now using iocId instead of the full object */}
+      <IocDetailModal
+        iocId={selectedIocId}
+        isOpen={isIocModalOpen}
+        onOpenChange={handleModalClose}
+        sourceContext="dashboard"
+        onNavigate={handleNavigation}
+      />
     </DashboardLayout>
   );
 }
