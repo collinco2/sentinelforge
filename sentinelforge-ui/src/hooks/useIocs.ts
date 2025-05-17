@@ -1,10 +1,10 @@
-import useSWR from 'swr';
-import axios from 'axios';
-import { IocFilters } from '../components/FilterSidebar';
-import { IOCData } from '../components/IocTable';
+import useSWR from "swr";
+import axios from "axios";
+import { IocFilters } from "../components/FilterSidebar";
+import { IOCData } from "../components/IocTable";
 
 // Base API URL
-const API_URL = '/api/iocs';
+const API_URL = "/api/iocs";
 
 // Fetcher function for SWR
 const fetcher = async (url: string) => {
@@ -15,39 +15,105 @@ const fetcher = async (url: string) => {
 // Create query string from filters
 const createQueryString = (filters: IocFilters): string => {
   const params = new URLSearchParams();
-  
+
   // Add type filters if any are selected
   const selectedTypes = Object.entries(filters.types || {})
     .filter(([_, isSelected]) => isSelected)
     .map(([type]) => type);
-  
+
   if (selectedTypes.length > 0) {
-    params.append('types', selectedTypes.join(','));
+    // Backend expects 'ioc_type' parameter
+    params.append("ioc_type", selectedTypes.join(","));
   }
-  
-  // Add severity filters if any are selected
+
+  // Add severity filters if any are selected - Map to score ranges
   const selectedSeverities = Object.entries(filters.severities || {})
     .filter(([_, isSelected]) => isSelected)
     .map(([severity]) => severity);
-  
+
   if (selectedSeverities.length > 0) {
-    params.append('severities', selectedSeverities.join(','));
+    // Map severities to score ranges for the API
+    // Based on API logic: score > 7.5 = high, score > 5 = medium, else low
+
+    if (selectedSeverities.includes("critical")) {
+      // Critical is 8.5-10
+      params.append("min_score", "8.5");
+    } else if (selectedSeverities.includes("high")) {
+      // High is 7.5-8.5
+      params.append("min_score", "7.5");
+    } else if (selectedSeverities.includes("medium")) {
+      // Medium is 5-7.5
+      params.append("min_score", "5");
+    } else if (selectedSeverities.includes("low")) {
+      // Low is 0-5
+      params.append("max_score", "5");
+    }
   }
-  
-  // Add confidence range if not default
+
+  // Add confidence range if not default - Map to score in API
   const confidenceRange = filters.confidenceRange || [0, 100];
   const minConfidence = confidenceRange[0] ?? 0;
   const maxConfidence = confidenceRange[1] ?? 100;
-  
+
   if (minConfidence > 0) {
-    params.append('minConfidence', String(minConfidence));
+    // Convert confidence percentage to score (0-10 scale)
+    params.append("min_score", String(minConfidence / 10));
   }
   if (maxConfidence < 100) {
-    params.append('maxConfidence', String(maxConfidence));
+    // Convert confidence percentage to score (0-10 scale)
+    params.append("max_score", String(maxConfidence / 10));
   }
-  
+
   const queryString = params.toString();
-  return queryString ? `?${queryString}` : '';
+  return queryString ? `?${queryString}` : "";
+};
+
+// Transform API data to match our frontend data model
+const transformApiResponse = (data: any): IOCData[] => {
+  if (!data || !data.iocs || !Array.isArray(data.iocs)) {
+    return [];
+  }
+
+  return data.iocs.map((ioc: any) => ({
+    id: String(ioc.id),
+    value: ioc.ioc_value || ioc.value || "",
+    type: mapApiType(ioc.ioc_type || ""),
+    severity: mapApiSeverityToUi(ioc.score || 0),
+    confidence: Math.round((ioc.score || 0) * 10), // Convert 0-10 score to 0-100 confidence
+    timestamp: ioc.last_seen || ioc.first_seen || new Date().toISOString(),
+  }));
+};
+
+// Map API ioc_type to UI type
+const mapApiType = (apiType: string): IOCData["type"] => {
+  switch (apiType) {
+    case "domain":
+      return "domain";
+    case "ip":
+      return "ip";
+    case "hash":
+      return "file";
+    case "url":
+      return "url";
+    case "email":
+      return "email";
+    default:
+      // Try to match as closely as possible
+      if (apiType.includes("file") || apiType.includes("hash")) return "file";
+      if (apiType.includes("url")) return "url";
+      if (apiType.includes("domain")) return "domain";
+      if (apiType.includes("ip")) return "ip";
+      if (apiType.includes("email")) return "email";
+      return "domain"; // Default fallback
+  }
+};
+
+// Map API score to UI severity
+const mapApiSeverityToUi = (score: number): IOCData["severity"] => {
+  if (score >= 8.5) return "critical";
+  if (score >= 7.5) return "high";
+  if (score >= 5) return "medium";
+  return "low";
 };
 
 // Interface for the hook return value
@@ -61,92 +127,39 @@ interface UseIocsReturn {
 // Main hook function
 export function useIocs(filters: IocFilters): UseIocsReturn {
   // Ensure filters is always defined
-  const safeFilters: IocFilters = filters || {...defaultFilters};
-  
+  const safeFilters: IocFilters = filters || { ...defaultFilters };
+
   const queryString = createQueryString(safeFilters);
   const url = `${API_URL}${queryString}`;
 
-  // Mock data for development (remove in production)
-  const mockData: IOCData[] = [
-    {
-      id: "ioc-1",
-      value: "malicious-domain.com",
-      type: "domain",
-      severity: "high",
-      confidence: 85,
-      timestamp: "2025-05-13T08:30:00Z",
-    },
-    {
-      id: "ioc-2",
-      value: "192.168.1.254",
-      type: "ip",
-      severity: "medium",
-      confidence: 72,
-      timestamp: "2025-05-13T07:45:00Z",
-    },
-    {
-      id: "ioc-3",
-      value: "ransomware.exe",
-      type: "file",
-      severity: "critical",
-      confidence: 98,
-      timestamp: "2025-05-13T09:15:00Z",
-    },
-    // Add more mock data as needed
-  ];
+  // Use SWR with proper caching and refresh strategy
+  const { data, error, mutate } = useSWR(url, fetcher, {
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    refreshInterval: 60000, // Refresh every minute
+    shouldRetryOnError: true,
+    errorRetryCount: 3,
+    dedupingInterval: 5000,
+    onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+      // Never retry on 404s
+      if (error.status === 404) return;
 
-  // Enable this for real API calls
-  // const { data, error, mutate } = useSWR(url, fetcher);
-  
-  // Using mock data for development
-  const { data, error, mutate } = useSWR(url, () => {
-    // Simulate API latency
-    return new Promise<IOCData[]>((resolve) => {
-      setTimeout(() => {
-        // Apply mock filtering based on the filters
-        let filteredData = [...mockData];
-        
-        // Filter by type
-        const activeTypes = Object.entries(safeFilters.types || {})
-          .filter(([_, active]) => active)
-          .map(([type]) => type);
-        
-        if (activeTypes.length > 0) {
-          filteredData = filteredData.filter(ioc => 
-            activeTypes.includes(ioc.type)
-          );
-        }
-        
-        // Filter by severity
-        const activeSeverities = Object.entries(safeFilters.severities || {})
-          .filter(([_, active]) => active)
-          .map(([severity]) => severity);
-        
-        if (activeSeverities.length > 0) {
-          filteredData = filteredData.filter(ioc => 
-            activeSeverities.includes(ioc.severity)
-          );
-        }
-        
-        // Filter by confidence
-        const confidenceRange = safeFilters.confidenceRange || [0, 100];
-        const minConfidence = confidenceRange[0] ?? 0;
-        const maxConfidence = confidenceRange[1] ?? 100;
-        
-        filteredData = filteredData.filter(ioc => 
-          ioc.confidence >= minConfidence && ioc.confidence <= maxConfidence
-        );
-        
-        resolve(filteredData);
-      }, 500); // Simulate 500ms delay
-    });
+      // Only retry up to 3 times
+      if (retryCount >= 3) return;
+
+      // Retry after 5 seconds
+      setTimeout(() => revalidate({ retryCount }), 5000);
+    },
   });
 
+  // Transform and return the data
+  const transformedData = data ? transformApiResponse(data) : [];
+
   return {
-    iocs: data || [],
+    iocs: transformedData,
     isLoading: !error && !data,
     isError: error,
-    mutate
+    mutate,
   };
 }
 
@@ -177,37 +190,45 @@ export function analyzeIocs(iocs: IOCData[]) {
       byType: { domain: 0, ip: 0, file: 0, url: 0, email: 0 },
       highestConfidence: 0,
       avgConfidence: 0,
-      recentCount: 0 // IOCs in last 24h
+      recentCount: 0, // IOCs in last 24h
     };
   }
-  
+
   // Count by severity
-  const bySeverity = iocs.reduce((acc, ioc) => {
-    const severity = ioc.severity || 'unknown';
-    acc[severity] = (acc[severity] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  
+  const bySeverity = iocs.reduce(
+    (acc, ioc) => {
+      const severity = ioc.severity || "unknown";
+      acc[severity] = (acc[severity] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+
   // Count by type
-  const byType = iocs.reduce((acc, ioc) => {
-    const type = ioc.type || 'unknown';
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  
+  const byType = iocs.reduce(
+    (acc, ioc) => {
+      const type = ioc.type || "unknown";
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+
   // Calculate highest confidence
-  const confidences = iocs.map(ioc => ioc.confidence ?? 0).filter(Boolean);
+  const confidences = iocs.map((ioc) => ioc.confidence ?? 0).filter(Boolean);
   const highestConfidence = confidences.length ? Math.max(...confidences) : 0;
-  
+
   // Calculate average confidence
-  const avgConfidence = confidences.length 
-    ? Math.round(confidences.reduce((sum, val) => sum + val, 0) / confidences.length)
+  const avgConfidence = confidences.length
+    ? Math.round(
+        confidences.reduce((sum, val) => sum + val, 0) / confidences.length,
+      )
     : 0;
-  
+
   // Count recent IOCs (last 24 hours)
   const now = new Date();
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const recentCount = iocs.filter(ioc => {
+  const recentCount = iocs.filter((ioc) => {
     if (!ioc.timestamp) return false;
     try {
       return new Date(ioc.timestamp) >= oneDayAgo;
@@ -215,13 +236,13 @@ export function analyzeIocs(iocs: IOCData[]) {
       return false;
     }
   }).length;
-  
+
   return {
     total: iocs.length,
     bySeverity,
     byType,
     highestConfidence,
     avgConfidence,
-    recentCount
+    recentCount,
   };
-} 
+}

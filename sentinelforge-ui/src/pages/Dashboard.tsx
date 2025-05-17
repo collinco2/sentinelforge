@@ -21,6 +21,7 @@ import { IocDetailModal } from "../components/IocDetailModal";
 import { useIocs, analyzeIocs } from "../hooks/useIocs";
 
 export function Dashboard() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -118,7 +119,7 @@ export function Dashboard() {
 
   // If no threat type data is available, use placeholder data
   const chartData = useMemo(() => {
-    if (threatTypeData.length === 0) {
+    if (threatTypeData.length === 0 && !isLoading) {
       return [
         { label: "Phishing", count: 40 },
         { label: "Malware", count: 25 },
@@ -127,24 +128,69 @@ export function Dashboard() {
       ];
     }
     return threatTypeData;
-  }, [threatTypeData]);
+  }, [threatTypeData, isLoading]);
 
-  // Generate mock timeline data for the last 14 days
+  // Generate timeline data from the actual IOCs for the last 14 days
   const timelineData = useMemo(() => {
+    if (isLoading || !iocs.length) {
+      // Return empty array during loading
+      return [];
+    }
+
+    const data: TimelineDataPoint[] = [];
+    const today = new Date();
+    const dateCounts: Record<string, number> = {};
+
+    // Initialize last 14 days with zero counts
+    for (let i = 13; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
+      const dateStr = date.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      dateCounts[dateStr] = 0;
+    }
+
+    // Count IOCs by date
+    iocs.forEach((ioc) => {
+      if (ioc.timestamp) {
+        try {
+          const iocDate = new Date(ioc.timestamp);
+          const dateStr = iocDate.toISOString().split("T")[0];
+
+          // Only count if in the last 14 days
+          if (dateCounts[dateStr] !== undefined) {
+            dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+          }
+        } catch (e) {
+          // Skip invalid dates
+        }
+      }
+    });
+
+    // Convert to timeline data format
+    Object.entries(dateCounts)
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+      .forEach(([date, count]) => {
+        data.push({ date, count });
+      });
+
+    return data.length ? data : generateFallbackTimelineData();
+  }, [iocs, isLoading]);
+
+  // Fallback timeline data generator function
+  const generateFallbackTimelineData = () => {
     const data: TimelineDataPoint[] = [];
     const today = new Date();
 
-    // Create data for the last 14 days
     for (let i = 13; i >= 0; i--) {
       const date = new Date();
       date.setDate(today.getDate() - i);
 
-      // Generate a somewhat realistic pattern with increasing trend and some randomness
-      let baseCount = 5 + Math.floor(i / 2); // Gradual increase
+      // Generate realistic pattern with some randomness
+      let baseCount = 5 + Math.floor(i / 2);
 
-      // Add weekly pattern (weekends lower)
+      // Add weekly pattern
       if (date.getDay() === 0 || date.getDay() === 6) {
-        baseCount = Math.floor(baseCount * 0.7); // Weekend drop
+        baseCount = Math.floor(baseCount * 0.7);
       }
 
       // Add randomness
@@ -152,13 +198,13 @@ export function Dashboard() {
       const count = Math.max(1, Math.floor(baseCount * randomFactor));
 
       data.push({
-        date: date.toISOString().split("T")[0], // Format as YYYY-MM-DD
+        date: date.toISOString().split("T")[0],
         count,
       });
     }
 
     return data;
-  }, []);
+  };
 
   const handleIocRowClick = (ioc: IOCData) => {
     setSelectedIoc(ioc);
