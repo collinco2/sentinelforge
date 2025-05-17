@@ -28,6 +28,7 @@ export interface IOCData {
   severity: "low" | "medium" | "high" | "critical";
   confidence: number; // percentage 0-100
   timestamp: string;
+  first_observed?: string;
 }
 
 // Props interface
@@ -530,12 +531,10 @@ export function IocTable({
 
       // Default string comparison for other fields
       return effectiveSortDir === "asc"
-        ? a[effectiveSortField]
-            .toString()
-            .localeCompare(b[effectiveSortField].toString())
-        : b[effectiveSortField]
-            .toString()
-            .localeCompare(a[effectiveSortField].toString());
+        ? (a[effectiveSortField]?.toString() ?? "")
+            .localeCompare(b[effectiveSortField]?.toString() ?? "")
+        : (b[effectiveSortField]?.toString() ?? "")
+            .localeCompare(a[effectiveSortField]?.toString() ?? "");
     });
   }, [
     filteredData,

@@ -6,23 +6,16 @@ module.exports = {
       "@": path.resolve(__dirname, "src"),
     },
     configure: (webpackConfig) => {
-      // Handle dependency resolution issues
-      webpackConfig.resolve = {
-        ...webpackConfig.resolve,
-        fallback: {
-          ...webpackConfig.resolve?.fallback,
-        },
-      };
-
-      // Force specific versions of React for all dependencies
-      webpackConfig.resolve.alias = {
-        ...webpackConfig.resolve.alias,
-        react: require.resolve("react"),
-        "react-dom": require.resolve("react-dom"),
-        "@types/react": require.resolve("@types/react"),
-      };
+      // Disable ModuleScopePlugin to allow imports outside of src/
+      webpackConfig.resolve.plugins = webpackConfig.resolve.plugins.filter(
+        plugin => plugin.constructor.name !== 'ModuleScopePlugin'
+      );
 
       return webpackConfig;
     },
   },
+  // Configure development server
+  devServer: {
+    hot: true,
+  }
 };

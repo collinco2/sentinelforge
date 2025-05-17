@@ -77,8 +77,8 @@ export function Dashboard() {
 
       // Default string comparison for other fields
       return sortDirection === "asc"
-        ? a[sortColumn].toString().localeCompare(b[sortColumn].toString())
-        : b[sortColumn].toString().localeCompare(a[sortColumn].toString());
+        ? (a[sortColumn]?.toString() ?? "").localeCompare(b[sortColumn]?.toString() ?? "")
+        : (b[sortColumn]?.toString() ?? "").localeCompare(a[sortColumn]?.toString() ?? "");
     });
   }, [iocs, sortColumn, sortDirection, isLoading]);
 

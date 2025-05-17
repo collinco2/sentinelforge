@@ -4,7 +4,7 @@ import { IOCData } from "../components/IocTable";
 
 // Extended IOC data interface with additional details
 export interface IocDetailData extends IOCData {
-  first_observed?: string;
+  first_observed: string;
   last_seen?: string;
   scoring_rationale?: {
     factors: Array<{
@@ -104,6 +104,7 @@ const transformResponse = (data: any): IocDetailData => {
     severity: "medium",
     confidence: 0,
     timestamp: new Date().toISOString(),
+    first_observed: new Date().toISOString(),
   };
 };
 

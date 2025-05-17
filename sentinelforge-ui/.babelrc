@@ -1,0 +1,11 @@
+{
+  "plugins": [
+    ["module-resolver", {
+      "alias": {
+        "react-refresh/runtime": "react-refresh/runtime",
+        "react/jsx-dev-runtime": "react/jsx-dev-runtime",
+        "react/jsx-runtime": "react/jsx-runtime"
+      }
+    }]
+  ]
+} 
