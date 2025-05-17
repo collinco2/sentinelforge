@@ -23,6 +23,8 @@ jobs:
           pip install -e '.[dev]'
           # Install ML-specific dependencies
           pip install -r requirements-ml.txt
+          # Ensure critical dependencies are installed
+          pip install numpy pydantic-settings email-validator
       - name: Lint Python code
         run: |
           ruff format . --check
