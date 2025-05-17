@@ -14,10 +14,10 @@ clean-test: ## Remove test and coverage artifacts
 	rm -rf .pytest_cache/
 
 test: clean-pyc ## Run tests with pytest
-	pytest
+	PYTHONPATH=. pytest
 
 test-ci: clean-pyc ## Run tests in CI environment
-	python -m pytest 
+	PYTHONPATH=. python -m pytest 
 
 install-deps: ## Install dependencies including test dependencies
 	pip install -e '.[dev]'

@@ -35,6 +35,8 @@ jobs:
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -type f -name '*.pyc' -delete
       - name: Run Python tests
+        env:
+          PYTHONPATH: .
         run: make test-ci
 
   node-tests:
