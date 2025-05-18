@@ -268,7 +268,7 @@ export function IocDetailModal({
         aria-modal="true"
         aria-labelledby="ioc-detail-title"
       >
-        <div className="bg-zinc-900 text-gray-100 rounded-xl shadow-xl p-6 w-[90vw] max-w-3xl relative overflow-y-auto max-h-[80vh]">
+        <div className="bg-zinc-900 text-gray-100 rounded-xl shadow-xl p-6 w-[90vw] max-w-3xl relative max-h-[80vh] sm:max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700">
           {/* Close Button */}
           <button
             onClick={() => onOpenChange(false)}
@@ -329,19 +329,19 @@ export function IocDetailModal({
                 <TabsList className="w-full mb-6">
                   <TabsTrigger
                     value="overview"
-                    className="flex-1 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                    className="flex-1 transition-all duration-200 data-[state=active]:bg-zinc-700 data-[state=active]:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
                   >
                     Overview
                   </TabsTrigger>
                   <TabsTrigger
                     value="scoring"
-                    className="flex-1 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                    className="flex-1 transition-all duration-200 data-[state=active]:bg-zinc-700 data-[state=active]:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
                   >
                     Scoring Rationale
                   </TabsTrigger>
                   <TabsTrigger
                     value="mitre"
-                    className="flex-1 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                    className="flex-1 transition-all duration-200 data-[state=active]:bg-zinc-700 data-[state=active]:text-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
                   >
                     MITRE ATT&CK
                   </TabsTrigger>
@@ -350,13 +350,15 @@ export function IocDetailModal({
                 {/* Overview Tab Content */}
                 <TabsContent
                   value="overview"
-                  className="space-y-6"
+                  className="space-y-6 sm:space-y-8"
                   role="tabpanel"
                   aria-labelledby="overview-tab"
                 >
                   {/* IOC Value */}
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium text-gray-400">Value</h3>
+                    <h3 className="text-base font-semibold text-gray-200 tracking-tight">
+                      Value
+                    </h3>
                     <div className="flex items-center group relative">
                       <div className="mr-2">{getTypeIcon(ioc.type)}</div>
                       <code className="font-mono bg-zinc-800 p-2 rounded-md text-white w-full overflow-x-auto">
@@ -378,7 +380,10 @@ export function IocDetailModal({
                       </button>
                       {/* Tooltip */}
                       <div
-                        className={`absolute -top-8 right-0 p-1.5 bg-zinc-700 text-xs text-gray-200 rounded shadow-lg transition-opacity ${isCopied ? "opacity-100" : "opacity-0"}`}
+                        className={`absolute -top-9 right-0 px-2 py-1 bg-zinc-800 text-xs text-gray-200 rounded shadow transition-opacity duration-300 ${
+                          isCopied ? "opacity-100" : "opacity-0"
+                        }`}
+                        aria-live="polite"
                       >
                         Copied to clipboard!
                       </div>
@@ -388,7 +393,7 @@ export function IocDetailModal({
                   {/* Type & Severity */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-400 mb-1">
+                      <h3 className="text-base font-semibold text-gray-200 tracking-tight mb-1">
                         Type
                       </h3>
                       <div className="px-3 py-1.5 rounded-md bg-zinc-800 inline-block text-sm capitalize">
@@ -396,7 +401,7 @@ export function IocDetailModal({
                       </div>
                     </div>
                     <div>
-                      <h3 className="text-sm font-medium text-gray-400 mb-1">
+                      <h3 className="text-base font-semibold text-gray-200 tracking-tight mb-1">
                         Severity
                       </h3>
                       <div
@@ -411,7 +416,7 @@ export function IocDetailModal({
 
                   {/* Confidence */}
                   <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-1">
+                    <h3 className="text-base font-semibold text-gray-200 tracking-tight mb-1">
                       Confidence Score
                     </h3>
                     <div className="flex items-center">
@@ -429,7 +434,7 @@ export function IocDetailModal({
 
                   {/* First Observed */}
                   <div>
-                    <h3 className="text-sm font-medium text-gray-400 mb-1">
+                    <h3 className="text-base font-semibold text-gray-200 tracking-tight mb-1">
                       First Observed
                     </h3>
                     <div className="flex items-center text-gray-300">
@@ -440,7 +445,7 @@ export function IocDetailModal({
 
                   {/* Associated Alerts */}
                   <div className="space-y-2 border-t border-zinc-700 pt-4 mt-4">
-                    <h3 className="text-sm font-medium text-gray-400">
+                    <h3 className="text-base font-semibold text-gray-200 tracking-tight">
                       Associated Alerts
                     </h3>
                     {iocDetail?.alerts && iocDetail.alerts.length > 0 ? (
@@ -479,19 +484,19 @@ export function IocDetailModal({
                 {/* Scoring Rationale Tab Content */}
                 <TabsContent
                   value="scoring"
-                  className="space-y-6"
+                  className="space-y-6 sm:space-y-8"
                   role="tabpanel"
                   aria-labelledby="scoring-tab"
                 >
                   <div className="flex items-center mb-4">
                     <Braces className="h-5 w-5 mr-2 text-purple-400" />
-                    <h3 className="text-md font-medium text-gray-100">
+                    <h3 className="text-base font-semibold text-gray-200 tracking-tight">
                       Scoring Rationale
                     </h3>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="bg-zinc-800 p-4 rounded-md">
+                  <div className="space-y-4 sm:space-y-6">
+                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
                       <h4 className="text-sm font-medium text-gray-300 mb-2">
                         Threat Score: {ioc.confidence}/100
                       </h4>
@@ -502,7 +507,7 @@ export function IocDetailModal({
                       </p>
                     </div>
 
-                    <div className="bg-zinc-800 p-4 rounded-md">
+                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
                       <h4 className="text-sm font-medium text-gray-300 mb-2">
                         Key Factors
                       </h4>
@@ -513,12 +518,28 @@ export function IocDetailModal({
                             (factor, index) => (
                               <li key={index} className="flex items-start">
                                 <span className="text-red-600 mr-2">•</span>
-                                <span className="text-gray-300">
-                                  {factor.name} (
-                                  {(factor.weight * 100).toFixed(0)}%)
-                                  {factor.description &&
-                                    `: ${factor.description}`}
-                                </span>
+                                <div className="w-full">
+                                  <span className="text-gray-300">
+                                    {factor.name} (
+                                    {(factor.weight * 100).toFixed(0)}%)
+                                    {factor.description &&
+                                      `: ${factor.description}`}
+                                  </span>
+                                  <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                    <div
+                                      className={`h-2 rounded ${
+                                        factor.weight > 0.7
+                                          ? "bg-red-500"
+                                          : factor.weight > 0.4
+                                            ? "bg-yellow-500"
+                                            : "bg-blue-500"
+                                      }`}
+                                      style={{
+                                        width: `${factor.weight * 100}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               </li>
                             ),
                           )
@@ -526,30 +547,54 @@ export function IocDetailModal({
                           <>
                             <li className="flex items-start">
                               <span className="text-red-600 mr-2">•</span>
-                              <span className="text-gray-300">
-                                Pattern matches known malicious {ioc.type}{" "}
-                                signatures (83% similarity)
-                              </span>
+                              <div className="w-full">
+                                <span className="text-gray-300">
+                                  Pattern matches known malicious {ioc.type}{" "}
+                                  signatures (83% similarity)
+                                </span>
+                                <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                  <div
+                                    className="bg-red-500 h-2 rounded"
+                                    style={{ width: "83%" }}
+                                  />
+                                </div>
+                              </div>
                             </li>
                             <li className="flex items-start">
                               <span className="text-red-600 mr-2">•</span>
-                              <span className="text-gray-300">
-                                Association with known threat actor
-                                infrastructure
-                              </span>
+                              <div className="w-full">
+                                <span className="text-gray-300">
+                                  Association with known threat actor
+                                  infrastructure
+                                </span>
+                                <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                  <div
+                                    className="bg-yellow-500 h-2 rounded"
+                                    style={{ width: "65%" }}
+                                  />
+                                </div>
+                              </div>
                             </li>
                             <li className="flex items-start">
                               <span className="text-red-600 mr-2">•</span>
-                              <span className="text-gray-300">
-                                Recently observed in multiple attack campaigns
-                              </span>
+                              <div className="w-full">
+                                <span className="text-gray-300">
+                                  Recently observed in multiple attack campaigns
+                                </span>
+                                <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                  <div
+                                    className="bg-blue-500 h-2 rounded"
+                                    style={{ width: "45%" }}
+                                  />
+                                </div>
+                              </div>
                             </li>
                           </>
                         )}
                       </ul>
                     </div>
 
-                    <div className="bg-zinc-800 p-4 rounded-md">
+                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
                       <h4 className="text-sm font-medium text-gray-300 mb-2">
                         Model Information
                       </h4>
@@ -569,19 +614,19 @@ export function IocDetailModal({
                 {/* MITRE ATT&CK Tab Content */}
                 <TabsContent
                   value="mitre"
-                  className="space-y-6"
+                  className="space-y-6 sm:space-y-8"
                   role="tabpanel"
                   aria-labelledby="mitre-tab"
                 >
                   <div className="flex items-center mb-4">
                     <Target className="h-5 w-5 mr-2 text-blue-400" />
-                    <h3 className="text-md font-medium text-gray-100">
+                    <h3 className="text-base font-semibold text-gray-200 tracking-tight">
                       MITRE ATT&CK Framework Analysis
                     </h3>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="bg-zinc-800 p-4 rounded-md">
+                  <div className="space-y-4 sm:space-y-6">
+                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
                       <h4 className="text-sm font-medium text-gray-300 mb-2">
                         Tactics
                       </h4>
@@ -612,7 +657,7 @@ export function IocDetailModal({
                       </div>
                     </div>
 
-                    <div className="bg-zinc-800 p-4 rounded-md">
+                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
                       <h4 className="text-sm font-medium text-gray-300 mb-2">
                         Techniques
                       </h4>
@@ -622,14 +667,21 @@ export function IocDetailModal({
                           iocDetail.mitre_techniques.map((technique, index) => (
                             <li key={index} className="flex justify-between">
                               <span className="text-sm text-gray-300">
-                                {technique.id} - {technique.name}
+                                <a
+                                  href={`https://attack.mitre.org/techniques/${technique.id.toLowerCase()}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:underline"
+                                >
+                                  {technique.id} - {technique.name}
+                                </a>
                               </span>
                               <span
                                 className={`text-xs ${
                                   technique.confidence === "high"
                                     ? "bg-red-700/40 text-red-300"
                                     : technique.confidence === "medium"
-                                      ? "bg-yellow-600/40 text-yellow-300"
+                                      ? "bg-yellow-500/30 text-yellow-200"
                                       : "bg-blue-600/40 text-blue-300"
                                 } px-2 py-0.5 rounded-full`}
                               >
@@ -643,7 +695,14 @@ export function IocDetailModal({
                           <>
                             <li className="flex justify-between">
                               <span className="text-sm text-gray-300">
-                                T1566 - Phishing
+                                <a
+                                  href="https://attack.mitre.org/techniques/T1566"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:underline"
+                                >
+                                  T1566 - Phishing
+                                </a>
                               </span>
                               <span className="text-xs bg-red-700/40 text-red-300 px-2 py-0.5 rounded-full">
                                 High Confidence
@@ -651,9 +710,16 @@ export function IocDetailModal({
                             </li>
                             <li className="flex justify-between">
                               <span className="text-sm text-gray-300">
-                                T1071 - Application Layer Protocol
+                                <a
+                                  href="https://attack.mitre.org/techniques/T1071"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:underline"
+                                >
+                                  T1071 - Application Layer Protocol
+                                </a>
                               </span>
-                              <span className="text-xs bg-yellow-600/40 text-yellow-300 px-2 py-0.5 rounded-full">
+                              <span className="text-xs bg-yellow-500/30 text-yellow-200 px-2 py-0.5 rounded-full">
                                 Medium Confidence
                               </span>
                             </li>
@@ -666,12 +732,12 @@ export function IocDetailModal({
               </Tabs>
 
               {/* Footer */}
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-between border-t border-zinc-700 pt-4 mt-6">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between border-t border-zinc-700 pt-4 mt-6">
                 {/* Export Dropdown */}
                 <div className="relative">
                   <Button
                     variant="outline"
-                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0 flex items-center"
+                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0 flex items-center min-w-[100px] justify-center"
                     onClick={() =>
                       setIsExportDropdownOpen(!isExportDropdownOpen)
                     }
@@ -706,33 +772,43 @@ export function IocDetailModal({
                 <div className="flex flex-col-reverse sm:flex-row sm:space-x-2">
                   <Button
                     variant="outline"
-                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0"
+                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0 min-w-[100px]"
                     onClick={() => onOpenChange(false)}
                   >
                     Close
                   </Button>
                   <Button
-                    className="bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                    className="bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-600 focus:outline-none min-w-[100px] relative"
                     onClick={navigateToIocDetail}
+                    aria-label="Copy link to clipboard"
                   >
-                    <Copy className="h-4 w-4 mr-2" />
-                    {isCopied ? "Link Copied!" : "Copy Shareable Link"}
+                    <Link2 className="h-4 w-4 mr-2" />
+                    {isCopied ? "Copied!" : "Copy Link"}
+                    {/* Add link copied tooltip */}
+                    <span
+                      className={`absolute -top-9 right-1/2 translate-x-1/2 px-2 py-1 bg-zinc-800 text-xs text-gray-200 rounded shadow transition-opacity duration-300 ${
+                        isCopied ? "opacity-100" : "opacity-0"
+                      }`}
+                      aria-live="polite"
+                    >
+                      Link copied to clipboard!
+                    </span>
                   </Button>
                   <Button
                     variant="outline"
-                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0"
+                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0 min-w-[100px]"
                     onClick={openInNewTab}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in New Tab
+                    Open
                   </Button>
                   <Button
                     variant="outline"
-                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0"
+                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0 min-w-[100px]"
                     onClick={viewInThreatIntelligence}
                   >
                     <Target className="h-4 w-4 mr-2" />
-                    View in Threat Intelligence
+                    View
                   </Button>
                 </div>
               </div>
