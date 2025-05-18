@@ -1,0 +1,5 @@
+Starting API server on port 5056
+ * Serving Flask app 'api_server'
+ * Debug mode: on
+Address already in use
+Port 5056 is in use by another program. Either identify and stop that program, or start the server with a different port.

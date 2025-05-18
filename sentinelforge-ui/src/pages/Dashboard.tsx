@@ -39,7 +39,7 @@ export function Dashboard() {
   const [currentPage, setCurrentPage] = useState(0);
   const pageSize = 10; // Fixed page size for now
 
-  // Fetch IOC data
+  // Fetch IOC data with filters
   const { iocs, isLoading, isError } = useIocs(filters);
 
   // Check for IOC ID in query params for direct opening
@@ -77,8 +77,12 @@ export function Dashboard() {
 
       // Default string comparison for other fields
       return sortDirection === "asc"
-        ? (a[sortColumn]?.toString() ?? "").localeCompare(b[sortColumn]?.toString() ?? "")
-        : (b[sortColumn]?.toString() ?? "").localeCompare(a[sortColumn]?.toString() ?? "");
+        ? (a[sortColumn]?.toString() ?? "").localeCompare(
+            b[sortColumn]?.toString() ?? "",
+          )
+        : (b[sortColumn]?.toString() ?? "").localeCompare(
+            a[sortColumn]?.toString() ?? "",
+          );
     });
   }, [iocs, sortColumn, sortDirection, isLoading]);
 
@@ -203,23 +207,8 @@ export function Dashboard() {
     return data;
   };
 
-  const handleIocRowClick = (ioc: IOCData) => {
-    setSelectedIocId(ioc.id);
-    setIocModalOpen(true);
-
-    // Update URL with query parameter without navigation
-    const newParams = new URLSearchParams();
-    newParams.set("iocId", ioc.id);
-
-    // Update URL without full page reload
-    window.history.replaceState(
-      {},
-      "",
-      `${window.location.pathname}?${newParams.toString()}`,
-    );
-  };
-
   const handleFilterChange = (newFilters: IocFilters) => {
+    console.log("Filters changed:", newFilters);
     setFilters(newFilters);
     // Reset to first page when filters change
     setCurrentPage(0);
@@ -243,6 +232,10 @@ export function Dashboard() {
     if (filters.confidenceRange[0] > 0 || filters.confidenceRange[1] < 100) {
       count++;
     }
+
+    // Count date filters
+    if (filters.dateRange?.from) count++;
+    if (filters.dateRange?.to) count++;
 
     return count;
   };
@@ -275,6 +268,27 @@ export function Dashboard() {
   const handleNavigation = (url: string) => {
     navigate(url);
   };
+
+  // Log the paginated IOCs for debugging
+  console.log("Dashboard: visibleIocs being passed to table", paginatedIocs);
+
+  // Open modal when selectedIocId changes
+  useEffect(() => {
+    if (selectedIocId) {
+      setIocModalOpen(true);
+
+      // Update URL with query parameter without navigation
+      const newParams = new URLSearchParams();
+      newParams.set("iocId", selectedIocId);
+
+      // Update URL without full page reload
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}?${newParams.toString()}`,
+      );
+    }
+  }, [selectedIocId]);
 
   return (
     <DashboardLayout title="Threat Intelligence Dashboard">
@@ -447,7 +461,10 @@ export function Dashboard() {
               </div>
               <IocTable
                 className="w-full"
-                onRowClick={handleIocRowClick}
+                onRowClick={(ioc) => {
+                  console.log("[Dashboard] Row clicked:", ioc);
+                  setSelectedIocId(ioc.value);
+                }}
                 noInternalModal={true}
                 data={paginatedIocs}
                 isLoading={isLoading}

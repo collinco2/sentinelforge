@@ -3,12 +3,18 @@ import axios from "axios";
 import { IocFilters } from "../components/FilterSidebar";
 import { IOCData } from "../components/IocTable";
 
-// Base API URL
-const API_URL = "/api/iocs";
+// Base API URL - Configure for both direct and proxy connections
+const API_BASE_URL =
+  process.env.NODE_ENV === "production"
+    ? "/api/iocs"
+    : process.env.REACT_APP_API_URL || "http://localhost:5056/api/iocs";
 
 // Fetcher function for SWR
 const fetcher = async (url: string) => {
-  const response = await axios.get(url);
+  // Use relative URL if it's already a full URL (for direct calls)
+  const requestUrl = url.startsWith("http") ? url : url;
+  console.log("Fetching from:", requestUrl);
+  const response = await axios.get(requestUrl);
   return response.data;
 };
 
@@ -62,6 +68,16 @@ const createQueryString = (filters: IocFilters): string => {
   if (maxConfidence < 100) {
     // Convert confidence percentage to score (0-10 scale)
     params.append("max_score", String(maxConfidence / 10));
+  }
+
+  // Add date range filters if specified
+  if (filters.dateRange) {
+    if (filters.dateRange.from) {
+      params.append("from_date", filters.dateRange.from);
+    }
+    if (filters.dateRange.to) {
+      params.append("to_date", filters.dateRange.to);
+    }
   }
 
   const queryString = params.toString();
@@ -129,8 +145,11 @@ export function useIocs(filters: IocFilters): UseIocsReturn {
   // Ensure filters is always defined
   const safeFilters: IocFilters = filters || { ...defaultFilters };
 
+  // Create query string from filters
   const queryString = createQueryString(safeFilters);
-  const url = `${API_URL}${queryString}`;
+
+  // Complete URL with query parameters
+  const url = `${API_BASE_URL}${queryString}`;
 
   // Use SWR with proper caching and refresh strategy
   const { data, error, mutate } = useSWR(url, fetcher, {
@@ -151,6 +170,11 @@ export function useIocs(filters: IocFilters): UseIocsReturn {
       setTimeout(() => revalidate({ retryCount }), 5000);
     },
   });
+
+  // Log fetched data for debugging
+  if (data) {
+    console.log("Fetched IOCs from API:", data);
+  }
 
   // Transform and return the data
   const transformedData = data ? transformApiResponse(data) : [];

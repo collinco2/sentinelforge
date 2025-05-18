@@ -19,6 +19,7 @@ import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
 import { IocDetailModal } from "./IocDetailModal";
 import { IocTableFilters, IocFilters, defaultFilters } from "./IocTableFilters";
+import ExportReportButton from "./ExportReportButton";
 
 // IOC type definition
 export interface IOCData {
@@ -226,7 +227,7 @@ const PaginationControls = ({
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        <div className="mx-2 text-sm text-muted-foreground">Loading...</div>
+        <div className="mx-2 text-sm text-gray-200">Loading...</div>
 
         <Button
           variant="outline"
@@ -295,7 +296,7 @@ const PaginationControls = ({
       </div>
 
       {/* Mobile current page indicator */}
-      <div className="sm:hidden mx-2 text-sm text-muted-foreground">
+      <div className="sm:hidden mx-2 text-sm text-gray-200">
         Page {currentPage + 1} of {totalPages}
       </div>
 
@@ -345,7 +346,7 @@ const SortableColumnHeader = ({
 
   return (
     <th
-      className={`px-4 py-3 text-${align} text-sm font-medium text-muted-foreground cursor-pointer group transition-colors hover:bg-zinc-800`}
+      className={`px-4 py-3 text-${align} text-sm font-medium text-gray-200 cursor-pointer group transition-colors hover:bg-zinc-800`}
       onClick={() => onSort(column)}
       aria-sort={
         isActive
@@ -531,10 +532,12 @@ export function IocTable({
 
       // Default string comparison for other fields
       return effectiveSortDir === "asc"
-        ? (a[effectiveSortField]?.toString() ?? "")
-            .localeCompare(b[effectiveSortField]?.toString() ?? "")
-        : (b[effectiveSortField]?.toString() ?? "")
-            .localeCompare(a[effectiveSortField]?.toString() ?? "");
+        ? (a[effectiveSortField]?.toString() ?? "").localeCompare(
+            b[effectiveSortField]?.toString() ?? "",
+          )
+        : (b[effectiveSortField]?.toString() ?? "").localeCompare(
+            a[effectiveSortField]?.toString() ?? "",
+          );
     });
   }, [
     filteredData,
@@ -708,13 +711,25 @@ export function IocTable({
 
   return (
     <>
-      {/* Filters */}
-      <IocTableFilters
-        filters={filters}
-        onFiltersChange={setFilters}
-        onReset={handleResetFilters}
-        activeFilterCount={activeFilterCount}
-      />
+      {/* Filters with export option */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+        <IocTableFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          onReset={handleResetFilters}
+          activeFilterCount={activeFilterCount}
+        />
+
+        {/* Export button for table data */}
+        {paginatedData.length > 0 && (
+          <ExportReportButton
+            data={sortedData}
+            variant="outline"
+            size="default"
+            className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+          />
+        )}
+      </div>
 
       <div
         className={cn(
@@ -793,7 +808,7 @@ export function IocTable({
                   onSort={handleSort}
                   align="right"
                 />
-                <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
+                <th className="px-4 py-3 text-right text-sm font-medium text-gray-200">
                   <div className="flex items-center justify-end">Actions</div>
                 </th>
               </tr>
@@ -801,12 +816,12 @@ export function IocTable({
             <tbody>
               {paginatedData.map((ioc) => (
                 <tr
-                  key={ioc.id}
-                  className="border-b border-zinc-700 hover:bg-zinc-700/50 transition-colors cursor-pointer"
+                  key={ioc.value || ioc.id || `ioc-${Math.random()}`}
+                  className="bg-zinc-900 hover:bg-zinc-800 text-gray-100 border-b border-zinc-700 transition-colors cursor-pointer"
                   onClick={() => handleRowClick(ioc)}
                 >
-                  <td className="px-4 py-2 text-sm">
-                    <div className="font-mono text-foreground">{ioc.value}</div>
+                  <td className="px-4 py-2 text-gray-100 dark:text-gray-200">
+                    <code className="font-mono">{ioc.value}</code>
                   </td>
                   <td className="px-4 py-2 text-sm">
                     <span className={getTypeBadgeClass(ioc.type)}>
@@ -871,7 +886,7 @@ export function IocTable({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-4 py-8 text-center text-muted-foreground"
+                    className="px-4 py-8 text-center text-gray-200"
                   >
                     {sortedData.length === 0
                       ? "No IOCs match the current filters"
@@ -886,7 +901,7 @@ export function IocTable({
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="border-t border-zinc-700 px-4 py-3 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-gray-200">
               {isLoading ? (
                 <span className="animate-pulse">Loading results...</span>
               ) : externalControl && totalCount !== undefined ? (

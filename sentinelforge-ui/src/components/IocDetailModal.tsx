@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Clock,
   AlertTriangle,
@@ -19,12 +19,19 @@ import {
   Table,
   ChevronDown,
   Loader2,
+  ClipboardCopy,
+  CheckCircle,
 } from "lucide-react";
 import { IOCData } from "./IocTable";
 import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
-import { useIocDetail, IocDetailData } from "../hooks/useIocDetail";
+import {
+  useIocDetail,
+  useIocExplanation,
+  IocDetailData,
+} from "../hooks/useIocDetail";
+import ExportReportButton from "./ExportReportButton";
 
 interface IocDetailModalProps {
   ioc?: IOCData | null; // Optional now - can use either this or iocId
@@ -100,13 +107,25 @@ export function IocDetailModal({
 }: IocDetailModalProps) {
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [isCopied, setIsCopied] = useState(false);
-  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const [copiedText, setCopiedText] = useState<string>("");
 
   // If an ID is provided, fetch the details
   const effectiveIocId = iocId || (propIoc ? propIoc.id : null);
 
   // Use our new hook to fetch IOC details
-  const { iocDetail, isLoading, isError, error } = useIocDetail(effectiveIocId);
+  const {
+    iocDetail,
+    isLoading: isLoadingIoc,
+    isError: isIocError,
+    error: iocError,
+  } = useIocDetail(effectiveIocId);
+
+  // Use the new ML explanation hook
+  const {
+    explanation,
+    isLoading: isLoadingExplanation,
+    isError: isExplanationError,
+  } = useIocExplanation(effectiveIocId);
 
   // Use the prop IOC as fallback if no detail data yet
   const ioc = iocDetail || propIoc;
@@ -200,18 +219,6 @@ export function IocDetailModal({
     }
   };
 
-  const handleExportAsCsv = () => {
-    if (!ioc) return;
-    exportIocToCsv(ioc);
-    setIsExportDropdownOpen(false);
-  };
-
-  const handleExportAsPdf = () => {
-    // This would be implemented in a future update
-    console.log("Export as PDF not yet implemented");
-    setIsExportDropdownOpen(false);
-  };
-
   // Add openInNewTab function
   const openInNewTab = () => {
     if (!ioc) return;
@@ -236,7 +243,7 @@ export function IocDetailModal({
         Error Loading IOC Details
       </h3>
       <p className="text-gray-400 max-w-md mx-auto">
-        {error?.message ||
+        {iocError?.message ||
           "An error occurred while loading the IOC details. Please try again."}
       </p>
       <Button
@@ -258,6 +265,25 @@ export function IocDetailModal({
     } else {
       window.location.href = url;
     }
+  };
+
+  // Function to copy shareable link
+  const handleCopyShareLink = () => {
+    if (!ioc) return;
+
+    const shareUrl = `${window.location.origin}/share/ioc/${encodeURIComponent(
+      ioc.value,
+    )}`;
+
+    navigator.clipboard.writeText(shareUrl).then(
+      () => {
+        setCopiedText("share-link");
+        setTimeout(() => setCopiedText(""), 2000);
+      },
+      (err) => {
+        console.error("Could not copy text: ", err);
+      },
+    );
   };
 
   return (
@@ -310,9 +336,9 @@ export function IocDetailModal({
           </div>
 
           {/* Content - Conditionally render based on loading/error state */}
-          {isLoading ? (
+          {isLoadingIoc ? (
             renderLoading()
-          ) : isError ? (
+          ) : isIocError ? (
             renderError()
           ) : !ioc ? (
             <div className="text-center py-8 text-gray-400">
@@ -490,124 +516,203 @@ export function IocDetailModal({
                 >
                   <div className="flex items-center mb-4">
                     <Braces className="h-5 w-5 mr-2 text-purple-400" />
-                    <h3 className="text-base font-semibold text-gray-200 tracking-tight">
+                    <h3 className="text-md font-medium text-gray-100">
                       Scoring Rationale
                     </h3>
                   </div>
 
                   <div className="space-y-4 sm:space-y-6">
-                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
-                      <h4 className="text-sm font-medium text-gray-300 mb-2">
-                        Threat Score: {ioc.confidence}/100
-                      </h4>
-                      <p className="text-sm text-gray-400">
-                        This IOC was analyzed using our ML model and received a{" "}
-                        {ioc.severity} threat score based on the following
-                        factors:
-                      </p>
-                    </div>
+                    {isLoadingExplanation ? (
+                      <div className="bg-zinc-800 p-4 sm:p-5 rounded-md flex items-center justify-center py-12">
+                        <Loader2 className="h-8 w-8 text-blue-400 animate-spin mr-2" />
+                        <span className="text-gray-300">
+                          Analyzing with ML model...
+                        </span>
+                      </div>
+                    ) : isExplanationError ? (
+                      <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
+                        <div className="flex items-center text-red-400 mb-2">
+                          <AlertTriangle className="h-5 w-5 mr-2" />
+                          <h4 className="text-sm font-medium">
+                            Error Loading ML Explanation
+                          </h4>
+                        </div>
+                        <p className="text-sm text-gray-400">
+                          The ML model was unable to provide an explanation.
+                          Using baseline scoring instead.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            ML Threat Score:{" "}
+                            {explanation?.score
+                              ? Math.round(explanation.score * 100)
+                              : ioc.confidence}
+                            /100
+                          </h4>
+                          <div className="flex items-center mb-4">
+                            <div className="w-full bg-zinc-700/50 rounded-full h-2 mr-3 overflow-hidden border border-zinc-600">
+                              <div
+                                className={`h-full rounded-full ${getConfidenceColor(explanation?.score ? Math.round(explanation.score * 100) : ioc.confidence)}`}
+                                style={{
+                                  width: `${explanation?.score ? Math.round(explanation.score * 100) : ioc.confidence}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-sm text-white font-medium">
+                              {explanation?.score
+                                ? Math.round(explanation.score * 100)
+                                : ioc.confidence}
+                              %
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-400">
+                            {explanation?.explanation?.summary ||
+                              "This IOC was analyzed using our ML model based on its features and observed behavior."}
+                          </p>
+                        </div>
 
-                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
-                      <h4 className="text-sm font-medium text-gray-300 mb-2">
-                        Key Factors
-                      </h4>
-                      <ul className="space-y-2 text-sm">
-                        {iocDetail?.scoring_rationale?.factors &&
-                        iocDetail.scoring_rationale.factors.length > 0 ? (
-                          iocDetail.scoring_rationale.factors.map(
-                            (factor, index) => (
-                              <li key={index} className="flex items-start">
-                                <span className="text-red-600 mr-2">•</span>
-                                <div className="w-full">
-                                  <span className="text-gray-300">
-                                    {factor.name} (
-                                    {(factor.weight * 100).toFixed(0)}%)
-                                    {factor.description &&
-                                      `: ${factor.description}`}
-                                  </span>
-                                  <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
-                                    <div
-                                      className={`h-2 rounded ${
-                                        factor.weight > 0.7
-                                          ? "bg-red-500"
-                                          : factor.weight > 0.4
-                                            ? "bg-yellow-500"
-                                            : "bg-blue-500"
-                                      }`}
-                                      style={{
-                                        width: `${factor.weight * 100}%`,
-                                      }}
-                                    />
+                        <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            Key Factors
+                          </h4>
+                          <ul className="space-y-2 text-sm">
+                            {explanation?.explanation?.feature_breakdown &&
+                            explanation.explanation.feature_breakdown.length >
+                              0 ? (
+                              explanation.explanation.feature_breakdown.map(
+                                (factor, index) => (
+                                  <li key={index} className="flex items-start">
+                                    <span className="text-red-600 mr-2">•</span>
+                                    <div className="w-full">
+                                      <span className="text-gray-300">
+                                        {factor.feature}{" "}
+                                        {factor.value
+                                          ? `(${factor.value})`
+                                          : ""}
+                                      </span>
+                                      <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                        <div
+                                          className={`h-2 rounded ${
+                                            factor.weight > 0.5
+                                              ? "bg-red-500"
+                                              : factor.weight > 0.2
+                                                ? "bg-yellow-500"
+                                                : factor.weight > 0
+                                                  ? "bg-blue-500"
+                                                  : "bg-gray-500"
+                                          }`}
+                                          style={{
+                                            width: `${Math.abs(factor.weight) * 100}%`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </li>
+                                ),
+                              )
+                            ) : iocDetail?.scoring_rationale?.factors &&
+                              iocDetail.scoring_rationale.factors.length > 0 ? (
+                              iocDetail.scoring_rationale.factors.map(
+                                (factor, index) => (
+                                  <li key={index} className="flex items-start">
+                                    <span className="text-red-600 mr-2">•</span>
+                                    <div className="w-full">
+                                      <span className="text-gray-300">
+                                        {factor.name} (
+                                        {(factor.weight * 100).toFixed(0)}%)
+                                        {factor.description &&
+                                          `: ${factor.description}`}
+                                      </span>
+                                      <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                        <div
+                                          className={`h-2 rounded ${
+                                            factor.weight > 0.7
+                                              ? "bg-red-500"
+                                              : factor.weight > 0.4
+                                                ? "bg-yellow-500"
+                                                : "bg-blue-500"
+                                          }`}
+                                          style={{
+                                            width: `${factor.weight * 100}%`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </li>
+                                ),
+                              )
+                            ) : (
+                              <>
+                                <li className="flex items-start">
+                                  <span className="text-red-600 mr-2">•</span>
+                                  <div className="w-full">
+                                    <span className="text-gray-300">
+                                      Pattern matches known malicious {ioc.type}{" "}
+                                      signatures (83% similarity)
+                                    </span>
+                                    <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                      <div
+                                        className="bg-red-500 h-2 rounded"
+                                        style={{ width: "83%" }}
+                                      />
+                                    </div>
                                   </div>
-                                </div>
-                              </li>
-                            ),
-                          )
-                        ) : (
-                          <>
-                            <li className="flex items-start">
-                              <span className="text-red-600 mr-2">•</span>
-                              <div className="w-full">
-                                <span className="text-gray-300">
-                                  Pattern matches known malicious {ioc.type}{" "}
-                                  signatures (83% similarity)
-                                </span>
-                                <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
-                                  <div
-                                    className="bg-red-500 h-2 rounded"
-                                    style={{ width: "83%" }}
-                                  />
-                                </div>
-                              </div>
-                            </li>
-                            <li className="flex items-start">
-                              <span className="text-red-600 mr-2">•</span>
-                              <div className="w-full">
-                                <span className="text-gray-300">
-                                  Association with known threat actor
-                                  infrastructure
-                                </span>
-                                <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
-                                  <div
-                                    className="bg-yellow-500 h-2 rounded"
-                                    style={{ width: "65%" }}
-                                  />
-                                </div>
-                              </div>
-                            </li>
-                            <li className="flex items-start">
-                              <span className="text-red-600 mr-2">•</span>
-                              <div className="w-full">
-                                <span className="text-gray-300">
-                                  Recently observed in multiple attack campaigns
-                                </span>
-                                <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
-                                  <div
-                                    className="bg-blue-500 h-2 rounded"
-                                    style={{ width: "45%" }}
-                                  />
-                                </div>
-                              </div>
-                            </li>
-                          </>
-                        )}
-                      </ul>
-                    </div>
+                                </li>
+                                <li className="flex items-start">
+                                  <span className="text-red-600 mr-2">•</span>
+                                  <div className="w-full">
+                                    <span className="text-gray-300">
+                                      Association with known threat actor
+                                      infrastructure
+                                    </span>
+                                    <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                      <div
+                                        className="bg-yellow-500 h-2 rounded"
+                                        style={{ width: "65%" }}
+                                      />
+                                    </div>
+                                  </div>
+                                </li>
+                                <li className="flex items-start">
+                                  <span className="text-red-600 mr-2">•</span>
+                                  <div className="w-full">
+                                    <span className="text-gray-300">
+                                      Recently observed in multiple attack
+                                      campaigns
+                                    </span>
+                                    <div className="w-full bg-zinc-700/50 rounded h-2 mt-1 overflow-hidden border border-zinc-600">
+                                      <div
+                                        className="bg-blue-500 h-2 rounded"
+                                        style={{ width: "45%" }}
+                                      />
+                                    </div>
+                                  </div>
+                                </li>
+                              </>
+                            )}
+                          </ul>
+                        </div>
 
-                    <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
-                      <h4 className="text-sm font-medium text-gray-300 mb-2">
-                        Model Information
-                      </h4>
-                      <p className="text-xs text-gray-400">
-                        This analysis was performed using SentinelForge's Neural
-                        Threat Detection{" "}
-                        {iocDetail?.scoring_rationale?.model_version || "v2.3"},
-                        last updated{" "}
-                        {iocDetail?.scoring_rationale?.model_last_updated ||
-                          "7 days ago"}
-                        .
-                      </p>
-                    </div>
+                        <div className="bg-zinc-800 p-4 sm:p-5 rounded-md">
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            Model Information
+                          </h4>
+                          <p className="text-xs text-gray-400">
+                            This analysis was performed using SentinelForge's ML
+                            Threat Scoring Model{" "}
+                            {iocDetail?.scoring_rationale?.model_version ||
+                              "v2.3"}
+                            , last updated{" "}
+                            {iocDetail?.scoring_rationale?.model_last_updated ||
+                              "7 days ago"}
+                            .
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -733,40 +838,33 @@ export function IocDetailModal({
 
               {/* Footer */}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between border-t border-zinc-700 pt-4 mt-6">
-                {/* Export Dropdown */}
-                <div className="relative">
+                {/* Export Options */}
+                <div className="flex space-x-2">
+                  <ExportReportButton
+                    data={ioc}
+                    variant="outline"
+                    size="default"
+                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0"
+                  />
+
+                  {/* Share Link Button */}
                   <Button
                     variant="outline"
-                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0 flex items-center min-w-[100px] justify-center"
-                    onClick={() =>
-                      setIsExportDropdownOpen(!isExportDropdownOpen)
-                    }
+                    className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none mt-2 sm:mt-0"
+                    onClick={handleCopyShareLink}
                   >
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                    <ChevronDown className="h-4 w-4 ml-2" />
+                    {copiedText === "share-link" ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                        <span>Link Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardCopy className="h-4 w-4 mr-2" />
+                        <span>Copy Share Link</span>
+                      </>
+                    )}
                   </Button>
-
-                  {isExportDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-40 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-10">
-                      <div className="p-1">
-                        <button
-                          className="w-full text-left px-2 py-1.5 flex items-center text-sm text-gray-300 hover:bg-zinc-700 rounded"
-                          onClick={handleExportAsPdf}
-                        >
-                          <FileIcon className="h-4 w-4 mr-2" />
-                          Export as PDF
-                        </button>
-                        <button
-                          className="w-full text-left px-2 py-1.5 flex items-center text-sm text-gray-300 hover:bg-zinc-700 rounded"
-                          onClick={handleExportAsCsv}
-                        >
-                          <Table className="h-4 w-4 mr-2" />
-                          Export as CSV
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex flex-col-reverse sm:flex-row sm:space-x-2">

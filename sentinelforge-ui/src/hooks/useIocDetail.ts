@@ -38,9 +38,25 @@ export interface IocDetailData extends IOCData {
   }>;
 }
 
+// ML model explanation interface
+export interface IocExplanationData {
+  value: string;
+  score: number; // 0-1 normalized score
+  explanation: {
+    summary: string;
+    feature_breakdown: Array<{
+      feature: string;
+      value: string;
+      weight: number;
+    }>;
+  };
+  error?: string;
+}
+
 // Fetcher function for SWR
 const fetcher = async (url: string) => {
   try {
+    console.log("[useIocDetail] Fetching URL:", url);
     const response = await axios.get(url);
     return response.data;
   } catch (error) {
@@ -151,19 +167,35 @@ interface UseIocDetailReturn {
 export function useIocDetail(
   iocId: string | null | undefined,
 ): UseIocDetailReturn {
+  console.log("[useIocDetail] Raw ID received:", iocId);
+
   // Don't fetch if no ID is provided
   const shouldFetch = !!iocId;
-  const url = shouldFetch ? `/api/ioc/${iocId}` : null;
+  const encodedId = iocId ? encodeURIComponent(iocId) : "";
 
-  const { data, error, mutate } = useSWR(url, fetcher, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: true,
-    refreshInterval: 0, // Don't auto-refresh for details
-    shouldRetryOnError: true,
-    errorRetryCount: 2,
-    dedupingInterval: 10000, // 10 seconds
-    focusThrottleInterval: 5000,
-  });
+  // Add console.log to debug the ID being fetched
+  console.log(
+    `[useIocDetail] Fetching IOC ID "${iocId}" as URL: /api/ioc?value=${encodedId}`,
+  );
+
+  console.log(
+    "[useIocDetail] Fetching from:",
+    iocId ? `/api/ioc?value=${encodeURIComponent(iocId)}` : "null",
+  );
+
+  const { data, error, mutate } = useSWR(
+    iocId ? `/api/ioc?value=${encodedId}` : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      refreshInterval: 0, // Don't auto-refresh for details
+      shouldRetryOnError: true,
+      errorRetryCount: 2,
+      dedupingInterval: 10000, // 10 seconds
+      focusThrottleInterval: 5000,
+    },
+  );
 
   // Transform the data if it exists
   const transformedData = data ? transformResponse(data) : null;
@@ -174,5 +206,47 @@ export function useIocDetail(
     isError: !!error,
     error: error as Error | null,
     mutate,
+  };
+}
+
+interface UseIocExplanationReturn {
+  explanation: IocExplanationData | null;
+  isLoading: boolean;
+  isError: any;
+  error: Error | null;
+}
+
+export function useIocExplanation(
+  iocId: string | null | undefined,
+): UseIocExplanationReturn {
+  console.log("[useIocExplanation] Raw ID received:", iocId);
+
+  // Don't fetch if no ID is provided
+  const shouldFetch = !!iocId;
+  const encodedId = iocId ? encodeURIComponent(iocId) : "";
+
+  console.log(
+    "[useIocExplanation] Fetching from:",
+    iocId ? `/api/explain/${encodedId}` : "null",
+  );
+
+  const { data, error } = useSWR(
+    iocId ? `/api/explain/${encodedId}` : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      refreshInterval: 0,
+      shouldRetryOnError: true,
+      errorRetryCount: 1,
+      dedupingInterval: 30000, // 30 seconds - ML model explanations are expensive
+    },
+  );
+
+  return {
+    explanation: data as IocExplanationData | null,
+    isLoading: shouldFetch && !error && !data,
+    isError: !!error,
+    error: error as Error | null,
   };
 }

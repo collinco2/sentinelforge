@@ -19,6 +19,10 @@ export interface IocFilters {
     low: boolean;
   };
   confidenceRange: [number, number]; // [min, max]
+  dateRange?: {
+    from: string | null;
+    to: string | null;
+  };
 }
 
 // Default filters
@@ -37,6 +41,10 @@ export const defaultFilters: IocFilters = {
     low: false,
   },
   confidenceRange: [0, 100],
+  dateRange: {
+    from: null,
+    to: null,
+  },
 };
 
 interface FilterSidebarProps {
@@ -50,50 +58,62 @@ export function FilterSidebar({
   onFilterChange,
   className = "",
 }: FilterSidebarProps) {
-  // Local state to track changes before applying
-  const [localFilters, setLocalFilters] = useState<IocFilters>(filters);
-
   // Update local state when a type checkbox changes
   const handleTypeChange = (type: keyof IocFilters["types"]) => {
-    setLocalFilters((prev) => ({
-      ...prev,
+    const updatedFilters = {
+      ...filters,
       types: {
-        ...prev.types,
-        [type]: !prev.types[type],
+        ...filters.types,
+        [type]: !filters.types[type],
       },
-    }));
+    };
+    onFilterChange(updatedFilters);
   };
 
   // Update local state when a severity checkbox changes
   const handleSeverityChange = (severity: keyof IocFilters["severities"]) => {
-    setLocalFilters((prev) => ({
-      ...prev,
+    const updatedFilters = {
+      ...filters,
       severities: {
-        ...prev.severities,
-        [severity]: !prev.severities[severity],
+        ...filters.severities,
+        [severity]: !filters.severities[severity],
       },
-    }));
+    };
+    onFilterChange(updatedFilters);
   };
 
-  // Update local state when confidence range changes
+  // Update state when confidence range changes
   const handleConfidenceChange = (value: number[]) => {
-    setLocalFilters((prev) => ({
-      ...prev,
-      confidenceRange: [value[0], value[1]],
-    }));
+    const updatedFilters = {
+      ...filters,
+      confidenceRange: [value[0], value[1]] as [number, number],
+    };
+    onFilterChange(updatedFilters);
   };
 
-  // Apply filters
-  const handleApplyFilters = () => {
-    onFilterChange(localFilters);
+  // Update state when date range changes
+  const handleDateRangeChange = (field: "from" | "to", value: string) => {
+    const updatedFilters = {
+      ...filters,
+      dateRange: {
+        from:
+          field === "from" ? value || null : filters.dateRange?.from || null,
+        to: field === "to" ? value || null : filters.dateRange?.to || null,
+      },
+    };
+    onFilterChange(updatedFilters);
   };
 
   // Clear all filters
   const handleClearFilters = () => {
-    const clearedFilters = { ...defaultFilters };
-    setLocalFilters(clearedFilters);
-    onFilterChange(clearedFilters);
+    onFilterChange(defaultFilters);
   };
+
+  // Get today's date and the date from 30 days ago in YYYY-MM-DD format
+  const today = new Date().toISOString().split("T")[0];
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
 
   return (
     <aside
@@ -106,7 +126,7 @@ export function FilterSidebar({
         <div>
           <h3 className="text-sm font-medium text-gray-400 mb-2">IOC Type</h3>
           <div className="space-y-2">
-            {Object.entries(localFilters.types).map(([type, isChecked]) => (
+            {Object.entries(filters.types).map(([type, isChecked]) => (
               <label
                 key={type}
                 className="flex items-center space-x-2 text-gray-300 text-sm cursor-pointer hover:text-gray-100"
@@ -129,64 +149,77 @@ export function FilterSidebar({
         <div>
           <h3 className="text-sm font-medium text-gray-400 mb-2">Severity</h3>
           <div className="space-y-2">
-            {Object.entries(localFilters.severities).map(
-              ([severity, isChecked]) => (
-                <label
-                  key={severity}
-                  className="flex items-center space-x-2 text-gray-300 text-sm cursor-pointer hover:text-gray-100"
-                >
-                  <input
-                    type="checkbox"
-                    className="rounded bg-zinc-800 border-zinc-700 text-blue-600 focus:ring-blue-600 focus:ring-offset-zinc-900"
-                    checked={isChecked}
-                    onChange={() =>
-                      handleSeverityChange(
-                        severity as keyof IocFilters["severities"],
-                      )
-                    }
-                  />
-                  <span className="capitalize">{severity}</span>
-                </label>
-              ),
-            )}
+            {Object.entries(filters.severities).map(([severity, isChecked]) => (
+              <label
+                key={severity}
+                className="flex items-center space-x-2 text-gray-300 text-sm cursor-pointer hover:text-gray-100"
+              >
+                <input
+                  type="checkbox"
+                  className="rounded bg-zinc-800 border-zinc-700 text-blue-600 focus:ring-blue-600 focus:ring-offset-zinc-900"
+                  checked={isChecked}
+                  onChange={() =>
+                    handleSeverityChange(
+                      severity as keyof IocFilters["severities"],
+                    )
+                  }
+                />
+                <span className="capitalize">{severity}</span>
+              </label>
+            ))}
           </div>
         </div>
 
         {/* Confidence Score Filter Section */}
         <div>
           <h3 className="text-sm font-medium text-gray-400 mb-2">
-            Confidence Score: {localFilters.confidenceRange[0]} -{" "}
-            {localFilters.confidenceRange[1]}
+            Confidence Score: {filters.confidenceRange[0]} -{" "}
+            {filters.confidenceRange[1]}
           </h3>
           <Slider
             className="mt-2"
             min={0}
             max={100}
             step={5}
-            value={[
-              localFilters.confidenceRange[0],
-              localFilters.confidenceRange[1],
-            ]}
+            value={[filters.confidenceRange[0], filters.confidenceRange[1]]}
             onValueChange={handleConfidenceChange}
           />
         </div>
 
-        {/* Action Buttons */}
-        <div className="pt-4 space-y-2">
-          <Button
-            type="button"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={handleApplyFilters}
-          >
-            Apply Filters
-          </Button>
+        {/* Date Range Filter Section */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-400 mb-2">Date Range</h3>
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-400">From</label>
+              <input
+                type="date"
+                className="w-full rounded bg-zinc-800 border-zinc-700 text-gray-300 focus:ring-blue-600 focus:ring-offset-zinc-900"
+                value={filters.dateRange?.from || ""}
+                onChange={(e) => handleDateRangeChange("from", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-400">To</label>
+              <input
+                type="date"
+                className="w-full rounded bg-zinc-800 border-zinc-700 text-gray-300 focus:ring-blue-600 focus:ring-offset-zinc-900"
+                value={filters.dateRange?.to || ""}
+                onChange={(e) => handleDateRangeChange("to", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Clear Filters Button */}
+        <div className="pt-4">
           <Button
             type="button"
             variant="outline"
             className="w-full border-zinc-700 text-gray-300 hover:bg-zinc-800"
             onClick={handleClearFilters}
           >
-            Clear All
+            Clear All Filters
           </Button>
         </div>
       </form>
