@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SentinelForge API CORS Test</title>
+</head>
+<body>
+    <h1>SentinelForge API CORS Test</h1>
+    <button id="test-btn">Test API Connection</button>
+    <pre id="result"></pre>
+
+    <script>
+        document.getElementById('test-btn').addEventListener('click', async () => {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Testing API connection...';
+            
+            try {
+                const response = await fetch('http://localhost:5056/api/iocs');
+                const data = await response.json();
+                resultEl.textContent = 'Success! API Response:\n' + JSON.stringify(data, null, 2);
+            } catch (err) {
+                resultEl.textContent = 'Error connecting to API:\n' + err.message;
+            }
+        });
+    </script>
+</body>
+</html> 

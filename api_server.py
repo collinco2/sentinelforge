@@ -456,7 +456,7 @@ def get_ioc_by_value(ioc_value):
     Returns:
         dict or None: The IOC object if found, or None if not found
     """
-    print(f"[API] Searching for IOC case-insensitively")
+    print("[API] Searching for IOC case-insensitively")
     ioc_value_lower = ioc_value.lower()
     print(f"[API] Lowercase search value: '{ioc_value_lower}'")
 
@@ -525,7 +525,6 @@ def explain_ml(ioc_value):
 
     try:
         from sentinelforge.scoring import score_ioc_with_explanation
-        from sentinelforge.ml.scoring_model import extract_features
 
         ioc_type = ioc.get("ioc_type", "unknown")
         source_feeds = [ioc.get("source_feed", "dummy")]
@@ -585,7 +584,7 @@ def explain_ml(ioc_value):
             },
         }
 
-        print(f"[API] ML explanation generated successfully")
+        print("[API] ML explanation generated successfully")
         return jsonify(response)
 
     except ImportError as e:
@@ -907,7 +906,7 @@ def not_found(error):
 # Initialize IOCS list at startup
 def initialize_iocs():
     """Load initial IOC data into memory at server startup."""
-    global IOCS
+    global IOCS  # This declaration is fine since IOCS is defined at module level
     print("[API] Initializing IOCs list at startup...")
 
     try:

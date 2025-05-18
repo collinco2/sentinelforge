@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
-import { IOCData } from "./IocTable";
 
 // Define the filter structure
 export interface IocFilters {
@@ -110,10 +109,11 @@ export function FilterSidebar({
   };
 
   // Get today's date and the date from 30 days ago in YYYY-MM-DD format
-  const today = new Date().toISOString().split("T")[0];
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
+  // Commented out for now as they're not being used
+  // const today = new Date().toISOString().split("T")[0];
+  // const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  //   .toISOString()
+  //   .split("T")[0];
 
   return (
     <aside

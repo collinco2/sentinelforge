@@ -3,18 +3,13 @@ import axios from "axios";
 import { IocFilters } from "../components/FilterSidebar";
 import { IOCData } from "../components/IocTable";
 
-// Base API URL - Configure for both direct and proxy connections
-const API_BASE_URL =
-  process.env.NODE_ENV === "production"
-    ? "/api/iocs"
-    : process.env.REACT_APP_API_URL || "http://localhost:5056/api/iocs";
+// Base API URL - Use the proxy URL in all environments
+const API_BASE_URL = "/api/iocs";
 
 // Fetcher function for SWR
 const fetcher = async (url: string) => {
-  // Use relative URL if it's already a full URL (for direct calls)
-  const requestUrl = url.startsWith("http") ? url : url;
-  console.log("Fetching from:", requestUrl);
-  const response = await axios.get(requestUrl);
+  console.log("Fetching from:", url);
+  const response = await axios.get(url);
   return response.data;
 };
 
