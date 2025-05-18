@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify, request, redirect, url_for
+from flask import Flask, jsonify, request, redirect, url_for, Blueprint
 from flask_cors import CORS
 import os
 import sqlite3
@@ -25,8 +25,6 @@ CORS(
 IOCS = []
 
 # Create a Blueprint for IOC-related routes
-from flask import Blueprint
-
 ioc_bp = Blueprint("ioc", __name__)
 
 
