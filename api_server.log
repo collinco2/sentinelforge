@@ -1,5 +1,17 @@
-Starting API server on port 5056
+Starting API server on port 5059
+[API] Initializing IOCs list at startup...
+Database path: /Users/Collins/sentinelforge/ioc_store.db
+Database exists: True
+[API] Loaded 100 IOCs from database
  * Serving Flask app 'api_server'
  * Debug mode: on
-Address already in use
-Port 5056 is in use by another program. Either identify and stop that program, or start the server with a different port.
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5059
+ * Running on http://192.168.1.164:5059
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 104-381-140
+127.0.0.1 - - [31/May/2025 15:17:27] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [31/May/2025 15:19:47] "GET /api/iocs HTTP/1.1" 200 -

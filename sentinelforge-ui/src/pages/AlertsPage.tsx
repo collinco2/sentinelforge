@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
@@ -97,17 +97,7 @@ const AlertsPage: React.FC = () => {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
 
-  // Reset pagination when filters change
-  useEffect(() => {
-    setPage(0);
-  }, [searchTerm, severityFilter, startDate, endDate]);
-
-  // Fetch alerts when filters or pagination changes
-  useEffect(() => {
-    fetchAlerts();
-  }, [page, pageSize, searchTerm, severityFilter, startDate, endDate]);
-
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
     setIsLoading(true);
     setIsError(false);
     try {
@@ -161,7 +151,17 @@ const AlertsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, pageSize, searchTerm, severityFilter, startDate, endDate]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, severityFilter, startDate, endDate]);
+
+  // Fetch alerts when filters or pagination changes
+  useEffect(() => {
+    fetchAlerts();
+  }, [fetchAlerts]);
 
   const fetchAlertIocs = async (alertId: string) => {
     setDrawerLoading(true);

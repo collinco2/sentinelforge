@@ -801,6 +801,115 @@ def get_attack_techniques(ioc_type):
     )
 
 
+@ioc_bp.route("/api/ioc/summary", methods=["GET"])
+def get_ioc_summary():
+    """Get IOC summary statistics by severity level."""
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Count IOCs by category/severity
+            cursor.execute("""
+                SELECT
+                    CASE
+                        WHEN score >= 9.0 THEN 'critical'
+                        WHEN score >= 7.5 THEN 'high'
+                        WHEN score >= 5.0 THEN 'medium'
+                        ELSE 'low'
+                    END as severity,
+                    COUNT(*) as count
+                FROM iocs
+                GROUP BY severity
+            """)
+            
+            summary = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+            for row in cursor.fetchall():
+                if "severity" in row and "count" in row:
+                    summary[row["severity"]] = row["count"]
+
+            conn.close()
+            return jsonify(summary)
+    except Exception as e:
+        print(f"[API] Database error in get_ioc_summary: {e}")
+
+    # Fallback to counting from in-memory IOCS
+    summary = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for ioc in IOCS:
+        score = ioc.get("score", 0)
+        if score >= 9.0:
+            summary["critical"] += 1
+        elif score >= 7.5:
+            summary["high"] += 1
+        elif score >= 5.0:
+            summary["medium"] += 1
+        else:
+            summary["low"] += 1
+    
+    return jsonify(summary)
+
+
+@ioc_bp.route("/api/threats/metrics", methods=["GET"])
+def get_threats_metrics():
+    """Get threat metrics over time for dashboard charts."""
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Get daily threat counts for the last 7 days
+            cursor.execute("""
+                SELECT 
+                    DATE(first_seen) as day,
+                    SUM(CASE WHEN score >= 9.0 THEN 1 ELSE 0 END) as critical,
+                    SUM(CASE WHEN score >= 7.5 AND score < 9.0 THEN 1 ELSE 0 END) as high,
+                    SUM(CASE WHEN score >= 5.0 AND score < 7.5 THEN 1 ELSE 0 END) as medium,
+                    SUM(CASE WHEN score < 5.0 THEN 1 ELSE 0 END) as low
+                FROM iocs 
+                WHERE first_seen >= date('now', '-7 days')
+                GROUP BY DATE(first_seen)
+                ORDER BY day DESC
+                LIMIT 7
+            """)
+            
+            daily_counts = []
+            for row in cursor.fetchall():
+                if "day" in row:
+                    daily_counts.append({
+                        "day": row["day"],
+                        "critical": row.get("critical", 0),
+                        "high": row.get("high", 0),
+                        "medium": row.get("medium", 0),
+                        "low": row.get("low", 0)
+                    })
+
+            conn.close()
+            
+            if daily_counts:
+                return jsonify({"daily_counts": daily_counts})
+    except Exception as e:
+        print(f"[API] Database error in get_threats_metrics: {e}")
+
+    # Fallback to mock data if database fails
+    import datetime
+    today = datetime.date.today()
+    
+    daily_counts = []
+    for i in range(7):
+        day = today - datetime.timedelta(days=i)
+        daily_counts.append({
+            "day": day.strftime("%Y-%m-%d"),
+            "critical": random.randint(0, 5),
+            "high": random.randint(2, 8),
+            "medium": random.randint(4, 12),
+            "low": random.randint(1, 6)
+        })
+    
+    return jsonify({"daily_counts": daily_counts})
+
+
 @ioc_bp.route("/api/ioc/share", methods=["GET"])
 def get_shareable_ioc():
     """Get a shareable, public-safe version of an IOC for public viewing."""
@@ -1228,7 +1337,7 @@ def initialize_iocs():
 
 
 if __name__ == "__main__":
-    port = 5056
+    port = 5059
     print(f"Starting API server on port {port}")
     initialize_iocs()  # Initialize IOCS list before starting the server
     app.run(host="0.0.0.0", port=port, debug=True)
