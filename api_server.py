@@ -823,7 +823,7 @@ def get_ioc_summary():
                 FROM iocs
                 GROUP BY severity
             """)
-            
+
             summary = {"critical": 0, "high": 0, "medium": 0, "low": 0}
             for row in cursor.fetchall():
                 if "severity" in row and "count" in row:
@@ -846,7 +846,7 @@ def get_ioc_summary():
             summary["medium"] += 1
         else:
             summary["low"] += 1
-    
+
     return jsonify(summary)
 
 
@@ -873,20 +873,22 @@ def get_threats_metrics():
                 ORDER BY day DESC
                 LIMIT 7
             """)
-            
+
             daily_counts = []
             for row in cursor.fetchall():
                 if "day" in row:
-                    daily_counts.append({
-                        "day": row["day"],
-                        "critical": row.get("critical", 0),
-                        "high": row.get("high", 0),
-                        "medium": row.get("medium", 0),
-                        "low": row.get("low", 0)
-                    })
+                    daily_counts.append(
+                        {
+                            "day": row["day"],
+                            "critical": row.get("critical", 0),
+                            "high": row.get("high", 0),
+                            "medium": row.get("medium", 0),
+                            "low": row.get("low", 0),
+                        }
+                    )
 
             conn.close()
-            
+
             if daily_counts:
                 return jsonify({"daily_counts": daily_counts})
     except Exception as e:
@@ -894,19 +896,22 @@ def get_threats_metrics():
 
     # Fallback to mock data if database fails
     import datetime
+
     today = datetime.date.today()
-    
+
     daily_counts = []
     for i in range(7):
         day = today - datetime.timedelta(days=i)
-        daily_counts.append({
-            "day": day.strftime("%Y-%m-%d"),
-            "critical": random.randint(0, 5),
-            "high": random.randint(2, 8),
-            "medium": random.randint(4, 12),
-            "low": random.randint(1, 6)
-        })
-    
+        daily_counts.append(
+            {
+                "day": day.strftime("%Y-%m-%d"),
+                "critical": random.randint(0, 5),
+                "high": random.randint(2, 8),
+                "medium": random.randint(4, 12),
+                "low": random.randint(1, 6),
+            }
+        )
+
     return jsonify({"daily_counts": daily_counts})
 
 
