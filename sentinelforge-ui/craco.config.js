@@ -6,16 +6,28 @@ module.exports = {
       "@": path.resolve(__dirname, "src"),
     },
     configure: (webpackConfig) => {
-      // Disable ModuleScopePlugin to allow imports outside of src/
-      webpackConfig.resolve.plugins = webpackConfig.resolve.plugins.filter(
-        plugin => plugin.constructor.name !== 'ModuleScopePlugin'
+      const scopePluginIndex = webpackConfig.resolve.plugins.findIndex(
+        (plugin) => plugin.constructor.name === 'ModuleScopePlugin'
       );
-
+      if (scopePluginIndex !== -1) {
+        webpackConfig.resolve.plugins.splice(scopePluginIndex, 1);
+        console.log("Attempted to remove ModuleScopePlugin.");
+      } else {
+        console.log("ModuleScopePlugin not found.");
+      }
       return webpackConfig;
     },
   },
-  // Configure development server
   devServer: {
+    port: 3000,
+    host: 'localhost',
     hot: true,
+    open: false,
+    allowedHosts: 'all',
+    historyApiFallback: true,
+    setupMiddlewares: (middlewares, devServer) => {
+      // Custom middleware setup if needed
+      return middlewares;
+    },
   }
 };

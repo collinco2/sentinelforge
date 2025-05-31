@@ -1,15 +1,24 @@
-const { createProxyMiddleware } = require("http-proxy-middleware");
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
-module.exports = function (app) {
+module.exports = function(app) {
+  // Main API endpoints
   app.use(
-    "/api",
+    '/api',
     createProxyMiddleware({
-      target: "http://localhost:5056",
+      target: 'http://localhost:5059',
       changeOrigin: true,
-      pathRewrite: {
-        "^/api": "/api", // No rewrite needed
-      },
-      logLevel: "debug",
-    }),
+      pathRewrite: false,
+      logLevel: 'debug',
+    })
+  );
+
+  // Timeline API endpoints
+  app.use(
+    '/api/alerts/timeline',
+    createProxyMiddleware({
+      target: 'http://localhost:5101',
+      changeOrigin: true,
+      logLevel: 'debug',
+    })
   );
 };

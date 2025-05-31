@@ -7,12 +7,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Shield,
-  AlertTriangle,
-  Info,
   ExternalLink,
   Link,
-  Copy,
   Check,
 } from "lucide-react";
 import { Button } from "../components/ui/button";

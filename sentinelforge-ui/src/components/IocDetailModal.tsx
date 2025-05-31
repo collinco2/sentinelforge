@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Clock,
   AlertTriangle,
@@ -14,10 +14,6 @@ import {
   Braces,
   Copy,
   Check,
-  Download,
-  FileText as FileIcon,
-  Table,
-  ChevronDown,
   Loader2,
   ClipboardCopy,
   CheckCircle,
@@ -29,7 +25,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import {
   useIocDetail,
   useIocExplanation,
-  IocDetailData,
 } from "../hooks/useIocDetail";
 import ExportReportButton from "./ExportReportButton";
 
@@ -41,61 +36,6 @@ interface IocDetailModalProps {
   sourceContext?: string; // Optional param to track where modal was opened from
   onNavigate?: (url: string) => void; // Optional navigation handler
 }
-
-// Utility function to export IOC to CSV
-const exportIocToCsv = (ioc: IOCData | IocDetailData) => {
-  // Define alerts (use from IocDetailData if available)
-  const detailIoc = ioc as IocDetailData;
-  const alerts = detailIoc.alerts || [
-    { id: "1", name: "Network scan detected", timestamp: "2 hours ago" },
-    {
-      id: "2",
-      name: "Suspicious outbound connection",
-      timestamp: "4 hours ago",
-    },
-  ];
-
-  // Create CSV header and row
-  const headers = [
-    "Value",
-    "Type",
-    "Severity",
-    "Confidence",
-    "First Seen",
-    "Alerts",
-  ];
-  const alertsStr = alerts.map((a) => `${a.name} (${a.timestamp})`).join("; ");
-
-  const row = [
-    ioc.value,
-    ioc.type,
-    ioc.severity,
-    `${ioc.confidence}%`,
-    new Date(ioc.timestamp).toLocaleString(),
-    alertsStr,
-  ];
-
-  // Convert to CSV format
-  const csvContent = [
-    headers.join(","),
-    row.map((field) => `"${field.replace(/"/g, '""')}"`).join(","), // Escape quotes
-  ].join("\n");
-
-  // Create a Blob with the CSV content
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-
-  // Create a temporary link element and trigger the download
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", `ioc-${ioc.id}-details.csv`);
-  document.body.appendChild(link);
-  link.click();
-
-  // Clean up
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
 
 export function IocDetailModal({
   ioc: propIoc,

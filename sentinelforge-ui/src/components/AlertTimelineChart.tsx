@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,6 +14,7 @@ import {
 import { Line } from "react-chartjs-2";
 import "chart.js/auto";
 import { Spinner } from "./ui/spinner";
+import { useAlertTimeline, AlertTimelineDataPoint } from "../hooks/useAlertTimeline";
 
 // Register required chart components
 ChartJS.register(
@@ -26,23 +27,6 @@ ChartJS.register(
   Legend,
   TimeScale,
 );
-
-// Define the data structure
-export interface AlertTimelineDataPoint {
-  date: string;
-  count: number;
-}
-
-// Define the API response structure
-interface TimelineApiResponseItem {
-  date: string;
-  timestamp: number;
-  total: number;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-}
 
 interface AlertTimelineChartProps {
   title?: string;
@@ -61,88 +45,12 @@ export function AlertTimelineChart({
   startDate,
   endDate,
 }: AlertTimelineChartProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<AlertTimelineDataPoint[]>([]);
-  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
-
-  // Fetch timeline data
-  useEffect(() => {
-    setLoading(true);
-
-    // Build query parameters
-    const params = new URLSearchParams();
-    params.append("group_by", groupBy);
-    if (startDate) params.append("start_date", startDate.toString());
-    if (endDate) params.append("end_date", endDate.toString());
-
-    // Direct fetch to timeline API
-    fetch(`http://localhost:5101/api/alerts/timeline?${params.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to fetch (${res.status})`);
-        return res.json();
-      })
-      .then((responseData: TimelineApiResponseItem[]) => {
-        // Log the raw response for inspection
-        console.log("API Response:", responseData);
-
-        if (!responseData || !Array.isArray(responseData)) {
-          console.error("Invalid API response format:", responseData);
-          throw new Error("Invalid API response format");
-        }
-
-        if (responseData.length === 0) {
-          console.log("API returned empty data set");
-          setData([]);
-          setError(null);
-          setHasAttemptedFetch(true);
-          return;
-        }
-
-        // Log the first item structure to examine date formatting
-        if (responseData && responseData.length > 0) {
-          console.log("First item structure:", responseData[0]);
-
-          // Test date parsing
-          const sampleDate = responseData[0].date;
-          const sampleTimestamp = responseData[0].timestamp;
-
-          console.log("Sample date string:", sampleDate);
-          console.log("Sample timestamp:", sampleTimestamp);
-
-          if (sampleDate) {
-            console.log("Date parsed from string:", new Date(sampleDate));
-          }
-
-          if (sampleTimestamp) {
-            console.log(
-              "Date parsed from timestamp:",
-              new Date(sampleTimestamp * 1000),
-            );
-          }
-        }
-
-        // Transform the response data to match AlertTimelineDataPoint interface
-        const formatted = responseData.map((item: TimelineApiResponseItem) => ({
-          // Prefer timestamp if available (convert to string), fallback to date string
-          date: item.timestamp ? item.timestamp.toString() : item.date || "",
-          count: Number(item.total) || 0, // Default to 0 if total is missing or falsy
-        }));
-
-        setData(formatted);
-        setError(null);
-        setHasAttemptedFetch(true);
-      })
-      .catch((err) => {
-        console.error("Timeline fetch error:", err);
-        setError(`Failed to load alert timeline data: ${err.message}`);
-        setData([]);
-        setHasAttemptedFetch(true);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [groupBy, startDate, endDate]);
+  // Use the new hook for data fetching
+  const { data, loading, error, hasAttemptedFetch } = useAlertTimeline({
+    groupBy,
+    startDate,
+    endDate,
+  });
 
   // Helper function to check if a date is valid
   const isValidDate = (dateString: string | undefined | null): boolean => {

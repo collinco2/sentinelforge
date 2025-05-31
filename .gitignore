@@ -57,3 +57,11 @@ ioc_store.db
 
 # Data files (e.g., GeoIP DBs)
 data/
+
+# Service management files
+*.pid
+*.log
+timeline_data.json
+
+# React build files
+sentinelforge-ui/build/
