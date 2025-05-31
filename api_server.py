@@ -24,6 +24,9 @@ CORS(
 # Define global IOCS list to store IOC data
 IOCS = []
 
+# Define global ALERTS list to store Alert data
+ALERTS = []
+
 # Create a Blueprint for IOC-related routes
 ioc_bp = Blueprint("ioc", __name__)
 
@@ -995,6 +998,237 @@ def share_explain_ml(ioc_value):
     return jsonify(explanation)
 
 
+def generate_mock_alerts():
+    """Generate mock alerts for testing purposes."""
+    global ALERTS
+
+    # Sample mock alerts
+    mock_alerts = [
+        {
+            "id": "AL1",
+            "name": "Suspicious Network Connection",
+            "timestamp": 1651234567,
+            "formatted_time": "2022-04-29 12:34:56",
+            "threat_type": "Command and Control",
+            "severity": "High",
+            "confidence": 85,
+            "description": "Alert triggered by detection of domain example.com in network traffic.",
+            "ioc_values": ["example.com"],
+            "related_iocs": ["example.com"],
+            "source": "SIEM",
+        },
+        {
+            "id": "AL2",
+            "name": "Malicious File Download",
+            "timestamp": 1651234800,
+            "formatted_time": "2022-04-29 12:40:00",
+            "threat_type": "Malware",
+            "severity": "Critical",
+            "confidence": 95,
+            "description": "Detected download from known malicious domain example.com",
+            "ioc_values": ["example.com"],
+            "related_iocs": ["example.com"],
+            "source": "EDR",
+        },
+        {
+            "id": "AL3",
+            "name": "Suspicious IP Communication",
+            "timestamp": 1651235000,
+            "formatted_time": "2022-04-29 12:43:20",
+            "threat_type": "Reconnaissance",
+            "severity": "Medium",
+            "confidence": 70,
+            "description": "Communication detected with suspicious IP address 1.1.1.1",
+            "ioc_values": ["1.1.1.1"],
+            "related_iocs": ["1.1.1.1"],
+            "source": "Firewall",
+        },
+    ]
+
+    ALERTS.clear()
+    ALERTS.extend(mock_alerts)
+    print(f"[API] Generated {len(ALERTS)} mock alerts")
+
+
+# Alert-related endpoints
+@ioc_bp.route("/api/alerts", methods=["GET"])
+def get_alerts():
+    """Get a list of alerts."""
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Parse query parameters
+            limit = request.args.get("limit", 50, type=int)
+            offset = request.args.get("offset", 0, type=int)
+            severity = request.args.get("severity", None)
+
+            # Build query
+            query = "SELECT * FROM alerts"
+            params = []
+
+            if severity:
+                query += " WHERE severity = ?"
+                params.append(severity)
+
+            query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            cursor.execute(query, params)
+            alerts = []
+            for row in cursor.fetchall():
+                alert = dict(row)
+                # Convert integer ID to string format for test compatibility
+                if isinstance(alert.get("id"), int):
+                    alert["id"] = f"AL{alert['id']}"
+                alerts.append(alert)
+
+            # Get total count
+            count_query = "SELECT COUNT(*) as count FROM alerts"
+            if severity:
+                count_query += " WHERE severity = ?"
+                cursor.execute(count_query, [severity])
+            else:
+                cursor.execute(count_query)
+
+            result = cursor.fetchone()
+            total = result.get("count", 0) if result else 0
+
+            conn.close()
+
+            # Update global ALERTS list
+            ALERTS.clear()
+            ALERTS.extend(alerts)
+
+            return jsonify({"alerts": alerts, "total": total})
+
+    except Exception as e:
+        print(f"Database error in get_alerts: {e}")
+
+    # Return empty result if database fails
+    return jsonify({"alerts": [], "total": 0})
+
+
+@ioc_bp.route("/api/ioc/<path:ioc_value>/alerts", methods=["GET"])
+def get_alerts_for_ioc(ioc_value):
+    """Get alerts associated with a specific IOC."""
+    # First check if the IOC exists
+    ioc = get_ioc_by_value(ioc_value)
+    if ioc is None:
+        return jsonify({"error": "IOC not found"}), 404
+
+    # Use the actual IOC value from the database for case-sensitive database query
+    actual_ioc_value = ioc.get("ioc_value") or ioc.get("value", ioc_value)
+
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Find alerts related to this IOC through the junction table
+            # Use the actual IOC value from the database to ensure case-sensitive match
+            cursor.execute(
+                """
+                SELECT a.* FROM alerts a
+                JOIN ioc_alert ia ON a.id = ia.alert_id
+                WHERE ia.ioc_value = ?
+                ORDER BY a.timestamp DESC
+            """,
+                (actual_ioc_value,),
+            )
+
+            alerts = []
+            for row in cursor.fetchall():
+                alert = dict(row)
+                # Convert integer ID to string format for test compatibility
+                if isinstance(alert.get("id"), int):
+                    alert["id"] = f"AL{alert['id']}"
+                alerts.append(alert)
+
+            conn.close()
+
+            return jsonify(
+                {
+                    "ioc_value": ioc_value,
+                    "alerts": alerts,
+                    "total": len(alerts),
+                    "total_alerts": len(alerts),  # For test compatibility
+                }
+            )
+
+    except Exception as e:
+        print(f"Database error in get_alerts_for_ioc: {e}")
+
+    # Return empty result if database fails but IOC exists
+    return jsonify(
+        {
+            "ioc_value": ioc_value,
+            "alerts": [],
+            "total": 0,
+            "total_alerts": 0,  # For test compatibility
+        }
+    )
+
+
+@ioc_bp.route("/api/alert/<int:alert_id>/iocs", methods=["GET"])
+def get_iocs_for_alert(alert_id):
+    """Get IOCs associated with a specific alert."""
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # First get the alert details
+            cursor.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,))
+            alert_row = cursor.fetchone()
+
+            if not alert_row:
+                return jsonify({"error": "Alert not found"}), 404
+
+            alert = dict(alert_row)
+
+            # Find IOCs related to this alert through the junction table
+            cursor.execute(
+                """
+                SELECT i.* FROM iocs i
+                JOIN ioc_alert ia ON i.ioc_type = ia.ioc_type AND i.ioc_value = ia.ioc_value
+                WHERE ia.alert_id = ?
+                ORDER BY i.score DESC
+            """,
+                (alert_id,),
+            )
+
+            iocs = []
+            for row in cursor.fetchall():
+                ioc = dict(row)
+                # Add the 'value' alias for compatibility
+                ioc["value"] = ioc.get("ioc_value", "")
+                iocs.append(ioc)
+
+            conn.close()
+
+            return jsonify(
+                {
+                    "alert_id": alert_id,
+                    "alert_name": alert.get("name", ""),
+                    "timestamp": alert.get("timestamp", 0),
+                    "formatted_time": alert.get("formatted_time", ""),
+                    "total_iocs": len(iocs),
+                    "iocs": iocs,
+                }
+            )
+
+    except Exception as e:
+        print(f"Database error in get_iocs_for_alert: {e}")
+
+    # Return error if database fails or alert not found
+    return jsonify({"error": "Alert not found"}), 404
+
+
 # Register the Blueprint with the main app
 app.register_blueprint(ioc_bp)
 
@@ -1015,7 +1249,7 @@ def not_found(error):
     return jsonify({"error": "Route not found"}), 404
 
 
-# Initialize IOCS list at startup
+# Initialize IOCS and ALERTS lists at startup
 def initialize_iocs():
     """Load initial IOC data into memory at server startup."""
     global IOCS  # This declaration is fine since IOCS is defined at module level
@@ -1043,6 +1277,35 @@ def initialize_iocs():
                 return
     except Exception as e:
         print(f"[API] Database error during initialization: {e}")
+
+
+def initialize_alerts():
+    """Load initial Alert data into memory at server startup."""
+    global ALERTS
+    print("[API] Initializing Alerts list at startup...")
+
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Fetch all alerts with a simple query
+            cursor.execute("SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 50")
+            alerts = []
+            for row in cursor.fetchall():
+                alert = dict(row)
+                alerts.append(alert)
+
+            conn.close()
+
+            if alerts:
+                ALERTS.clear()
+                ALERTS.extend(alerts)
+                print(f"[API] Loaded {len(ALERTS)} Alerts from database")
+                return
+    except Exception as e:
+        print(f"[API] Database error during alerts initialization: {e}")
 
     # Fallback to enhanced mock IOCs if database fails
     # Generate random timestamps within the last 14 days
@@ -1345,4 +1608,5 @@ if __name__ == "__main__":
     port = 5059
     print(f"Starting API server on port {port}")
     initialize_iocs()  # Initialize IOCS list before starting the server
+    initialize_alerts()  # Initialize ALERTS list before starting the server
     app.run(host="0.0.0.0", port=port, debug=True)

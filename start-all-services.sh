@@ -128,14 +128,9 @@ start_react_ui() {
         fi
     fi
 
-    # Check if serve is installed
-    if ! command -v serve &> /dev/null; then
-        print_status "Installing serve package..."
-        npm install -g serve
-    fi
-
-    # Start production server in background
-    serve -s build -l 3000 > ../react_ui.log 2>&1 &
+    # Use our custom SPA server instead of serve
+    # Start production server in background using custom SPA server
+    python3 spa-server.py 3000 > ../react_ui.log 2>&1 &
     REACT_PID=$!
     echo $REACT_PID > ../.react_ui.pid
 

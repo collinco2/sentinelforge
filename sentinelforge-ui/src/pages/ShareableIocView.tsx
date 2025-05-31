@@ -73,14 +73,14 @@ export function ShareableIocView() {
         // Fetch the IOC data
         const encodedValue = encodeURIComponent(iocValue || "");
         const response = await axios.get(
-          `/api/ioc/share?value=${encodedValue}`,
+          `http://localhost:5059/api/ioc/share?value=${encodedValue}`,
         );
         setIocData(response.data);
 
         // Fetch the ML explanation
         try {
           const explainResponse = await axios.get(
-            `/api/explain/share/${encodedValue}`,
+            `http://localhost:5059/api/explain/share/${encodedValue}`,
           );
           setExplanationData(explainResponse.data);
         } catch (explainError) {

@@ -1,6 +1,16 @@
 import datetime
-from sqlalchemy import create_engine, Column, String, DateTime, Integer, JSON
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import (
+    create_engine,
+    Column,
+    String,
+    DateTime,
+    Integer,
+    JSON,
+    Text,
+    Table,
+    ForeignKey,
+)
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # Import settings
 from sentinelforge.settings import settings
@@ -11,6 +21,15 @@ from sentinelforge.settings import settings
 engine = create_engine(settings.database_url, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()
+
+# Junction table for many-to-many relationship between Alerts and IOCs
+ioc_alert_association = Table(
+    "ioc_alert",
+    Base.metadata,
+    Column("alert_id", Integer, ForeignKey("alerts.id"), primary_key=True),
+    Column("ioc_type", String, ForeignKey("iocs.ioc_type"), primary_key=True),
+    Column("ioc_value", String, ForeignKey("iocs.ioc_value"), primary_key=True),
+)
 
 
 class IOC(Base):
@@ -25,6 +44,31 @@ class IOC(Base):
     enrichment_data = Column(JSON, nullable=True)
     summary = Column(String, nullable=True)
     explanation_data = Column(JSON, nullable=True)  # SHAP explanation data
+
+    # Relationship to alerts
+    alerts = relationship(
+        "Alert", secondary=ioc_alert_association, back_populates="iocs"
+    )
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    timestamp = Column(Integer, nullable=False)  # Unix timestamp
+    formatted_time = Column(String(50), nullable=True)  # Human-readable time
+    threat_type = Column(String(100), nullable=True)
+    severity = Column(String(20), nullable=False, default="medium")
+    confidence = Column(Integer, nullable=False, default=50)  # 0-100
+    source = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+    # Relationship to IOCs
+    iocs = relationship("IOC", secondary=ioc_alert_association, back_populates="alerts")
 
 
 def init_db():

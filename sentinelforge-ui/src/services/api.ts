@@ -1,7 +1,7 @@
-import axios from 'axios';
+import axios from "axios";
 
 // API base URL
-export const API_BASE_URL = 'http://localhost:5056';
+export const API_BASE_URL = "http://localhost:5059";
 
 // Define interfaces for our data models
 export interface IOC {
@@ -76,14 +76,14 @@ export async function fetchStats(): Promise<Stats> {
     const response = await axios.get(`${API_BASE_URL}/api/stats`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    console.error("Error fetching stats:", error);
     return {
       total_iocs: 0,
       high_risk_iocs: 0,
       new_iocs: 0,
       avg_score: 0,
       ioc_types: {},
-      risk_categories: {}
+      risk_categories: {},
     };
   }
 }
@@ -94,30 +94,32 @@ export async function fetchIOCs(
   minScore = 0,
   maxScore = 10,
   iocType?: string,
-  search?: string
+  search?: string,
 ): Promise<IOC[]> {
   try {
     let url = `${API_BASE_URL}/api/iocs?limit=${limit}&offset=${offset}&min_score=${minScore}&max_score=${maxScore}`;
-    
+
     if (iocType) {
       url += `&ioc_type=${iocType}`;
     }
-    
+
     if (search) {
       url += `&search=${encodeURIComponent(search)}`;
     }
-    
+
     const response = await axios.get(url);
     return response.data;
   } catch (error) {
-    console.error('Error fetching IOCs:', error);
+    console.error("Error fetching IOCs:", error);
     return [];
   }
 }
 
 export async function fetchIOC(iocValue: string): Promise<ExtendedIOC | null> {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/ioc/${encodeURIComponent(iocValue)}`);
+    const response = await axios.get(
+      `${API_BASE_URL}/api/ioc/${encodeURIComponent(iocValue)}`,
+    );
     return response.data;
   } catch (error) {
     console.error(`Error fetching IOC ${iocValue}:`, error);
@@ -125,9 +127,13 @@ export async function fetchIOC(iocValue: string): Promise<ExtendedIOC | null> {
   }
 }
 
-export async function fetchMLExplanation(iocValue: string): Promise<MLExplanation | null> {
+export async function fetchMLExplanation(
+  iocValue: string,
+): Promise<MLExplanation | null> {
   try {
-    const response = await axios.get(`${API_BASE_URL}/api/explain/${encodeURIComponent(iocValue)}`);
+    const response = await axios.get(
+      `${API_BASE_URL}/api/explain/${encodeURIComponent(iocValue)}`,
+    );
     return response.data;
   } catch (error) {
     console.error(`Error fetching ML explanation for ${iocValue}:`, error);
@@ -138,22 +144,25 @@ export async function fetchMLExplanation(iocValue: string): Promise<MLExplanatio
 export async function exportToCSV(): Promise<void> {
   try {
     const response = await axios.get(`${API_BASE_URL}/api/export/csv`, {
-      responseType: 'blob'
+      responseType: "blob",
     });
-    
+
     // Create download link
     const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.setAttribute('download', `sentinelforge-iocs-${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute(
+      "download",
+      `sentinelforge-iocs-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
-    
+
     // Clean up
     window.URL.revokeObjectURL(url);
     document.body.removeChild(link);
   } catch (error) {
-    console.error('Error exporting to CSV:', error);
-    alert('Failed to export data. Please try again later.');
+    console.error("Error exporting to CSV:", error);
+    alert("Failed to export data. Please try again later.");
   }
-} 
+}

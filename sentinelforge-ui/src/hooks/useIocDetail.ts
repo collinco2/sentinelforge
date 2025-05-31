@@ -184,7 +184,7 @@ export function useIocDetail(
   );
 
   const { data, error, mutate } = useSWR(
-    iocId ? `/api/ioc?value=${encodedId}` : null,
+    iocId ? `http://localhost:5059/api/ioc?value=${encodedId}` : null,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -231,7 +231,7 @@ export function useIocExplanation(
   );
 
   const { data, error } = useSWR(
-    iocId ? `/api/explain/${encodedId}` : null,
+    iocId ? `http://localhost:5059/api/explain/${encodedId}` : null,
     fetcher,
     {
       revalidateOnFocus: false,

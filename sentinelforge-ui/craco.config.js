@@ -7,7 +7,7 @@ module.exports = {
     },
     configure: (webpackConfig) => {
       const scopePluginIndex = webpackConfig.resolve.plugins.findIndex(
-        (plugin) => plugin.constructor.name === 'ModuleScopePlugin'
+        (plugin) => plugin.constructor.name === "ModuleScopePlugin",
       );
       if (scopePluginIndex !== -1) {
         webpackConfig.resolve.plugins.splice(scopePluginIndex, 1);
@@ -20,14 +20,14 @@ module.exports = {
   },
   devServer: {
     port: 3000,
-    host: 'localhost',
+    host: "0.0.0.0",
     hot: true,
     open: false,
-    allowedHosts: 'all',
+    allowedHosts: "all",
     historyApiFallback: true,
     setupMiddlewares: (middlewares, devServer) => {
       // Custom middleware setup if needed
       return middlewares;
     },
-  }
+  },
 };
