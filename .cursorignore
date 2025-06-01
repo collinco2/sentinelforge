@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+*.tsbuildinfo
+
+# Generated files
+*.log
+*.map
+*.min.js
+*.min.css
+
+# Large data files
+*.csv
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Environment files
+.env*
+!.env.example
+
+# Python virtual environments and artifacts
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.dylib
+*.abi3.so
+
+# Node modules and build tools
+*.pack
+*.node
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large media files
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.pdf
+*.zip
+*.tar.gz
+*.tgz
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3 

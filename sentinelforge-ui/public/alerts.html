@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinelForge Alerts</title>
+  <script>
+    // Redirect to the React app's route
+    window.location.href = '/';
+    // After the app loads, navigate to alerts
+    window.onload = function() {
+      if (window.location.pathname.includes('alerts.html')) {
+        // Use React Router navigation if available
+        if (window.ReactRouterNavigation) {
+          window.ReactRouterNavigation.navigate('/alerts');
+        } else {
+          // Otherwise try to modify the URL without reload
+          window.history.pushState({}, '', '/alerts');
+          // Dispatch an event to notify the app
+          window.dispatchEvent(new CustomEvent('popstate'));
+        }
+      }
+    };
+  </script>
+</head>
+<body>
+  <h1>Redirecting to Alerts...</h1>
+  <p>If you are not redirected automatically, please <a href="/">click here</a>.</p>
+</body>
+</html> 

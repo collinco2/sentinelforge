@@ -6,38 +6,29 @@ module.exports = {
       "@": path.resolve(__dirname, "src"),
     },
     configure: (webpackConfig) => {
-      // Handle dependency resolution issues
-      webpackConfig.resolve = {
-        ...webpackConfig.resolve,
-        fallback: {
-          ...webpackConfig.resolve?.fallback,
-        },
-      };
-
-      // Force specific versions of React for all dependencies using relative paths
-      webpackConfig.resolve.alias = {
-        ...webpackConfig.resolve.alias,
-        react: path.resolve(__dirname, "node_modules/react"),
-        "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
-      };
-
-      // Enable React Refresh properly
-      const plugins = webpackConfig.plugins || [];
-      plugins.forEach(plugin => {
-        if (plugin.constructor.name === 'ReactRefreshPlugin') {
-          // It's already included by CRA, but might need configuration
-          plugin.options = {
-            ...plugin.options,
-            overlay: false, // Disable error overlay to prevent path issues
-          };
-        }
-      });
-
+      // Attempt to remove ModuleScopePlugin
+      const scopePluginIndex = webpackConfig.resolve.plugins.findIndex(
+        (plugin) => plugin.constructor.name === 'ModuleScopePlugin'
+      );
+      if (scopePluginIndex !== -1) {
+        webpackConfig.resolve.plugins.splice(scopePluginIndex, 1);
+        console.log("Attempted to remove ModuleScopePlugin.");
+      } else {
+        console.log("ModuleScopePlugin not found.");
+      }
       return webpackConfig;
     },
   },
-  // Configure development server
   devServer: {
+    port: 3000,
+    host: 'localhost',
+    open: false,
     hot: true,
-  }
-}; 
+    allowedHosts: 'all',
+    historyApiFallback: true,
+    setupMiddlewares: (middlewares, devServer) => {
+      // Custom middleware setup if needed
+      return middlewares;
+    },
+  },
+};

@@ -1,6 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react';
-import { screen, fireEvent } from '@testing-library/dom';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { IocTable, IOCData } from './IocTable';
 
@@ -57,10 +56,8 @@ describe('IocTable', () => {
     );
     
     // Find the first row by IOC value and click it
-    const firstRow = screen.getByText('malicious-domain.com').closest('tr');
-    if (firstRow) {
-      fireEvent.click(firstRow);
-    }
+    const firstRowElement = screen.getByText('malicious-domain.com');
+    fireEvent.click(firstRowElement);
     
     // Check if handler was called with the correct IOC data
     expect(handleRowClick).toHaveBeenCalledTimes(1);

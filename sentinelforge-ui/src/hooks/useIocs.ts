@@ -3,8 +3,8 @@ import axios from "axios";
 import { IocFilters } from "../components/FilterSidebar";
 import { IOCData } from "../components/IocTable";
 
-// Base API URL - Use the proxy URL in all environments
-const API_BASE_URL = "/api/iocs";
+// Base API URL - Use the full URL for production builds
+const API_BASE_URL = "http://localhost:5059/api/iocs";
 
 // Fetcher function for SWR
 const fetcher = async (url: string) => {
