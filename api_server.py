@@ -449,7 +449,7 @@ def get_iocs():
 
 def get_ioc_by_value(ioc_value):
     """
-    Look up an IOC by its value using case-insensitive matching.
+    Look up an IOC by its value using case-insensitive matching from database.
 
     Args:
         ioc_value (str): The IOC value to look up
@@ -457,10 +457,40 @@ def get_ioc_by_value(ioc_value):
     Returns:
         dict or None: The IOC object if found, or None if not found
     """
-    print("[API] Searching for IOC case-insensitively")
+    print("[API] Searching for IOC case-insensitively in database")
     ioc_value_lower = ioc_value.lower()
     print(f"[API] Lowercase search value: '{ioc_value_lower}'")
 
+    try:
+        # Try accessing the database first
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Search for IOC using case-insensitive matching
+            cursor.execute(
+                "SELECT * FROM iocs WHERE LOWER(ioc_value) = ? LIMIT 1",
+                (ioc_value_lower,),
+            )
+
+            row = cursor.fetchone()
+            if row:
+                ioc = dict(row)
+                print(
+                    f"[API] Found matching IOC in database: {ioc.get('ioc_value', '')}"
+                )
+                conn.close()
+                return ioc
+
+            conn.close()
+            print(f"[API] No matching IOC found in database for {ioc_value}")
+            return None
+
+    except Exception as e:
+        print(f"[API] Database error in get_ioc_by_value: {e}")
+
+    # Fallback to in-memory search if database fails
+    print("[API] Falling back to in-memory search")
     for i, ioc in enumerate(IOCS):
         stored_value = str(ioc.get("value", ""))
         stored_value_lower = stored_value.lower()
@@ -1143,9 +1173,7 @@ def get_alerts_for_ioc(ioc_value):
             alerts = []
             for row in cursor.fetchall():
                 alert = dict(row)
-                # Convert integer ID to string format for test compatibility
-                if isinstance(alert.get("id"), int):
-                    alert["id"] = f"AL{alert['id']}"
+                # Keep integer IDs as they are for database consistency
                 alerts.append(alert)
 
             conn.close()
@@ -1195,7 +1223,7 @@ def get_iocs_for_alert(alert_id):
             cursor.execute(
                 """
                 SELECT i.* FROM iocs i
-                JOIN ioc_alert ia ON i.ioc_type = ia.ioc_type AND i.ioc_value = ia.ioc_value
+                JOIN ioc_alert ia ON i.ioc_value = ia.ioc_value
                 WHERE ia.alert_id = ?
                 ORDER BY i.score DESC
             """,

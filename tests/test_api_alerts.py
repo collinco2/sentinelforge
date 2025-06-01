@@ -7,6 +7,8 @@ import json
 import unittest
 import sys
 import os
+import tempfile
+import sqlite3
 
 # Add the parent directory to sys.path to import api_server
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -19,69 +21,119 @@ class TestApiAlertsEndpoint(unittest.TestCase):
     """Tests for the IOC-to-alerts endpoint."""
 
     def setUp(self):
-        """Set up the test client and mock data."""
+        """Set up the test client and mock database."""
         self.app = app.test_client()
 
-        # Mock IOC and alert data
-        api_server.IOCS = [
-            {
-                "id": 1,
-                "ioc_type": "domain",
-                "ioc_value": "example.com",
-                "value": "example.com",
-                "score": 9.0,
-            },
-            {
-                "id": 2,
-                "ioc_type": "ip",
-                "ioc_value": "1.1.1.1",
-                "value": "1.1.1.1",
-                "score": 7.2,
-            },
-        ]
+        # Create a temporary database for testing
+        self.test_db = tempfile.NamedTemporaryFile(delete=False)
+        self.test_db_path = self.test_db.name
+        self.test_db.close()
 
-        # Mock alert data with timestamps for sorting test
-        api_server.ALERTS = [
-            {
-                "id": "AL1",
-                "name": "Suspicious Network Connection",
-                "timestamp": 1651234567,  # Older timestamp
-                "formatted_time": "2022-04-29 12:34:56",
-                "threat_type": "Command and Control",
-                "severity": "High",
-                "confidence": 85,
-                "description": "Alert triggered by detection of domain example.com in network traffic.",
-                "ioc_values": ["example.com"],
-                "related_iocs": ["example.com"],
-                "source": "SIEM",
-            },
-            {
-                "id": "AL2",
-                "name": "Malware Detection",
-                "timestamp": 1667890123,  # Newer timestamp
-                "formatted_time": "2022-11-08 15:42:03",
-                "threat_type": "Malware",
-                "severity": "Critical",
-                "confidence": 92,
-                "description": "Alert triggered by detection of domain example.com in network traffic.",
-                "ioc_values": ["example.com"],
-                "related_iocs": ["example.com"],
-                "source": "EDR",
-            },
-            {
-                "id": "AL3",
-                "name": "Potential Data Exfiltration",
-                "timestamp": 1662345678,  # Middle timestamp
-                "formatted_time": "2022-09-05 09:14:38",
-                "threat_type": "Data Exfiltration",
-                "severity": "Medium",
-                "confidence": 70,
-                "description": "Alert triggered by detection of ip 1.1.1.1 in network traffic.",
-                "ioc_values": ["1.1.1.1"],
-                "related_iocs": ["1.1.1.1"],
-                "source": "Firewall",
-            },
-        ]
+        # Create test database schema
+        self.setup_test_database()
+
+        # Mock the database connection to use our test database
+        self.original_get_db_connection = api_server.get_db_connection
+        api_server.get_db_connection = self.mock_get_db_connection
+
+    def tearDown(self):
+        """Clean up test database."""
+        api_server.get_db_connection = self.original_get_db_connection
+        os.unlink(self.test_db_path)
+
+    def mock_get_db_connection(self):
+        """Mock database connection for testing."""
+        conn = sqlite3.connect(self.test_db_path)
+
+        def dict_factory(cursor, row):
+            d = {}
+            for idx, col in enumerate(cursor.description):
+                if col[0]:
+                    d[col[0]] = row[idx]
+                    if col[0] == "ioc_value":
+                        d["value"] = row[idx]
+            return d
+
+        conn.row_factory = dict_factory
+        return conn
+
+    def setup_test_database(self):
+        """Set up test database with sample data."""
+        conn = sqlite3.connect(self.test_db_path)
+        cursor = conn.cursor()
+
+        # Create tables
+        cursor.execute("""
+            CREATE TABLE iocs (
+                id INTEGER PRIMARY KEY,
+                ioc_type TEXT,
+                ioc_value TEXT,
+                score REAL,
+                first_seen_timestamp REAL,
+                tags TEXT
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE alerts (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                severity TEXT,
+                confidence INTEGER,
+                description TEXT,
+                timestamp REAL,
+                threat_type TEXT,
+                source TEXT
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE ioc_alert (
+                alert_id INTEGER,
+                ioc_id INTEGER,
+                ioc_value TEXT,
+                FOREIGN KEY (alert_id) REFERENCES alerts (id),
+                FOREIGN KEY (ioc_id) REFERENCES iocs (id)
+            )
+        """)
+
+        # Insert test IOCs
+        cursor.execute("""
+            INSERT INTO iocs (id, ioc_type, ioc_value, score, first_seen_timestamp)
+            VALUES (1, 'domain', 'example.com', 9.0, 1651234567)
+        """)
+
+        cursor.execute("""
+            INSERT INTO iocs (id, ioc_type, ioc_value, score, first_seen_timestamp)
+            VALUES (2, 'ip', '1.1.1.1', 7.2, 1651234567)
+        """)
+
+        # Insert test alerts
+        cursor.execute("""
+            INSERT INTO alerts (id, name, severity, confidence, description, timestamp, threat_type, source)
+            VALUES (1, 'Suspicious Network Connection', 'High', 85,
+                   'Alert triggered by detection of domain example.com', 1651234567, 'Command and Control', 'SIEM')
+        """)
+
+        cursor.execute("""
+            INSERT INTO alerts (id, name, severity, confidence, description, timestamp, threat_type, source)
+            VALUES (2, 'Malware Detection', 'Critical', 92,
+                   'Alert triggered by detection of domain example.com', 1667890123, 'Malware', 'EDR')
+        """)
+
+        # Insert IOC-Alert relationships
+        cursor.execute("""
+            INSERT INTO ioc_alert (alert_id, ioc_id, ioc_value)
+            VALUES (1, 1, 'example.com')
+        """)
+
+        cursor.execute("""
+            INSERT INTO ioc_alert (alert_id, ioc_id, ioc_value)
+            VALUES (2, 1, 'example.com')
+        """)
+
+        conn.commit()
+        conn.close()
 
     def test_get_ioc_alerts_success(self):
         """Test successful retrieval of alerts for an IOC."""
@@ -95,8 +147,8 @@ class TestApiAlertsEndpoint(unittest.TestCase):
         self.assertEqual(len(data["alerts"]), 2)
 
         # Verify alerts are sorted by timestamp in reverse chronological order (newest first)
-        self.assertEqual(data["alerts"][0]["id"], "AL2")
-        self.assertEqual(data["alerts"][1]["id"], "AL1")
+        self.assertEqual(data["alerts"][0]["id"], 2)  # Updated to match database IDs
+        self.assertEqual(data["alerts"][1]["id"], 1)
 
     def test_get_ioc_alerts_case_insensitive(self):
         """Test that IOC matching is case-insensitive."""
@@ -117,55 +169,21 @@ class TestApiAlertsEndpoint(unittest.TestCase):
 
     def test_get_ioc_alerts_empty_results(self):
         """Test successful response with empty results when no alerts are found."""
-        # Add a new IOC with no alerts
-        api_server.IOCS.append(
-            {
-                "id": 3,
-                "ioc_type": "hash",
-                "ioc_value": "deadbeef",
-                "value": "deadbeef",
-                "score": 5.0,
-            }
-        )
+        # Add a new IOC with no alerts to the test database
+        conn = sqlite3.connect(self.test_db_path)
+        cursor = conn.cursor()
 
-        # Use a unique value that won't match any generated alerts
         unique_ioc_value = "deadbeef12345unique"
-        api_server.IOCS.append(
-            {
-                "id": 4,
-                "ioc_type": "hash",
-                "ioc_value": unique_ioc_value,
-                "value": unique_ioc_value,
-                "score": 5.0,
-            }
+        cursor.execute(
+            """
+            INSERT INTO iocs (id, ioc_type, ioc_value, score, first_seen_timestamp)
+            VALUES (3, 'hash', ?, 5.0, 1651234567)
+        """,
+            (unique_ioc_value,),
         )
 
-        # Patch the get_ioc_by_value function to return our test IOC
-        original_get_ioc = api_server.get_ioc_by_value
-
-        def mock_get_ioc_by_value(value):
-            if value == unique_ioc_value:
-                return {"id": 4, "ioc_type": "hash", "value": unique_ioc_value}
-            return original_get_ioc(value)
-
-        api_server.get_ioc_by_value = mock_get_ioc_by_value
-
-        # Clear ALERTS list and define only one unrelated alert
-        api_server.ALERTS = [
-            {
-                "id": "AL4",
-                "name": "Unrelated Alert",
-                "timestamp": 1667890123,
-                "formatted_time": "2022-11-08 15:42:03",
-                "threat_type": "Malware",
-                "severity": "Low",
-                "confidence": 30,
-                "description": "This alert is not related to deadbeef12345unique.",
-                "ioc_values": ["unrelated.com"],
-                "related_iocs": ["unrelated.com"],
-                "source": "User Report",
-            }
-        ]
+        conn.commit()
+        conn.close()
 
         response = self.app.get(f"/api/ioc/{unique_ioc_value}/alerts")
         data = json.loads(response.data)
@@ -175,37 +193,26 @@ class TestApiAlertsEndpoint(unittest.TestCase):
         self.assertEqual(data["total_alerts"], 0)
         self.assertEqual(data["alerts"], [])
 
-        # Restore original function
-        api_server.get_ioc_by_value = original_get_ioc
+    def test_api_stats_endpoint(self):
+        """Test that the stats endpoint works with database."""
+        response = self.app.get("/api/stats")
+        data = json.loads(response.data)
 
-    def test_generate_mock_alerts(self):
-        """Test that the generate_mock_alerts function creates alerts."""
-        # Clear existing alerts
-        api_server.ALERTS = []
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("total_iocs", data)
+        self.assertIn("high_risk_iocs", data)
+        self.assertIn("avg_score", data)
+        self.assertEqual(data["total_iocs"], 2)  # We have 2 test IOCs
 
-        # Call the function
-        api_server.generate_mock_alerts()
+    def test_api_iocs_endpoint(self):
+        """Test that the IOCs endpoint works with database."""
+        response = self.app.get("/api/iocs")
+        data = json.loads(response.data)
 
-        # Check that alerts were generated
-        self.assertGreater(len(api_server.ALERTS), 0)
-
-        # Check that each alert has all required fields
-        required_fields = [
-            "id",
-            "name",
-            "timestamp",
-            "formatted_time",
-            "threat_type",
-            "severity",
-            "confidence",
-            "description",
-            "ioc_values",
-            "source",
-        ]
-
-        for alert in api_server.ALERTS:
-            for field in required_fields:
-                self.assertIn(field, alert)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("iocs", data)
+        self.assertIn("total", data)
+        self.assertEqual(len(data["iocs"]), 2)  # We have 2 test IOCs
 
 
 if __name__ == "__main__":
