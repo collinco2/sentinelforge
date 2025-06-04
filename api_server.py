@@ -1083,7 +1083,7 @@ def generate_mock_alerts():
 # Alert-related endpoints
 @ioc_bp.route("/api/alerts", methods=["GET"])
 def get_alerts():
-    """Get a list of alerts."""
+    """Get a list of alerts with optional filtering, sorting, and pagination."""
     try:
         # Try accessing the database
         conn = get_db_connection()
@@ -1091,54 +1091,103 @@ def get_alerts():
             cursor = conn.cursor()
 
             # Parse query parameters
-            limit = request.args.get("limit", 50, type=int)
-            offset = request.args.get("offset", 0, type=int)
-            severity = request.args.get("severity", None)
+            name = request.args.get("name")
+            ioc_value = request.args.get("ioc")
+            page = int(request.args.get("page", 1))
+            limit = int(request.args.get("limit", 10))
 
-            # Build query
-            query = "SELECT * FROM alerts"
+            # Parse sorting parameters
+            sort_field = request.args.get("sort", "id")
+            sort_order = request.args.get("order", "asc").lower()
+
+            # Validate sort field against allowed columns
+            allowed_sort_fields = ["id", "name", "timestamp", "risk_score"]
+            if sort_field not in allowed_sort_fields:
+                sort_field = "id"  # Default to id if invalid field provided
+
+            # Validate sort order
+            if sort_order not in ["asc", "desc"]:
+                sort_order = "asc"  # Default to ascending if invalid order provided
+
+            # Calculate offset from page
+            offset = (page - 1) * limit
+
+            # Build base query - always include risk_score and overridden_risk_score, and additional fields for sorting
+            base_fields = (
+                "a.id, a.name, a.description, a.risk_score, a.overridden_risk_score"
+            )
+            if sort_field in ["timestamp"] and sort_field not in base_fields:
+                query = f"SELECT DISTINCT {base_fields}, a.{sort_field} FROM alerts a"
+            else:
+                query = f"SELECT DISTINCT {base_fields} FROM alerts a"
+            count_query = "SELECT COUNT(DISTINCT a.id) as count FROM alerts a"
             params = []
+            where_conditions = []
 
-            if severity:
-                query += " WHERE severity = ?"
-                params.append(severity)
+            # Filter by alert name (case-insensitive partial match)
+            if name:
+                where_conditions.append("LOWER(a.name) LIKE LOWER(?)")
+                params.append(f"%{name}%")
 
-            query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
+            # Filter by IOC value (case-insensitive partial match)
+            if ioc_value:
+                query += " JOIN ioc_alert ia ON a.id = ia.alert_id JOIN iocs i ON ia.ioc_value = i.ioc_value"
+                count_query += " JOIN ioc_alert ia ON a.id = ia.alert_id JOIN iocs i ON ia.ioc_value = i.ioc_value"
+                where_conditions.append("LOWER(i.ioc_value) LIKE LOWER(?)")
+                params.append(f"%{ioc_value}%")
 
-            cursor.execute(query, params)
+            # Add WHERE clause if we have conditions
+            if where_conditions:
+                where_clause = " WHERE " + " AND ".join(where_conditions)
+                query += where_clause
+                count_query += where_clause
+
+            # Add ordering and pagination - use overridden_risk_score if available, otherwise risk_score
+            if sort_field == "risk_score":
+                query += f" ORDER BY COALESCE(a.overridden_risk_score, a.risk_score) {sort_order.upper()} LIMIT ? OFFSET ?"
+            else:
+                query += (
+                    f" ORDER BY a.{sort_field} {sort_order.upper()} LIMIT ? OFFSET ?"
+                )
+            query_params = params + [limit, offset]
+
+            # Execute main query
+            cursor.execute(query, query_params)
             alerts = []
             for row in cursor.fetchall():
                 alert = dict(row)
-                # Convert integer ID to string format for test compatibility
-                if isinstance(alert.get("id"), int):
-                    alert["id"] = f"AL{alert['id']}"
                 alerts.append(alert)
 
-            # Get total count
-            count_query = "SELECT COUNT(*) as count FROM alerts"
-            if severity:
-                count_query += " WHERE severity = ?"
-                cursor.execute(count_query, [severity])
-            else:
-                cursor.execute(count_query)
-
+            # Get total count for pagination
+            cursor.execute(count_query, params)
             result = cursor.fetchone()
             total = result.get("count", 0) if result else 0
 
             conn.close()
 
-            # Update global ALERTS list
-            ALERTS.clear()
-            ALERTS.extend(alerts)
-
-            return jsonify({"alerts": alerts, "total": total})
+            # Return simplified JSON array as requested, including risk_score and overridden_risk_score
+            return jsonify(
+                [
+                    {
+                        "id": alert["id"],
+                        "name": alert["name"],
+                        "description": alert["description"],
+                        "risk_score": alert.get(
+                            "risk_score", 50
+                        ),  # Default to 50 if not present
+                        "overridden_risk_score": alert.get(
+                            "overridden_risk_score"
+                        ),  # None if not overridden
+                    }
+                    for alert in alerts
+                ]
+            )
 
     except Exception as e:
         print(f"Database error in get_alerts: {e}")
 
-    # Return empty result if database fails
-    return jsonify({"alerts": [], "total": 0})
+    # Return empty array if database fails
+    return jsonify([])
 
 
 @ioc_bp.route("/api/ioc/<path:ioc_value>/alerts", methods=["GET"])
@@ -1255,6 +1304,283 @@ def get_iocs_for_alert(alert_id):
 
     # Return error if database fails or alert not found
     return jsonify({"error": "Alert not found"}), 404
+
+
+@ioc_bp.route("/api/alert/<int:alert_id>", methods=["GET"])
+def get_alert(alert_id):
+    """Get detailed information about a specific alert."""
+    try:
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Get the alert details
+            cursor.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,))
+            alert_row = cursor.fetchone()
+
+            if not alert_row:
+                conn.close()
+                return jsonify({"error": "Alert not found"}), 404
+
+            alert = dict(alert_row)
+            conn.close()
+
+            # Return complete alert information including risk_score and overridden_risk_score
+            return jsonify(
+                {
+                    "id": alert["id"],
+                    "name": alert["name"],
+                    "description": alert.get("description", ""),
+                    "timestamp": alert.get("timestamp", 0),
+                    "formatted_time": alert.get("formatted_time", ""),
+                    "threat_type": alert.get("threat_type", ""),
+                    "severity": alert.get("severity", "medium"),
+                    "confidence": alert.get("confidence", 50),
+                    "risk_score": alert.get("risk_score", 50),
+                    "overridden_risk_score": alert.get("overridden_risk_score"),
+                    "source": alert.get("source", ""),
+                    "created_at": alert.get("created_at", ""),
+                    "updated_at": alert.get("updated_at", ""),
+                }
+            )
+
+    except Exception as e:
+        print(f"Database error in get_alert: {e}")
+
+    # Return error if database fails or alert not found
+    return jsonify({"error": "Alert not found"}), 404
+
+
+@ioc_bp.route("/api/alert/<int:alert_id>/override", methods=["PATCH"])
+def override_alert_risk_score(alert_id):
+    """Override the risk score for a specific alert."""
+    try:
+        # Parse JSON body
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body is required"}), 400
+
+        # Validate risk_score field
+        if "risk_score" not in data:
+            return jsonify({"error": "risk_score field is required"}), 400
+
+        risk_score = data["risk_score"]
+
+        # Validate risk_score value
+        if not isinstance(risk_score, (int, float)):
+            return jsonify({"error": "risk_score must be a number"}), 400
+
+        risk_score = int(risk_score)
+        if risk_score < 0 or risk_score > 100:
+            return jsonify({"error": "risk_score must be between 0 and 100"}), 400
+
+        # Try accessing the database
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # Check if alert exists
+            cursor.execute("SELECT id FROM alerts WHERE id = ?", (alert_id,))
+            if not cursor.fetchone():
+                conn.close()
+                return jsonify({"error": "Alert not found"}), 404
+
+            # Update the overridden_risk_score
+            cursor.execute(
+                "UPDATE alerts SET overridden_risk_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (risk_score, alert_id),
+            )
+            conn.commit()
+
+            # Fetch the updated alert
+            cursor.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,))
+            alert_row = cursor.fetchone()
+            alert = dict(alert_row)
+            conn.close()
+
+            # Return the updated alert
+            return jsonify(
+                {
+                    "id": alert["id"],
+                    "name": alert["name"],
+                    "description": alert.get("description", ""),
+                    "timestamp": alert.get("timestamp", 0),
+                    "formatted_time": alert.get("formatted_time", ""),
+                    "threat_type": alert.get("threat_type", ""),
+                    "severity": alert.get("severity", "medium"),
+                    "confidence": alert.get("confidence", 50),
+                    "risk_score": alert.get("risk_score", 50),
+                    "overridden_risk_score": alert.get("overridden_risk_score"),
+                    "source": alert.get("source", ""),
+                    "created_at": alert.get("created_at", ""),
+                    "updated_at": alert.get("updated_at", ""),
+                    "message": f"Risk score overridden to {risk_score}",
+                }
+            )
+        else:
+            return jsonify({"error": "Database connection failed"}), 500
+
+    except Exception as e:
+        print(f"Database error in override_alert_risk_score: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/alert/<int:alert_id>/timeline", methods=["GET"])
+def get_alert_timeline(alert_id):
+    """Get a chronological timeline of events and IOCs related to a specific alert."""
+    try:
+        # Try accessing the database to verify alert exists
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+
+            # First verify the alert exists
+            cursor.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,))
+            alert_row = cursor.fetchone()
+
+            if not alert_row:
+                conn.close()
+                return jsonify({"error": "Alert not found"}), 404
+
+            alert = dict(alert_row)
+            conn.close()
+
+            # Generate mock timeline data based on alert information
+            timeline_events = generate_mock_timeline(alert_id, alert)
+
+            return jsonify(timeline_events)
+
+        else:
+            # Fallback to mock data if database is not available
+            timeline_events = generate_mock_timeline(
+                alert_id, {"name": f"Alert {alert_id}", "timestamp": 1651234567}
+            )
+            return jsonify(timeline_events)
+
+    except Exception as e:
+        print(f"Database error in get_alert_timeline: {e}")
+        # Return mock data on error
+        timeline_events = generate_mock_timeline(
+            alert_id, {"name": f"Alert {alert_id}", "timestamp": 1651234567}
+        )
+        return jsonify(timeline_events)
+
+
+def generate_mock_timeline(alert_id, alert_info):
+    """Generate mock timeline data for an alert."""
+    import datetime
+    import random
+
+    # Base timestamp from alert or current time
+    base_timestamp = alert_info.get(
+        "timestamp", int(datetime.datetime.now().timestamp())
+    )
+    base_datetime = datetime.datetime.fromtimestamp(base_timestamp)
+
+    # Generate timeline events based on alert ID for consistency
+    random.seed(alert_id)  # Ensure consistent data for same alert
+
+    timeline_events = []
+
+    # Event templates based on alert type
+    event_templates = [
+        {
+            "type": "network",
+            "descriptions": [
+                "Outbound connection to malicious IP {ip}",
+                "DNS query for suspicious domain {domain}",
+                "Unusual network traffic pattern detected",
+                "Connection attempt to known C2 server",
+                "Data exfiltration attempt detected",
+            ],
+        },
+        {
+            "type": "file",
+            "descriptions": [
+                "Downloaded suspicious executable {filename}",
+                "File modification detected: {filename}",
+                "Malicious file hash identified: {hash}",
+                "Unauthorized file access attempt",
+                "Suspicious file creation in system directory",
+            ],
+        },
+        {
+            "type": "process",
+            "descriptions": [
+                "Suspicious process execution: {process}",
+                "Process injection detected",
+                "Privilege escalation attempt",
+                "Unusual command line execution",
+                "Process hollowing technique identified",
+            ],
+        },
+        {
+            "type": "registry",
+            "descriptions": [
+                "Registry modification detected",
+                "Persistence mechanism installed",
+                "Autorun entry created",
+                "Security setting bypassed",
+                "System configuration altered",
+            ],
+        },
+        {
+            "type": "authentication",
+            "descriptions": [
+                "Failed login attempt from {ip}",
+                "Suspicious authentication pattern",
+                "Account lockout triggered",
+                "Credential harvesting attempt",
+                "Brute force attack detected",
+            ],
+        },
+    ]
+
+    # Sample data for placeholders
+    sample_ips = ["192.168.1.100", "10.0.0.50", "172.16.1.25", "203.0.113.45"]
+    sample_domains = ["malicious-site.com", "phishing-domain.net", "c2-server.org"]
+    sample_files = ["malware.exe", "trojan.dll", "suspicious.bat", "payload.scr"]
+    sample_hashes = ["a1b2c3d4e5f6", "f6e5d4c3b2a1", "123456789abc"]
+    sample_processes = ["cmd.exe", "powershell.exe", "rundll32.exe", "svchost.exe"]
+
+    # Generate 5-8 timeline events
+    num_events = random.randint(5, 8)
+
+    for i in range(num_events):
+        # Generate timestamp (events spread over 30 minutes before and after alert)
+        time_offset = random.randint(-1800, 1800)  # ±30 minutes in seconds
+        event_datetime = base_datetime + datetime.timedelta(seconds=time_offset)
+
+        # Choose random event type
+        event_template = random.choice(event_templates)
+        event_type = event_template["type"]
+        description_template = random.choice(event_template["descriptions"])
+
+        # Fill in placeholders in description
+        description = description_template.format(
+            ip=random.choice(sample_ips),
+            domain=random.choice(sample_domains),
+            filename=random.choice(sample_files),
+            hash=random.choice(sample_hashes),
+            process=random.choice(sample_processes),
+        )
+
+        timeline_events.append(
+            {
+                "timestamp": event_datetime.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "type": event_type,
+                "description": description,
+            }
+        )
+
+    # Sort events chronologically
+    timeline_events.sort(key=lambda x: x["timestamp"])
+
+    return timeline_events
 
 
 # Register the Blueprint with the main app

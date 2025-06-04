@@ -8,6 +8,8 @@ import http.server
 import socketserver
 import os
 import sys
+import urllib.request
+import urllib.error
 from urllib.parse import urlparse
 
 
@@ -18,6 +20,10 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
         # Parse the URL
         parsed_path = urlparse(self.path)
         path = parsed_path.path
+
+        # Check if this is an API request
+        if path.startswith("/api/"):
+            return self.proxy_api_request()
 
         # Remove leading slash for file system check
         file_path = path[1:] if path.startswith("/") else path
@@ -43,15 +49,79 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
         print(f"SPA fallback: {original_path} -> /index.html")
         return super().do_GET()
 
+    def proxy_api_request(self):
+        """Proxy API requests to the backend server."""
+        api_server_url = "http://localhost:5059"
+        target_url = f"{api_server_url}{self.path}"
+
+        try:
+            print(f"Proxying API request: {self.path} -> {target_url}")
+
+            # Read request body for POST/PATCH/PUT requests
+            request_body = None
+            if self.command in ["POST", "PATCH", "PUT"]:
+                content_length = int(self.headers.get("Content-Length", 0))
+                if content_length > 0:
+                    request_body = self.rfile.read(content_length)
+
+            # Create the request with method and body
+            req = urllib.request.Request(
+                target_url, data=request_body, method=self.command
+            )
+
+            # Copy headers from the original request
+            for header, value in self.headers.items():
+                if header.lower() not in ["host", "connection"]:
+                    req.add_header(header, value)
+
+            # Make the request
+            with urllib.request.urlopen(req) as response:
+                # Send response status
+                self.send_response(response.getcode())
+
+                # Copy response headers
+                for header, value in response.headers.items():
+                    if header.lower() not in ["connection", "transfer-encoding"]:
+                        self.send_header(header, value)
+
+                # Add CORS headers
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header(
+                    "Access-Control-Allow-Methods",
+                    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                )
+                self.send_header(
+                    "Access-Control-Allow-Headers", "Content-Type, Authorization"
+                )
+
+                self.end_headers()
+
+                # Copy response body
+                self.wfile.write(response.read())
+
+        except urllib.error.HTTPError as e:
+            print(f"API request failed: {e}")
+            self.send_error(e.code, e.reason)
+        except Exception as e:
+            print(f"Proxy error: {e}")
+            self.send_error(500, "Internal Server Error")
+
     def do_HEAD(self):
         # Handle HEAD requests the same way as GET requests
         return self.do_GET()
+
+    def do_PATCH(self):
+        """Handle PATCH requests by proxying to API server."""
+        if self.path.startswith("/api/"):
+            return self.proxy_api_request()
+        else:
+            self.send_error(404, "Not Found")
 
     def end_headers(self):
         # Add CORS headers for API requests
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header(
-            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+            "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         )
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         super().end_headers()

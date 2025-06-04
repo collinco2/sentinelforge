@@ -61,6 +61,8 @@ class Alert(Base):
     threat_type = Column(String(100), nullable=True)
     severity = Column(String(20), nullable=False, default="medium")
     confidence = Column(Integer, nullable=False, default=50)  # 0-100
+    risk_score = Column(Integer, nullable=False, default=50)  # 0-100 risk assessment
+    overridden_risk_score = Column(Integer, nullable=True)  # 0-100 analyst override
     source = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(
