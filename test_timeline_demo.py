@@ -4,7 +4,6 @@ Demo script to test the new /api/alert/<int:alert_id>/timeline route.
 """
 
 import requests
-import json
 from datetime import datetime
 
 

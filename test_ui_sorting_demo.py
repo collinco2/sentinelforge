@@ -4,7 +4,6 @@ Demo script to test the enhanced AlertTable UI sorting functionality.
 """
 
 import requests
-import json
 
 
 def test_ui_sorting():
