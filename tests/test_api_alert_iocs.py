@@ -83,7 +83,9 @@ class TestApiAlertIocsEndpoint(unittest.TestCase):
                 description TEXT,
                 timestamp REAL,
                 threat_type TEXT,
-                source TEXT
+                source TEXT,
+                risk_score INTEGER DEFAULT 50,
+                overridden_risk_score INTEGER
             )
         """)
 
@@ -115,16 +117,16 @@ class TestApiAlertIocsEndpoint(unittest.TestCase):
 
         # Insert test alerts
         cursor.execute("""
-            INSERT INTO alerts (id, name, severity, confidence, description, timestamp, threat_type, source)
+            INSERT INTO alerts (id, name, severity, confidence, description, timestamp, threat_type, source, risk_score)
             VALUES (1, 'Suspicious Network Connection', 'High', 85,
-                   'Alert triggered by detection of domain example.com', 1651234567, 'Command and Control', 'SIEM')
+                   'Alert triggered by detection of domain example.com', 1651234567, 'Command and Control', 'SIEM', 60)
         """)
 
         cursor.execute("""
-            INSERT INTO alerts (id, name, severity, confidence, description, timestamp, threat_type, source)
+            INSERT INTO alerts (id, name, severity, confidence, description, timestamp, threat_type, source, risk_score)
             VALUES (2, 'Multiple IOC Detection', 'Critical', 92,
                    'Multiple IOCs detected: domain example.com, IP 1.1.1.1, and URL https://malicious-site.com/download.exe',
-                   1667890123, 'Malware', 'EDR')
+                   1667890123, 'Malware', 'EDR', 85)
         """)
 
         # Insert IOC-Alert relationships
@@ -191,9 +193,44 @@ class TestApiAlertIocsEndpoint(unittest.TestCase):
         data = json.loads(response.data)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("alerts", data)
-        self.assertIn("total", data)
-        self.assertEqual(len(data["alerts"]), 2)  # We have 2 test alerts
+        self.assertIsInstance(data, list)  # Should return a list now
+        self.assertEqual(len(data), 2)  # We have 2 test alerts
+
+        # Check that each alert has the required fields
+        for alert in data:
+            self.assertIn("id", alert)
+            self.assertIn("name", alert)
+            self.assertIn("description", alert)
+
+    def test_api_alerts_filtering_by_name(self):
+        """Test filtering alerts by name."""
+        response = self.app.get("/api/alerts?name=multiple")
+        data = json.loads(response.data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(data, list)
+        # Should find the "Multiple IOC Detection" alert
+        self.assertEqual(len(data), 1)
+        self.assertIn("Multiple", data[0]["name"])
+
+    def test_api_alerts_filtering_by_ioc(self):
+        """Test filtering alerts by IOC value."""
+        response = self.app.get("/api/alerts?ioc=example.com")
+        data = json.loads(response.data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(data, list)
+        # Should find alerts linked to example.com
+        self.assertGreaterEqual(len(data), 1)
+
+    def test_api_alerts_pagination(self):
+        """Test pagination parameters."""
+        response = self.app.get("/api/alerts?page=1&limit=1")
+        data = json.loads(response.data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 1)  # Should return only 1 alert due to limit
 
 
 if __name__ == "__main__":
