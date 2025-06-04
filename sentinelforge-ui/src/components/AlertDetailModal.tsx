@@ -147,7 +147,7 @@ export function AlertDetailModal({
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
-      const updatedAlert = await response.json();
+      await response.json(); // Response contains updated alert data
 
       toast({
         title: "Risk Score Updated",

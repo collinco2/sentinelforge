@@ -1158,11 +1158,6 @@ def get_alerts():
                 alert = dict(row)
                 alerts.append(alert)
 
-            # Get total count for pagination
-            cursor.execute(count_query, params)
-            result = cursor.fetchone()
-            total = result.get("count", 0) if result else 0
-
             conn.close()
 
             # Return simplified JSON array as requested, including risk_score and overridden_risk_score
@@ -1599,7 +1594,7 @@ def index():
 
 
 @app.errorhandler(404)
-def not_found(error):
+def not_found(_error):
     return jsonify({"error": "Route not found"}), 404
 
 
