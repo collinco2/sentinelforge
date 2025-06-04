@@ -48,6 +48,8 @@ def migrate_database():
                     threat_type VARCHAR(100),
                     severity VARCHAR(20) NOT NULL DEFAULT 'medium',
                     confidence INTEGER NOT NULL DEFAULT 50,
+                    risk_score INTEGER NOT NULL DEFAULT 50,
+                    overridden_risk_score INTEGER,
                     source VARCHAR(100),
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -94,6 +96,7 @@ def migrate_database():
                     "Command and Control",
                     "High",
                     85,
+                    78,  # risk_score
                     "SIEM",
                 ),
                 (
@@ -104,6 +107,7 @@ def migrate_database():
                     "Malware",
                     "Critical",
                     95,
+                    92,  # risk_score
                     "EDR",
                 ),
                 (
@@ -114,14 +118,15 @@ def migrate_database():
                     "Reconnaissance",
                     "Medium",
                     70,
+                    55,  # risk_score
                     "Firewall",
                 ),
             ]
 
             cursor.executemany(
                 """
-                INSERT INTO alerts (name, description, timestamp, formatted_time, threat_type, severity, confidence, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO alerts (name, description, timestamp, formatted_time, threat_type, severity, confidence, risk_score, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 sample_alerts,
             )

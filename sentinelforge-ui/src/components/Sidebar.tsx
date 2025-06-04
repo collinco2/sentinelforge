@@ -6,6 +6,7 @@ import {
   BarChart2,
   Shield,
   AlertCircle,
+  AlertTriangle,
   Settings,
   Menu,
   X,
@@ -29,6 +30,7 @@ export function Sidebar({ className }: SidebarProps) {
   const navItems: NavItem[] = [
     { icon: Home, label: "Dashboard", path: "/dashboard", active: true },
     { icon: Shield, label: "IOC Analysis", path: "/ioc-analysis" },
+    { icon: AlertTriangle, label: "Alerts", path: "/alerts" },
     { icon: AlertCircle, label: "Threats", path: "/threats" },
     { icon: BarChart2, label: "Reports", path: "/reports" },
     { icon: Settings, label: "Settings", path: "/settings" },
@@ -48,12 +50,14 @@ export function Sidebar({ className }: SidebarProps) {
       className={cn(
         "flex flex-col bg-card border-r border-border transition-all duration-300 h-screen",
         collapsed ? "w-16" : "w-64",
-        className
+        className,
       )}
     >
       <div className="flex items-center justify-between p-4 border-b border-border">
         {!collapsed && (
-          <div className="font-semibold text-lg text-foreground">SentinelForge</div>
+          <div className="font-semibold text-lg text-foreground">
+            SentinelForge
+          </div>
         )}
         <Button
           variant="ghost"
@@ -77,7 +81,7 @@ export function Sidebar({ className }: SidebarProps) {
                   activePath === item.path
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:text-foreground",
-                  collapsed ? "justify-center px-0" : "px-3"
+                  collapsed ? "justify-center px-0" : "px-3",
                 )}
                 onClick={() => handleNavClick(item.path)}
               >
@@ -107,4 +111,4 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
     </div>
   );
-} 
+}
