@@ -4,7 +4,6 @@ Demo script to test the new AlertTimelineView React component.
 """
 
 import requests
-import json
 
 
 def test_timeline_component():

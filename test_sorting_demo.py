@@ -4,7 +4,6 @@ Demo script to test the enhanced /api/alerts sorting functionality.
 """
 
 import requests
-import json
 
 
 def test_alerts_sorting():
