@@ -141,6 +141,85 @@ export async function fetchMLExplanation(
   }
 }
 
+// Audit logging interfaces and functions
+export interface AuditLogEntry {
+  id: number;
+  alert_id: number;
+  alert_name: string;
+  user_id: number;
+  original_score: number;
+  override_score: number;
+  justification: string;
+  timestamp: string;
+}
+
+export interface AuditLogsResponse {
+  audit_logs: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AuditFilters {
+  alert_id?: number;
+  user_id?: number;
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchAuditLogs(
+  filters: AuditFilters = {},
+): Promise<AuditLogsResponse | null> {
+  try {
+    const params = new URLSearchParams();
+
+    if (filters.alert_id)
+      params.append("alert_id", filters.alert_id.toString());
+    if (filters.user_id) params.append("user_id", filters.user_id.toString());
+    if (filters.start_date) params.append("start_date", filters.start_date);
+    if (filters.end_date) params.append("end_date", filters.end_date);
+    if (filters.limit) params.append("limit", filters.limit.toString());
+    if (filters.offset) params.append("offset", filters.offset.toString());
+
+    const response = await axios.get(
+      `${API_BASE_URL}/api/audit?${params.toString()}`,
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching audit logs:", error);
+    return null;
+  }
+}
+
+export interface RiskScoreOverride {
+  risk_score: number;
+  justification?: string;
+  user_id?: number;
+}
+
+export async function overrideAlertRiskScore(
+  alertId: number | string,
+  override: RiskScoreOverride,
+): Promise<any> {
+  try {
+    const response = await axios.patch(
+      `${API_BASE_URL}/api/alert/${alertId}/override`,
+      override,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error(`Error overriding risk score for alert ${alertId}:`, error);
+    throw error;
+  }
+}
+
 export async function exportToCSV(): Promise<void> {
   try {
     const response = await axios.get(`${API_BASE_URL}/api/export/csv`, {

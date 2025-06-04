@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelForge Audit Logging Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e5e5e5;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        .demo-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        .audit-entry {
+            background: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border-left: 3px solid #10b981;
+        }
+        .score-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 0 5px;
+        }
+        .score-high { background: #dc2626; }
+        .score-medium { background: #f59e0b; }
+        .score-low { background: #10b981; }
+        .button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #2563eb;
+        }
+        .override-form {
+            background: #333;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #d1d5db;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #e5e5e5;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #065f46;
+            border: 1px solid #10b981;
+        }
+        .status.error {
+            background: #7f1d1d;
+            border: 1px solid #dc2626;
+        }
+        .audit-trail {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1a1a1a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 SentinelForge Audit Logging System</h1>
+            <p>Interactive Demo - Risk Score Override with Complete Audit Trail</p>
+        </div>
+
+        <div class="demo-section">
+            <h2>📊 Current Alert Status</h2>
+            <div id="alert-info">
+                <p><strong>Alert:</strong> <span id="alert-name">Loading...</span></p>
+                <p><strong>Current Risk Score:</strong> <span id="current-score">Loading...</span></p>
+                <p><strong>Overridden Score:</strong> <span id="override-score">Loading...</span></p>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>🔧 Risk Score Override</h2>
+            <div class="override-form">
+                <div class="form-group">
+                    <label for="new-score">New Risk Score (0-100):</label>
+                    <input type="number" id="new-score" min="0" max="100" value="75">
+                </div>
+                <div class="form-group">
+                    <label for="justification">Justification:</label>
+                    <textarea id="justification" rows="3" placeholder="Reason for this risk score change..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="user-id">User ID:</label>
+                    <input type="number" id="user-id" value="1001" placeholder="Analyst ID">
+                </div>
+                <button class="button" onclick="performOverride()">🔄 Override Risk Score</button>
+            </div>
+            <div id="override-status"></div>
+        </div>
+
+        <div class="demo-section">
+            <h2>📋 Audit Trail</h2>
+            <button class="button" onclick="loadAuditTrail()">🔄 Refresh Audit Trail</button>
+            <div id="audit-trail" class="audit-trail">
+                <p>Click "Refresh Audit Trail" to load audit history...</p>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>🧪 API Testing</h2>
+            <button class="button" onclick="testAPI()">🔍 Test API Connection</button>
+            <button class="button" onclick="loadAlerts()">📊 Load All Alerts</button>
+            <div id="api-status"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5059';
+        let currentAlert = null;
+
+        // Load initial data
+        window.onload = function() {
+            loadCurrentAlert();
+            loadAuditTrail();
+        };
+
+        async function loadCurrentAlert() {
+            try {
+                const response = await fetch(`${API_BASE}/api/alerts`);
+                const alerts = await response.json();
+                
+                if (alerts && alerts.length > 0) {
+                    currentAlert = alerts[0]; // Use first alert for demo
+                    document.getElementById('alert-name').textContent = currentAlert.name;
+                    document.getElementById('current-score').innerHTML = getScoreBadge(currentAlert.risk_score);
+                    document.getElementById('override-score').innerHTML = currentAlert.overridden_risk_score 
+                        ? getScoreBadge(currentAlert.overridden_risk_score) 
+                        : '<em>None</em>';
+                }
+            } catch (error) {
+                console.error('Error loading alert:', error);
+                showStatus('error', 'Failed to load alert data');
+            }
+        }
+
+        async function performOverride() {
+            if (!currentAlert) {
+                showStatus('error', 'No alert loaded');
+                return;
+            }
+
+            const newScore = parseInt(document.getElementById('new-score').value);
+            const justification = document.getElementById('justification').value;
+            const userId = parseInt(document.getElementById('user-id').value);
+
+            if (isNaN(newScore) || newScore < 0 || newScore > 100) {
+                showStatus('error', 'Please enter a valid risk score (0-100)');
+                return;
+            }
+
+            if (!justification.trim()) {
+                showStatus('error', 'Please provide a justification for this override');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/alert/${currentAlert.id}/override`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        risk_score: newScore,
+                        justification: justification,
+                        user_id: userId
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus('success', `✅ Risk score successfully overridden to ${newScore}`);
+                    
+                    // Update display
+                    document.getElementById('override-score').innerHTML = getScoreBadge(newScore);
+                    
+                    // Clear form
+                    document.getElementById('justification').value = '';
+                    
+                    // Refresh audit trail
+                    setTimeout(loadAuditTrail, 500);
+                } else {
+                    const error = await response.json();
+                    showStatus('error', `Failed to override: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error performing override:', error);
+                showStatus('error', 'Network error - check if API server is running');
+            }
+        }
+
+        async function loadAuditTrail() {
+            if (!currentAlert) {
+                document.getElementById('audit-trail').innerHTML = '<p>No alert loaded</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/audit?alert_id=${currentAlert.id}`);
+                const data = await response.json();
+                
+                if (data.audit_logs && data.audit_logs.length > 0) {
+                    const auditHtml = data.audit_logs.map(log => `
+                        <div class="audit-entry">
+                            <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
+                                <strong>Entry #${log.id}</strong>
+                                <span style="color: #9ca3af; font-size: 14px;">${new Date(log.timestamp).toLocaleString()}</span>
+                            </div>
+                            <div style="margin: 8px 0;">
+                                <strong>User:</strong> ${log.user_id} | 
+                                <strong>Score Change:</strong> 
+                                ${getScoreBadge(log.original_score)} → ${getScoreBadge(log.override_score)}
+                            </div>
+                            <div style="margin: 8px 0;">
+                                <strong>Justification:</strong> <em>${log.justification || 'No justification provided'}</em>
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    document.getElementById('audit-trail').innerHTML = `
+                        <h4>📊 ${data.total} Total Audit Entries</h4>
+                        ${auditHtml}
+                    `;
+                } else {
+                    document.getElementById('audit-trail').innerHTML = '<p>No audit entries found for this alert.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading audit trail:', error);
+                document.getElementById('audit-trail').innerHTML = '<p style="color: #dc2626;">Error loading audit trail</p>';
+            }
+        }
+
+        async function testAPI() {
+            try {
+                const response = await fetch(`${API_BASE}/api/alerts`);
+                if (response.ok) {
+                    const alerts = await response.json();
+                    showAPIStatus('success', `✅ API Connected - ${alerts.length} alerts available`);
+                } else {
+                    showAPIStatus('error', `❌ API Error: ${response.status}`);
+                }
+            } catch (error) {
+                showAPIStatus('error', '❌ API Connection Failed - Check if server is running on port 5059');
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const response = await fetch(`${API_BASE}/api/alerts`);
+                const alerts = await response.json();
+                
+                const alertsHtml = alerts.map(alert => `
+                    <div style="background: #333; padding: 10px; margin: 5px 0; border-radius: 4px;">
+                        <strong>${alert.name}</strong> (ID: ${alert.id})<br>
+                        Risk Score: ${getScoreBadge(alert.risk_score)}
+                        ${alert.overridden_risk_score ? ` → ${getScoreBadge(alert.overridden_risk_score)}` : ''}
+                    </div>
+                `).join('');
+                
+                showAPIStatus('success', `📊 Loaded ${alerts.length} alerts:<br>${alertsHtml}`);
+            } catch (error) {
+                showAPIStatus('error', '❌ Failed to load alerts');
+            }
+        }
+
+        function getScoreBadge(score) {
+            let className = 'score-low';
+            if (score >= 80) className = 'score-high';
+            else if (score >= 50) className = 'score-medium';
+            
+            return `<span class="score-badge ${className}">${score}</span>`;
+        }
+
+        function showStatus(type, message) {
+            const statusDiv = document.getElementById('override-status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+
+        function showAPIStatus(type, message) {
+            const statusDiv = document.getElementById('api-status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+    </script>
+</body>
+</html>

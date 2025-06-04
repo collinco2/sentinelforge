@@ -1364,6 +1364,8 @@ def override_alert_risk_score(alert_id):
             return jsonify({"error": "risk_score field is required"}), 400
 
         risk_score = data["risk_score"]
+        justification = data.get("justification", "")  # Optional justification
+        user_id = data.get("user_id", 1)  # Default user_id for now
 
         # Validate risk_score value
         if not isinstance(risk_score, (int, float)):
@@ -1378,17 +1380,34 @@ def override_alert_risk_score(alert_id):
         if conn:
             cursor = conn.cursor()
 
-            # Check if alert exists
-            cursor.execute("SELECT id FROM alerts WHERE id = ?", (alert_id,))
-            if not cursor.fetchone():
+            # Check if alert exists and get current risk score
+            cursor.execute(
+                "SELECT id, risk_score, overridden_risk_score FROM alerts WHERE id = ?",
+                (alert_id,),
+            )
+            alert_data = cursor.fetchone()
+            if not alert_data:
                 conn.close()
                 return jsonify({"error": "Alert not found"}), 404
+
+            # Get the original score (use overridden if it exists, otherwise use risk_score)
+            original_score = alert_data.get("overridden_risk_score") or alert_data.get(
+                "risk_score", 50
+            )
 
             # Update the overridden_risk_score
             cursor.execute(
                 "UPDATE alerts SET overridden_risk_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (risk_score, alert_id),
             )
+
+            # Create audit log entry
+            cursor.execute(
+                """INSERT INTO audit_logs (alert_id, user_id, original_score, override_score, justification, timestamp)
+                   VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                (alert_id, user_id, original_score, risk_score, justification),
+            )
+
             conn.commit()
 
             # Fetch the updated alert
@@ -1421,6 +1440,115 @@ def override_alert_risk_score(alert_id):
 
     except Exception as e:
         print(f"Database error in override_alert_risk_score: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/audit", methods=["GET"])
+def get_audit_logs():
+    """Get audit logs with optional filtering."""
+    try:
+        # Get query parameters
+        alert_id = request.args.get("alert_id", type=int)
+        user_id = request.args.get("user_id", type=int)
+        start_date = request.args.get("start_date")  # ISO format: 2023-12-01
+        end_date = request.args.get("end_date")  # ISO format: 2023-12-31
+        limit = request.args.get("limit", default=100, type=int)
+        offset = request.args.get("offset", default=0, type=int)
+
+        # Build the query
+        query = """
+            SELECT al.*, a.name as alert_name
+            FROM audit_logs al
+            JOIN alerts a ON al.alert_id = a.id
+            WHERE 1=1
+        """
+        params = []
+
+        # Add filters
+        if alert_id:
+            query += " AND al.alert_id = ?"
+            params.append(alert_id)
+
+        if user_id:
+            query += " AND al.user_id = ?"
+            params.append(user_id)
+
+        if start_date:
+            query += " AND DATE(al.timestamp) >= ?"
+            params.append(start_date)
+
+        if end_date:
+            query += " AND DATE(al.timestamp) <= ?"
+            params.append(end_date)
+
+        # Add ordering and pagination
+        query += " ORDER BY al.timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        # Execute query
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+
+            audit_logs = []
+            for row in cursor.fetchall():
+                log = dict(row)
+                audit_logs.append(
+                    {
+                        "id": log["id"],
+                        "alert_id": log["alert_id"],
+                        "alert_name": log["alert_name"],
+                        "user_id": log["user_id"],
+                        "original_score": log["original_score"],
+                        "override_score": log["override_score"],
+                        "justification": log.get("justification", ""),
+                        "timestamp": log["timestamp"],
+                    }
+                )
+
+            # Get total count for pagination
+            count_query = """
+                SELECT COUNT(*) as total
+                FROM audit_logs al
+                WHERE 1=1
+            """
+            count_params = []
+
+            if alert_id:
+                count_query += " AND al.alert_id = ?"
+                count_params.append(alert_id)
+
+            if user_id:
+                count_query += " AND al.user_id = ?"
+                count_params.append(user_id)
+
+            if start_date:
+                count_query += " AND DATE(al.timestamp) >= ?"
+                count_params.append(start_date)
+
+            if end_date:
+                count_query += " AND DATE(al.timestamp) <= ?"
+                count_params.append(end_date)
+
+            cursor.execute(count_query, count_params)
+            total_count = cursor.fetchone()["total"]
+
+            conn.close()
+
+            return jsonify(
+                {
+                    "audit_logs": audit_logs,
+                    "total": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        else:
+            return jsonify({"error": "Database connection failed"}), 500
+
+    except Exception as e:
+        print(f"Database error in get_audit_logs: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
 

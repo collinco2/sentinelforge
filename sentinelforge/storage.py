@@ -73,6 +73,20 @@ class Alert(Base):
     iocs = relationship("IOC", secondary=ioc_alert_association, back_populates="alerts")
 
 
+class AuditLogEntry(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=False)
+    user_id = Column(Integer, nullable=False)  # User identifier
+    original_score = Column(Integer, nullable=False)  # Original risk score
+    override_score = Column(Integer, nullable=False)  # New overridden score
+    justification = Column(Text, nullable=True)  # Reason for override
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    # Relationship to Alert
+    alert = relationship("Alert", backref="audit_logs")
+
+
 def init_db():
     # Pass engine explicitly if Base.metadata needs it
     Base.metadata.create_all(bind=engine)
