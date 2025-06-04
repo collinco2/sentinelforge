@@ -42,6 +42,7 @@ import {
 } from "./ui/tooltip";
 import { AuditTrailView } from "./AuditTrailView";
 import { overrideAlertRiskScore } from "../services/api";
+import { useAuth } from "../hooks/useAuth";
 
 // Alert interface matching the one from AlertTable
 interface Alert {
@@ -101,6 +102,9 @@ export function AlertDetailModal({
   const [isUpdatingRiskScore, setIsUpdatingRiskScore] = useState(false);
   const { toast } = useToast();
 
+  // Authentication and RBAC
+  const { canOverrideRiskScores, canViewAuditTrail } = useAuth();
+
   // Tab state
   const [activeTab, setActiveTab] = useState("details");
 
@@ -146,6 +150,27 @@ export function AlertDetailModal({
   const handleRiskScoreOverride = async () => {
     if (!alert) return;
 
+    // Check permissions
+    if (!canOverrideRiskScores()) {
+      toast({
+        title: "Permission Denied",
+        description: "You do not have permission to perform this action.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check justification
+    if (!justification.trim()) {
+      toast({
+        title: "Justification Required",
+        description:
+          "Please provide a justification for the risk score override.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsUpdatingRiskScore(true);
     try {
       await overrideAlertRiskScore(alert.id, {
@@ -169,14 +194,27 @@ export function AlertDetailModal({
       }
     } catch (error) {
       console.error("Error updating risk score:", error);
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to update risk score",
-        variant: "destructive",
-      });
+
+      // Check for permission errors in response
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to update risk score";
+      if (
+        errorMessage.includes("permission") ||
+        errorMessage.includes("403") ||
+        errorMessage.includes("Forbidden")
+      ) {
+        toast({
+          title: "Permission Denied",
+          description: "You do not have permission to perform this action.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsUpdatingRiskScore(false);
     }
@@ -365,10 +403,12 @@ export function AlertDetailModal({
                 <Shield className="h-4 w-4 mr-2" />
                 IOCs
               </TabsTrigger>
-              <TabsTrigger value="audit" className="flex-1">
-                <History className="h-4 w-4 mr-2" />
-                Audit Trail
-              </TabsTrigger>
+              {canViewAuditTrail() && (
+                <TabsTrigger value="audit" className="flex-1">
+                  <History className="h-4 w-4 mr-2" />
+                  Audit Trail
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Details Tab */}
@@ -471,7 +511,7 @@ export function AlertDetailModal({
                             </Tooltip>
                           </TooltipProvider>
                         </div>
-                        {!isEditingRiskScore && (
+                        {!isEditingRiskScore && canOverrideRiskScores() && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -482,6 +522,29 @@ export function AlertDetailModal({
                           >
                             <Edit3 className="h-3 w-3" />
                           </Button>
+                        )}
+                        {!isEditingRiskScore && !canOverrideRiskScores() && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled
+                                  className="h-6 w-6 p-0 text-gray-600 cursor-not-allowed"
+                                  aria-label="Override risk score - insufficient permissions"
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>
+                                  You do not have permission to override risk
+                                  scores
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                       </div>
 
@@ -730,9 +793,11 @@ export function AlertDetailModal({
             </TabsContent>
 
             {/* Audit Trail Tab */}
-            <TabsContent value="audit" className="space-y-6">
-              <AuditTrailView alertId={Number(alert.id)} />
-            </TabsContent>
+            {canViewAuditTrail() && (
+              <TabsContent value="audit" className="space-y-6">
+                <AuditTrailView alertId={Number(alert.id)} />
+              </TabsContent>
+            )}
           </Tabs>
 
           {/* Footer */}

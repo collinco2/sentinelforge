@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify, request, redirect, url_for, Blueprint
+from flask import Flask, jsonify, request, redirect, url_for, Blueprint, g
 from flask_cors import CORS
 import os
 import sqlite3
@@ -7,6 +7,7 @@ import time
 import re
 import random
 import datetime
+from auth import require_role, require_authentication, get_current_user, UserRole
 
 app = Flask(__name__)
 # Enable CORS for all routes and all origins
@@ -1348,8 +1349,9 @@ def get_alert(alert_id):
 
 
 @ioc_bp.route("/api/alert/<int:alert_id>/override", methods=["PATCH"])
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
 def override_alert_risk_score(alert_id):
-    """Override the risk score for a specific alert."""
+    """Override the risk score for a specific alert. Requires analyst or admin role."""
     try:
         # Parse JSON body
         if not request.is_json:
@@ -1365,7 +1367,10 @@ def override_alert_risk_score(alert_id):
 
         risk_score = data["risk_score"]
         justification = data.get("justification", "")  # Optional justification
-        user_id = data.get("user_id", 1)  # Default user_id for now
+
+        # Get current user from auth system
+        current_user = g.current_user
+        user_id = current_user.user_id if current_user else data.get("user_id", 1)
 
         # Validate risk_score value
         if not isinstance(risk_score, (int, float)):
@@ -1443,9 +1448,22 @@ def override_alert_risk_score(alert_id):
         return jsonify({"error": "Internal server error"}), 500
 
 
+@ioc_bp.route("/api/user/current", methods=["GET"])
+@require_authentication()
+def get_current_user_info():
+    """Get current user information and permissions."""
+    try:
+        current_user = g.current_user
+        return jsonify(current_user.to_dict())
+    except Exception as e:
+        print(f"Error getting current user info: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @ioc_bp.route("/api/audit", methods=["GET"])
+@require_role([UserRole.AUDITOR, UserRole.ADMIN])
 def get_audit_logs():
-    """Get audit logs with optional filtering."""
+    """Get audit logs with optional filtering. Requires auditor or admin role."""
     try:
         # Get query parameters
         alert_id = request.args.get("alert_id", type=int)

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getAuthHeaders } from "./auth";
 
 // API base URL
 export const API_BASE_URL = "http://localhost:5059";
@@ -185,6 +186,9 @@ export async function fetchAuditLogs(
 
     const response = await axios.get(
       `${API_BASE_URL}/api/audit?${params.toString()}`,
+      {
+        headers: getAuthHeaders(),
+      },
     );
     return response.data;
   } catch (error) {
@@ -209,6 +213,7 @@ export async function overrideAlertRiskScore(
       override,
       {
         headers: {
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
       },
