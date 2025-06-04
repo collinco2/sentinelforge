@@ -50,8 +50,14 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def proxy_api_request(self):
-        """Proxy API requests to the backend server."""
-        api_server_url = "http://localhost:5059"
+        """Proxy API requests to the appropriate backend server."""
+        # Route timeline requests to timeline API server
+        if self.path.startswith("/api/alerts/timeline"):
+            api_server_url = "http://localhost:5101"
+        else:
+            # Route all other API requests to main API server
+            api_server_url = "http://localhost:5059"
+
         target_url = f"{api_server_url}{self.path}"
 
         try:

@@ -50,10 +50,8 @@ export function useAlertTimeline({
         endDate,
       });
 
-      // Fetch from timeline API
-      const response = await fetch(
-        `http://localhost:5101/api/alerts/timeline?${params.toString()}`
-      );
+      // Fetch from timeline API via proxy
+      const response = await fetch(`/api/alerts/timeline?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch (${response.status})`);
@@ -65,7 +63,10 @@ export function useAlertTimeline({
       console.log("[useAlertTimeline] API Response:", responseData);
 
       if (!responseData || !Array.isArray(responseData)) {
-        console.error("[useAlertTimeline] Invalid API response format:", responseData);
+        console.error(
+          "[useAlertTimeline] Invalid API response format:",
+          responseData,
+        );
         throw new Error("Invalid API response format");
       }
 
@@ -79,7 +80,10 @@ export function useAlertTimeline({
 
       // Log the first item structure to examine date formatting
       if (responseData.length > 0) {
-        console.log("[useAlertTimeline] First item structure:", responseData[0]);
+        console.log(
+          "[useAlertTimeline] First item structure:",
+          responseData[0],
+        );
       }
 
       // Transform the response data to match AlertTimelineDataPoint interface
@@ -118,4 +122,4 @@ export function useAlertTimeline({
     hasAttemptedFetch,
     refetch,
   };
-} 
+}
