@@ -1460,6 +1460,232 @@ def get_current_user_info():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@ioc_bp.route("/api/users", methods=["GET"])
+@require_role([UserRole.ADMIN])
+def get_all_users():
+    """Get all users with their roles. Admin only."""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, username, email, role, is_active, created_at, updated_at
+            FROM users
+            ORDER BY created_at DESC
+        """)
+
+        users = []
+        for row in cursor.fetchall():
+            user_dict = dict(row)
+            # Convert boolean for JSON serialization
+            user_dict["is_active"] = bool(user_dict["is_active"])
+            users.append(user_dict)
+
+        conn.close()
+
+        return jsonify({"users": users, "total": len(users)})
+
+    except Exception as e:
+        print(f"Error getting all users: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/user/<int:user_id>/role", methods=["PATCH"])
+@require_role([UserRole.ADMIN])
+def update_user_role(user_id):
+    """Update a user's role. Admin only."""
+    try:
+        # Parse request data
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body is required"}), 400
+
+        # Validate role field
+        if "role" not in data:
+            return jsonify({"error": "role field is required"}), 400
+
+        new_role = data["role"]
+        valid_roles = ["viewer", "analyst", "auditor", "admin"]
+        if new_role not in valid_roles:
+            return jsonify(
+                {
+                    "error": "Invalid role",
+                    "message": f"Role must be one of: {valid_roles}",
+                }
+            ), 400
+
+        # Get current user for audit logging
+        current_user = g.current_user
+
+        # Get database connection
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Get current user data
+        cursor.execute(
+            """
+            SELECT user_id, username, email, role, is_active, created_at
+            FROM users
+            WHERE user_id = ?
+        """,
+            (user_id,),
+        )
+
+        user_row = cursor.fetchone()
+        if not user_row:
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+
+        old_role = user_row["role"]
+
+        # Prevent admin from demoting themselves
+        if user_id == current_user.user_id and new_role != "admin":
+            conn.close()
+            return jsonify(
+                {
+                    "error": "Cannot demote yourself",
+                    "message": "Admins cannot change their own role",
+                }
+            ), 400
+
+        # Update user role
+        cursor.execute(
+            """
+            UPDATE users
+            SET role = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+        """,
+            (new_role, user_id),
+        )
+
+        # Create audit log entry for role change
+        # We'll use a special format in the audit_logs table for role changes
+        cursor.execute(
+            """
+            INSERT INTO audit_logs (alert_id, user_id, original_score, override_score, justification, timestamp)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """,
+            (
+                -user_id,  # Use negative user_id to indicate this is a role change audit entry
+                current_user.user_id,
+                0,  # Not applicable for role changes
+                0,  # Not applicable for role changes
+                f"ROLE_CHANGE: User '{user_row['username']}' (ID: {user_id}) role changed from '{old_role}' to '{new_role}' by admin '{current_user.username}' (ID: {current_user.user_id})",
+            ),
+        )
+
+        conn.commit()
+
+        # Get updated user data
+        cursor.execute(
+            """
+            SELECT user_id, username, email, role, is_active, created_at, updated_at
+            FROM users
+            WHERE user_id = ?
+        """,
+            (user_id,),
+        )
+
+        updated_user = dict(cursor.fetchone())
+        updated_user["is_active"] = bool(updated_user["is_active"])
+
+        conn.close()
+
+        print(
+            f"Role updated: User {user_row['username']} (ID: {user_id}) from {old_role} to {new_role} by {current_user.username}"
+        )
+
+        return jsonify(
+            {
+                "message": "User role updated successfully",
+                "user": updated_user,
+                "old_role": old_role,
+                "new_role": new_role,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error updating user role: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/audit/roles", methods=["GET"])
+@require_role([UserRole.ADMIN])
+def get_role_change_audit_logs():
+    """Get role change audit logs. Admin only."""
+    try:
+        # Get query parameters
+        limit = request.args.get("limit", default=50, type=int)
+        offset = request.args.get("offset", default=0, type=int)
+        user_id = request.args.get("user_id", type=int)
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Build query for role change audit logs (negative alert_id indicates role changes)
+        query = """
+            SELECT al.*, u.username as admin_username
+            FROM audit_logs al
+            LEFT JOIN users u ON al.user_id = u.user_id
+            WHERE al.alert_id < 0 AND al.justification LIKE 'ROLE_CHANGE:%'
+        """
+        params = []
+
+        if user_id:
+            query += " AND ABS(al.alert_id) = ?"
+            params.append(user_id)
+
+        query += " ORDER BY al.timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor.execute(query, params)
+
+        audit_logs = []
+        for row in cursor.fetchall():
+            log_dict = dict(row)
+            # Parse the role change information from justification
+            justification = log_dict["justification"]
+            if justification.startswith("ROLE_CHANGE:"):
+                log_dict["action"] = "role_change"
+                log_dict["target_user_id"] = abs(log_dict["alert_id"])
+            audit_logs.append(log_dict)
+
+        # Get total count
+        count_query = """
+            SELECT COUNT(*) as total
+            FROM audit_logs
+            WHERE alert_id < 0 AND justification LIKE 'ROLE_CHANGE:%'
+        """
+        count_params = []
+        if user_id:
+            count_query += " AND ABS(alert_id) = ?"
+            count_params.append(user_id)
+
+        cursor.execute(count_query, count_params)
+        total = cursor.fetchone()["total"]
+
+        conn.close()
+
+        return jsonify(
+            {"audit_logs": audit_logs, "total": total, "limit": limit, "offset": offset}
+        )
+
+    except Exception as e:
+        print(f"Error getting role change audit logs: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @ioc_bp.route("/api/audit", methods=["GET"])
 @require_role([UserRole.AUDITOR, UserRole.ADMIN])
 def get_audit_logs():

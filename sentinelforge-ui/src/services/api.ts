@@ -170,6 +170,53 @@ export interface AuditFilters {
   offset?: number;
 }
 
+// User management interfaces
+export interface User {
+  user_id: number;
+  username: string;
+  email: string;
+  role: "viewer" | "analyst" | "auditor" | "admin";
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface UsersResponse {
+  users: User[];
+  total: number;
+}
+
+export interface RoleUpdateRequest {
+  role: "viewer" | "analyst" | "auditor" | "admin";
+}
+
+export interface RoleUpdateResponse {
+  message: string;
+  user: User;
+  old_role: string;
+  new_role: string;
+}
+
+export interface RoleChangeAuditLog {
+  id: number;
+  alert_id: number; // Negative for role changes
+  user_id: number; // Admin who made the change
+  admin_username: string;
+  original_score: number; // Not applicable for role changes
+  override_score: number; // Not applicable for role changes
+  justification: string; // Contains role change details
+  timestamp: string;
+  action: string; // "role_change"
+  target_user_id: number; // User whose role was changed
+}
+
+export interface RoleChangeAuditResponse {
+  audit_logs: RoleChangeAuditLog[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export async function fetchAuditLogs(
   filters: AuditFilters = {},
 ): Promise<AuditLogsResponse | null> {
@@ -248,5 +295,64 @@ export async function exportToCSV(): Promise<void> {
   } catch (error) {
     console.error("Error exporting to CSV:", error);
     alert("Failed to export data. Please try again later.");
+  }
+}
+
+// User management API functions
+export async function getUsers(): Promise<UsersResponse> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/api/users`, {
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    throw error;
+  }
+}
+
+export async function updateUserRole(
+  userId: number,
+  newRole: "viewer" | "analyst" | "auditor" | "admin",
+): Promise<RoleUpdateResponse> {
+  try {
+    const response = await axios.patch(
+      `${API_BASE_URL}/api/user/${userId}/role`,
+      { role: newRole },
+      {
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    throw error;
+  }
+}
+
+export async function getRoleChangeAuditLogs(
+  filters: { user_id?: number; limit?: number; offset?: number } = {},
+): Promise<RoleChangeAuditResponse> {
+  try {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined) {
+        params.append(key, value.toString());
+      }
+    });
+
+    const response = await axios.get(
+      `${API_BASE_URL}/api/audit/roles?${params.toString()}`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching role change audit logs:", error);
+    throw error;
   }
 }

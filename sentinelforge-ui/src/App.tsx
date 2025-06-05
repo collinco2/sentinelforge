@@ -5,6 +5,7 @@ import { IocDetailPage } from "./pages/IocDetailPage";
 import { ShareableIocView } from "./pages/ShareableIocView";
 import { AlertTimelinePage } from "./pages/AlertTimelinePage";
 import { AlertsPage } from "./pages/AlertsPage";
+import { RoleManagementPage } from "./pages/RoleManagementPage";
 import "./App.css";
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/share/ioc/:iocValue" element={<ShareableIocView />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/alerts/timeline" element={<AlertTimelinePage />} />
+            <Route path="/role-management" element={<RoleManagementPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

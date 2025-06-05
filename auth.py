@@ -70,6 +70,10 @@ class User:
         """Check if user can view audit trail."""
         return self.has_permission([UserRole.AUDITOR, UserRole.ADMIN])
 
+    def can_manage_user_roles(self) -> bool:
+        """Check if user can manage other users' roles."""
+        return self.has_permission([UserRole.ADMIN])
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert user to dictionary for JSON serialization."""
         return {
@@ -82,6 +86,7 @@ class User:
             "permissions": {
                 "can_override_risk_scores": self.can_override_risk_scores(),
                 "can_view_audit_trail": self.can_view_audit_trail(),
+                "can_manage_user_roles": self.can_manage_user_roles(),
             },
         }
 

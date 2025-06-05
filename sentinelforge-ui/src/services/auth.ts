@@ -22,6 +22,7 @@ export interface User {
   permissions: {
     can_override_risk_scores: boolean;
     can_view_audit_trail: boolean;
+    can_manage_user_roles: boolean;
   };
 }
 

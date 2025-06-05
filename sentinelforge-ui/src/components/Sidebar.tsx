@@ -10,7 +10,10 @@ import {
   Settings,
   Menu,
   X,
+  Users,
 } from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
+import { UserRole } from "../services/auth";
 
 interface SidebarProps {
   className?: string;
@@ -26,14 +29,24 @@ interface NavItem {
 export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [activePath, setActivePath] = useState("/dashboard");
+  const { hasRole } = useAuth();
 
-  const navItems: NavItem[] = [
+  // Base navigation items
+  const baseNavItems: NavItem[] = [
     { icon: Home, label: "Dashboard", path: "/dashboard", active: true },
     { icon: Shield, label: "IOC Analysis", path: "/ioc-analysis" },
     { icon: AlertTriangle, label: "Alerts", path: "/alerts" },
     { icon: AlertCircle, label: "Threats", path: "/threats" },
     { icon: BarChart2, label: "Reports", path: "/reports" },
     { icon: Settings, label: "Settings", path: "/settings" },
+  ];
+
+  // Add admin-only items
+  const navItems: NavItem[] = [
+    ...baseNavItems,
+    ...(hasRole([UserRole.ADMIN])
+      ? [{ icon: Users, label: "Role Management", path: "/role-management" }]
+      : []),
   ];
 
   const toggleSidebar = () => {
