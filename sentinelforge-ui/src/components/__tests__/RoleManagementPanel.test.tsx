@@ -265,7 +265,7 @@ describe("RoleManagementPanel", () => {
 
     // Find the role dropdown for analyst1 (not the current admin user)
     // Look for the analyst1 user's row and find the role select within it
-    const analyst1Row = screen.getByText("analyst1@test.com");
+    screen.getByText("analyst1@test.com"); // Verify analyst1 user is present
     // Find the role select in the same row by using a more specific selector
     const roleSelects = screen.getAllByRole("combobox");
     // The second combobox should be the analyst1's role dropdown (after the filter)
@@ -319,7 +319,7 @@ describe("RoleManagementPanel", () => {
     });
 
     // Find the role dropdown for admin (current user) in the table
-    const adminRow = screen.getByText("admin@test.com");
+    screen.getByText("admin@test.com"); // Verify admin user is present
     // Find the admin's role select (should be the first user role dropdown after filter)
     const roleSelects = screen.getAllByRole("combobox");
     const adminRoleSelect = roleSelects[1]; // Filter + admin

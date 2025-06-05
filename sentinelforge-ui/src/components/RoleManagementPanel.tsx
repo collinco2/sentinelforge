@@ -148,7 +148,7 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
       setUpdating(pendingUpdate.userId);
       setShowConfirmDialog(false);
 
-      const response = await updateUserRole(
+      await updateUserRole(
         pendingUpdate.userId,
         pendingUpdate.newRole as "viewer" | "analyst" | "auditor" | "admin",
       );

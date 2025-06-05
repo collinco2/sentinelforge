@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { authService, User, UserRole, AuthError } from "../services/auth";
+import { authService, User, UserRole } from "../services/auth";
 
 interface UseAuthReturn {
   user: User | null;
