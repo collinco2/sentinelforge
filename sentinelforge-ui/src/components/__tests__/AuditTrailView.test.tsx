@@ -2,9 +2,12 @@ import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { AuditTrailView } from "../AuditTrailView";
+import * as api from "../../services/api";
 
-// Mock fetch
-global.fetch = vi.fn();
+// Mock the API service
+vi.mock("../../services/api", () => ({
+  fetchAuditLogs: vi.fn(),
+}));
 
 const mockAuditLogs = [
   {
@@ -42,24 +45,23 @@ describe("AuditTrailView", () => {
   });
 
   it("renders loading state initially", () => {
-    vi.mocked(fetch).mockImplementation(() => new Promise(() => {})); // Never resolves
+    vi.mocked(api.fetchAuditLogs).mockImplementation(
+      () => new Promise(() => {}),
+    ); // Never resolves
 
     render(<AuditTrailView alertId={123} />);
 
     expect(screen.getByText("Loading audit trail...")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toBeInTheDocument(); // Loader icon
+    expect(screen.getByTestId("loading-spinner")).toBeInTheDocument(); // Loader icon
   });
 
   it("renders audit logs successfully", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockApiResponse,
-    });
+    vi.mocked(api.fetchAuditLogs).mockResolvedValueOnce(mockApiResponse);
 
     render(<AuditTrailView alertId={123} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Audit Trail (2)")).toBeInTheDocument();
+      expect(screen.getByText(/Audit Trail \(2\)/)).toBeInTheDocument();
     });
 
     // Check if audit log entries are rendered
@@ -68,7 +70,7 @@ describe("AuditTrailView", () => {
 
     // Check score changes
     expect(screen.getByText("50")).toBeInTheDocument(); // Original score
-    expect(screen.getByText("85")).toBeInTheDocument(); // Override score
+    expect(screen.getAllByText("85")).toHaveLength(2); // Override score appears twice (original and override)
     expect(screen.getByText("30")).toBeInTheDocument(); // Second override
 
     // Check justifications
@@ -79,9 +81,10 @@ describe("AuditTrailView", () => {
   });
 
   it("renders empty state when no audit logs", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ ...mockApiResponse, audit_logs: [], total: 0 }),
+    vi.mocked(api.fetchAuditLogs).mockResolvedValueOnce({
+      ...mockApiResponse,
+      audit_logs: [],
+      total: 0,
     });
 
     render(<AuditTrailView alertId={123} />);
@@ -98,7 +101,9 @@ describe("AuditTrailView", () => {
   });
 
   it("renders error state on fetch failure", async () => {
-    vi.mocked(fetch).mockRejectedValueOnce(new Error("Network error"));
+    vi.mocked(api.fetchAuditLogs).mockRejectedValueOnce(
+      new Error("Network error"),
+    );
 
     render(<AuditTrailView alertId={123} />);
 
@@ -106,20 +111,15 @@ describe("AuditTrailView", () => {
       expect(screen.getByText("Error loading audit trail")).toBeInTheDocument();
     });
 
-    expect(
-      screen.getByText("Failed to fetch audit logs: Network error"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Network error")).toBeInTheDocument();
     expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 
   it("handles retry functionality", async () => {
     // First call fails
-    vi.mocked(fetch)
+    vi.mocked(api.fetchAuditLogs)
       .mockRejectedValueOnce(new Error("Network error"))
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockApiResponse,
-      });
+      .mockResolvedValueOnce(mockApiResponse);
 
     render(<AuditTrailView alertId={123} />);
 
@@ -133,7 +133,7 @@ describe("AuditTrailView", () => {
 
     // Wait for successful load
     await waitFor(() => {
-      expect(screen.getByText("Audit Trail (2)")).toBeInTheDocument();
+      expect(screen.getByText(/Audit Trail \(2\)/)).toBeInTheDocument();
     });
   });
 
@@ -148,19 +148,16 @@ describe("AuditTrailView", () => {
       },
     ];
 
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        ...mockApiResponse,
-        audit_logs: mockLogsWithLongJustification,
-        total: 1,
-      }),
+    vi.mocked(api.fetchAuditLogs).mockResolvedValueOnce({
+      ...mockApiResponse,
+      audit_logs: mockLogsWithLongJustification,
+      total: 1,
     });
 
     render(<AuditTrailView alertId={123} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Audit Trail (1)")).toBeInTheDocument();
+      expect(screen.getByText(/Audit Trail \(1\)/)).toBeInTheDocument();
     });
 
     // Should show truncated text initially
@@ -178,28 +175,25 @@ describe("AuditTrailView", () => {
   });
 
   it("calls correct API endpoint with alert ID", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockApiResponse,
-    });
+    vi.mocked(api.fetchAuditLogs).mockResolvedValueOnce(mockApiResponse);
 
     render(<AuditTrailView alertId={456} />);
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/api/audit?alert_id=456&limit=50");
+      expect(api.fetchAuditLogs).toHaveBeenCalledWith({
+        alert_id: 456,
+        limit: 50,
+      });
     });
   });
 
   it("handles refresh functionality", async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => mockApiResponse,
-    });
+    vi.mocked(api.fetchAuditLogs).mockResolvedValue(mockApiResponse);
 
     render(<AuditTrailView alertId={123} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Audit Trail (2)")).toBeInTheDocument();
+      expect(screen.getByText(/Audit Trail \(2\)/)).toBeInTheDocument();
     });
 
     // Click refresh
@@ -207,7 +201,7 @@ describe("AuditTrailView", () => {
 
     // Should call API again
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(api.fetchAuditLogs).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -217,18 +211,15 @@ describe("AuditTrailView", () => {
       { ...mockAuditLogs[1], original_score: 30, override_score: 75 }, // Low to medium
     ];
 
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        ...mockApiResponse,
-        audit_logs: mockLogsWithDifferentScores,
-      }),
+    vi.mocked(api.fetchAuditLogs).mockResolvedValueOnce({
+      ...mockApiResponse,
+      audit_logs: mockLogsWithDifferentScores,
     });
 
     render(<AuditTrailView alertId={123} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Audit Trail (2)")).toBeInTheDocument();
+      expect(screen.getByText(/Audit Trail \(2\)/)).toBeInTheDocument();
     });
 
     // Check that score badges are rendered

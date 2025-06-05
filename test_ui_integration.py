@@ -5,7 +5,6 @@ UI Integration test script to verify the audit logging system works end-to-end.
 
 import requests
 import time
-import json
 
 API_BASE = "http://localhost:5059"
 UI_BASE = "http://localhost:3000"
@@ -55,7 +54,7 @@ def test_ui_integration():
 
             if audit_logs:
                 latest = audit_logs[0]
-                print(f"   📝 Latest Entry:")
+                print("   📝 Latest Entry:")
                 print(f"      User: {latest['user_id']}")
                 print(
                     f"      Score Change: {latest['original_score']} → {latest['override_score']}"
@@ -93,7 +92,7 @@ def test_ui_integration():
 
         if response.status_code == 200:
             result = response.json()
-            print(f"   ✅ Override successful")
+            print("   ✅ Override successful")
             print(f"   📊 New overridden score: {result.get('overridden_risk_score')}")
         else:
             print(f"   ❌ Override failed: {response.status_code}")
@@ -117,8 +116,8 @@ def test_ui_integration():
 
             if audit_logs:
                 latest = audit_logs[0]
-                print(f"   ✅ New audit entry created")
-                print(f"   📝 Entry Details:")
+                print("   ✅ New audit entry created")
+                print("   📝 Entry Details:")
                 print(f"      ID: {latest['id']}")
                 print(f"      User: {latest['user_id']}")
                 print(
@@ -133,12 +132,12 @@ def test_ui_integration():
                     and latest["user_id"] == 999
                     and "UI Integration Test" in latest["justification"]
                 ):
-                    print(f"   ✅ Audit entry data verified")
+                    print("   ✅ Audit entry data verified")
                 else:
-                    print(f"   ❌ Audit entry data mismatch")
+                    print("   ❌ Audit entry data mismatch")
                     return False
             else:
-                print(f"   ❌ No audit entry found")
+                print("   ❌ No audit entry found")
                 return False
         else:
             print(f"   ❌ Audit verification failed: {response.status_code}")
@@ -175,20 +174,20 @@ def test_ui_integration():
     # Step 6: UI Instructions
     print("\n📋 Step 6: UI Testing Instructions")
     print(f"   🌐 Frontend URL: {UI_BASE}")
-    print(f"   📝 Manual Testing Steps:")
+    print("   📝 Manual Testing Steps:")
     print(f"      1. Open {UI_BASE} in your browser")
-    print(f"      2. Navigate to the Alerts page")
+    print("      2. Navigate to the Alerts page")
     print(f"      3. Click on alert '{test_alert['name']}' (ID: {alert_id})")
-    print(f"      4. Verify the modal opens with 3 tabs: Details, IOCs, Audit Trail")
-    print(f"      5. Click on 'Audit Trail' tab")
+    print("      4. Verify the modal opens with 3 tabs: Details, IOCs, Audit Trail")
+    print("      5. Click on 'Audit Trail' tab")
     print(
-        f"      6. Verify you see the audit history with timestamps and justifications"
+        "      6. Verify you see the audit history with timestamps and justifications"
     )
-    print(f"      7. Go back to 'Details' tab")
-    print(f"      8. Click the edit icon next to the risk score")
-    print(f"      9. Change the score and add a justification")
-    print(f"      10. Save the changes")
-    print(f"      11. Go back to 'Audit Trail' tab and verify the new entry appears")
+    print("      7. Go back to 'Details' tab")
+    print("      8. Click the edit icon next to the risk score")
+    print("      9. Change the score and add a justification")
+    print("      10. Save the changes")
+    print("      11. Go back to 'Audit Trail' tab and verify the new entry appears")
 
     print("\n" + "=" * 60)
     print("🎉 UI Integration Test Complete!")
