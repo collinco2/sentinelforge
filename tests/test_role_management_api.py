@@ -9,15 +9,12 @@ Tests user listing, role updates, and audit logging.
 import json
 import sys
 import os
-import sqlite3
 from unittest.mock import patch, MagicMock
 
 # Add the parent directory to sys.path to import api_server
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import api_server
 from api_server import app
-from auth import UserRole, User
 
 
 class TestRoleManagementAPI:

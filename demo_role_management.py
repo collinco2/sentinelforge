@@ -7,10 +7,8 @@ including user listing, role updates, and audit logging.
 """
 
 import requests
-import json
 import time
-from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 
 
 class RoleManagementDemo:
@@ -114,9 +112,9 @@ class RoleManagementDemo:
                 for user in users[:2]:  # Show first 2 users
                     print(f"   - {user['username']} ({user['role']})")
             elif not can_manage and response["status_code"] == 403:
-                print(f"🚫 EXPECTED: Access denied (403)")
+                print("🚫 EXPECTED: Access denied (403)")
             elif response["success"]:
-                print(f"⚠️  UNEXPECTED: Access granted when it shouldn't be")
+                print("⚠️  UNEXPECTED: Access granted when it shouldn't be")
             else:
                 print(f"❌ ERROR: {response['data'].get('error', 'Unknown error')}")
 
@@ -257,28 +255,28 @@ class RoleManagementDemo:
         """Demonstrate UI integration points."""
         self.print_step("5. UI Integration")
 
-        print(f"\n🌐 Frontend Role Management Interface:")
+        print("\n🌐 Frontend Role Management Interface:")
         print(f"   URL: {self.ui_base}/role-management")
-        print(f"   📋 Features:")
-        print(f"      • User listing with role badges")
-        print(f"      • Role filtering and search")
-        print(f"      • Inline role editing with dropdowns")
-        print(f"      • Confirmation dialogs for role changes")
-        print(f"      • Real-time audit trail display")
-        print(f"      • Admin-only access control")
+        print("   📋 Features:")
+        print("      • User listing with role badges")
+        print("      • Role filtering and search")
+        print("      • Inline role editing with dropdowns")
+        print("      • Confirmation dialogs for role changes")
+        print("      • Real-time audit trail display")
+        print("      • Admin-only access control")
 
-        print(f"\n🔐 Security Features:")
-        print(f"      • RBAC enforcement at API level")
-        print(f"      • Self-demotion prevention")
-        print(f"      • Comprehensive audit logging")
-        print(f"      • Input validation and sanitization")
-        print(f"      • Error handling with user feedback")
+        print("\n🔐 Security Features:")
+        print("      • RBAC enforcement at API level")
+        print("      • Self-demotion prevention")
+        print("      • Comprehensive audit logging")
+        print("      • Input validation and sanitization")
+        print("      • Error handling with user feedback")
 
     def run_demo(self):
         """Run the complete role management demo."""
         self.print_header("SentinelForge Role Management Demo")
 
-        print(f"🎯 This demo showcases the admin-only role management system")
+        print("🎯 This demo showcases the admin-only role management system")
         print(f"📊 Testing with {len(self.demo_users)} different user roles")
         print(f"🔗 API Base: {self.api_base}")
         print(f"🌐 UI Base: {self.ui_base}")

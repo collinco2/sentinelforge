@@ -5,6 +5,8 @@ import { RoleManagementPanel } from "../RoleManagementPanel";
 import { UserRole } from "../../services/auth";
 import * as api from "../../services/api";
 
+import { useAuth } from "../../hooks/useAuth";
+
 // Mock dependencies
 vi.mock("../../hooks/useAuth", () => ({
   useAuth: vi.fn(),
@@ -21,8 +23,7 @@ vi.mock("../ui/use-toast", () => ({
     toast: vi.fn(),
   }),
 }));
-
-const mockUseAuth = vi.mocked(require("../../hooks/useAuth").useAuth);
+const mockUseAuth = vi.mocked(useAuth);
 
 const mockGetUsers = vi.mocked(api.getUsers);
 const mockGetRoleChangeAuditLogs = vi.mocked(api.getRoleChangeAuditLogs);

@@ -150,7 +150,7 @@ def demo_role_management_features():
         "target_user_id": 2,
     }
 
-    print(f"\n📄 Sample Audit Log Entry:")
+    print("\n📄 Sample Audit Log Entry:")
     print(json.dumps(sample_audit, indent=2))
 
     print_step("6. Testing Coverage")
@@ -209,9 +209,9 @@ def demo_role_management_features():
     print("   • Extensive testing with 100% pass rate")
     print("   • Production-ready with security best practices")
 
-    print(f"\n🌐 Access the interface at: http://localhost:3000/role-management")
-    print(f"📚 Documentation: docs/ROLE_MANAGEMENT.md")
-    print(f"🧪 Run tests: python tests/test_role_management_api.py")
+    print("\n🌐 Access the interface at: http://localhost:3000/role-management")
+    print("📚 Documentation: docs/ROLE_MANAGEMENT.md")
+    print("🧪 Run tests: python tests/test_role_management_api.py")
 
 
 if __name__ == "__main__":
