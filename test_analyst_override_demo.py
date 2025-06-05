@@ -4,7 +4,6 @@ Demo script to test the analyst override functionality for risk scores.
 """
 
 import requests
-import json
 
 
 def test_analyst_override_functionality():
@@ -54,7 +53,7 @@ def test_current_alert_states():
                         f"      ⚡ Effective Score: {overridden_score} (using override)"
                     )
                 else:
-                    print(f"      🔧 Analyst Override: None")
+                    print("      🔧 Analyst Override: None")
                     print(
                         f"      ⚡ Effective Score: {original_score} (using original)"
                     )

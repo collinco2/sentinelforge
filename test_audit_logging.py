@@ -4,7 +4,6 @@ Test script for audit logging functionality.
 """
 
 import requests
-import json
 import sqlite3
 import os
 

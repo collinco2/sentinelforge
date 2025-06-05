@@ -4,7 +4,6 @@ Final comprehensive demo of the enhanced AlertTable with risk_score functionalit
 """
 
 import requests
-import json
 
 
 def test_complete_risk_score_functionality():

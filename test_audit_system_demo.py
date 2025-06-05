@@ -240,7 +240,7 @@ def get_audit_trail_filtered(**filters):
         data = response.json()
         return data.get("audit_logs", [])
 
-    except Exception as e:
+    except Exception:
         return None
 
 

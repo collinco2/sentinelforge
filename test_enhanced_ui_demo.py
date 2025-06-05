@@ -4,7 +4,6 @@ Demo script to test the enhanced AlertTable and AlertDetailModal components with
 """
 
 import requests
-import json
 
 
 def test_enhanced_ui_functionality():
@@ -67,14 +66,14 @@ def test_current_alert_display():
                         f"      💬 Tooltip: 'Risk Score: {overridden_score}/100 (Overridden by analyst from {original_score})'"
                     )
                 else:
-                    print(f"      🔧 Override Score: None")
+                    print("      🔧 Override Score: None")
                     print(f"      ⚡ Effective Score: {original_score} (original)")
                     print(f"      🎨 Badge: {badge_color} normal styling")
                     print(f"      💬 Tooltip: 'Risk Score: {original_score}/100'")
 
                 # Fire emoji check
                 if effective_score > 90:
-                    print(f"      🔥 Special: Fire emoji displayed")
+                    print("      🔥 Special: Fire emoji displayed")
 
                 print()
 

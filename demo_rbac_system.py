@@ -18,7 +18,6 @@ Usage:
 """
 
 import requests
-import json
 import time
 from typing import Dict, Any
 import webbrowser
@@ -152,7 +151,7 @@ class RBACDemo:
 
     def demonstrate_ui_restrictions(self):
         """Demonstrate UI restrictions based on roles."""
-        print(f"\n🎨 UI Restrictions Demonstration")
+        print("\n🎨 UI Restrictions Demonstration")
         print("-" * 40)
         print("The React UI automatically adapts based on user permissions:")
         print()
@@ -182,7 +181,7 @@ class RBACDemo:
 
     def show_security_features(self):
         """Show security features of the RBAC system."""
-        print(f"\n🔒 Security Features")
+        print("\n🔒 Security Features")
         print("-" * 40)
         print("✅ Defense in Depth:")
         print("   • Frontend: UI restrictions prevent unauthorized actions")
@@ -239,7 +238,7 @@ comprehensive audit capabilities, and defense-in-depth protection.
         self.show_security_features()
 
         # Offer to open browser
-        print(f"\n🌐 Interactive Testing")
+        print("\n🌐 Interactive Testing")
         print("-" * 40)
         print("To test the RBAC system interactively:")
         print(f"1. Open: {self.ui_base}/alerts")
@@ -261,7 +260,7 @@ comprehensive audit capabilities, and defense-in-depth protection.
                 print(f"❌ Could not open browser: {e}")
                 print(f"Please manually navigate to: {self.ui_base}/alerts")
 
-        print(f"\n🎉 RBAC Demonstration Complete!")
+        print("\n🎉 RBAC Demonstration Complete!")
         print("The SentinelForge RBAC system provides enterprise-grade security")
         print(
             "with proper role separation, audit capabilities, and compliance support."

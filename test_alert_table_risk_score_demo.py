@@ -4,7 +4,6 @@ Demo script to test the enhanced AlertTable component with risk_score functional
 """
 
 import requests
-import json
 
 
 def test_alert_table_enhancements():

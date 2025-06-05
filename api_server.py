@@ -7,7 +7,7 @@ import time
 import re
 import random
 import datetime
-from auth import require_role, require_authentication, get_current_user, UserRole
+from auth import require_role, require_authentication, UserRole
 
 app = Flask(__name__)
 # Enable CORS for all routes and all origins
@@ -1740,7 +1740,7 @@ def index():
 
 
 @app.errorhandler(404)
-def not_found(_error):
+def not_found(e):
     return jsonify({"error": "Route not found"}), 404
 
 

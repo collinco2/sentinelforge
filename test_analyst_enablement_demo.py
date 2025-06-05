@@ -18,8 +18,6 @@ Features Demonstrated:
 
 import requests
 import time
-import json
-from datetime import datetime
 from typing import Dict, List, Optional
 
 # Configuration
@@ -117,7 +115,7 @@ class AnalystEnablementDemo:
 
             if response.status_code == 200:
                 result = response.json()
-                print(f"✅ Override successful!")
+                print("✅ Override successful!")
                 print(f"   Alert ID: {result.get('id')}")
                 print(f"   New Risk Score: {result.get('overridden_risk_score')}")
                 print(f"   Previous Score: {result.get('risk_score')}")
@@ -188,7 +186,7 @@ class AnalystEnablementDemo:
         self.wait_for_user("Ready to see the justification? Press Enter...")
 
         # Show justification
-        print(f"\n📝 Analyst Justification:")
+        print("\n📝 Analyst Justification:")
         print(f'   "{justification}"')
 
         self.wait_for_user("Ready to perform the override? Press Enter...")
