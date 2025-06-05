@@ -8,6 +8,7 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
@@ -27,5 +28,8 @@
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "node_modules/call-bind-apply-helpers"
   ]
 } 
