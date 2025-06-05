@@ -1,9 +1,10 @@
 import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { vi, describe, it, expect, beforeEach } from "vitest";
 import { AuditTrailView } from "../AuditTrailView";
 
 // Mock fetch
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 const mockAuditLogs = [
   {
@@ -37,11 +38,11 @@ const mockApiResponse = {
 
 describe("AuditTrailView", () => {
   beforeEach(() => {
-    (fetch as jest.Mock).mockClear();
+    vi.clearAllMocks();
   });
 
   it("renders loading state initially", () => {
-    (fetch as jest.Mock).mockImplementation(() => new Promise(() => {})); // Never resolves
+    vi.mocked(fetch).mockImplementation(() => new Promise(() => {})); // Never resolves
 
     render(<AuditTrailView alertId={123} />);
 
@@ -50,7 +51,7 @@ describe("AuditTrailView", () => {
   });
 
   it("renders audit logs successfully", async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce({
+    vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => mockApiResponse,
     });
@@ -78,7 +79,7 @@ describe("AuditTrailView", () => {
   });
 
   it("renders empty state when no audit logs", async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce({
+    vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ...mockApiResponse, audit_logs: [], total: 0 }),
     });
@@ -97,7 +98,7 @@ describe("AuditTrailView", () => {
   });
 
   it("renders error state on fetch failure", async () => {
-    (fetch as jest.Mock).mockRejectedValueOnce(new Error("Network error"));
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("Network error"));
 
     render(<AuditTrailView alertId={123} />);
 
@@ -113,7 +114,7 @@ describe("AuditTrailView", () => {
 
   it("handles retry functionality", async () => {
     // First call fails
-    (fetch as jest.Mock)
+    vi.mocked(fetch)
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValueOnce({
         ok: true,
@@ -147,7 +148,7 @@ describe("AuditTrailView", () => {
       },
     ];
 
-    (fetch as jest.Mock).mockResolvedValueOnce({
+    vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         ...mockApiResponse,
@@ -177,7 +178,7 @@ describe("AuditTrailView", () => {
   });
 
   it("calls correct API endpoint with alert ID", async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce({
+    vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => mockApiResponse,
     });
@@ -190,7 +191,7 @@ describe("AuditTrailView", () => {
   });
 
   it("handles refresh functionality", async () => {
-    (fetch as jest.Mock).mockResolvedValue({
+    vi.mocked(fetch).mockResolvedValue({
       ok: true,
       json: async () => mockApiResponse,
     });
@@ -216,7 +217,7 @@ describe("AuditTrailView", () => {
       { ...mockAuditLogs[1], original_score: 30, override_score: 75 }, // Low to medium
     ];
 
-    (fetch as jest.Mock).mockResolvedValueOnce({
+    vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         ...mockApiResponse,
