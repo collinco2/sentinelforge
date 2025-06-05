@@ -18,10 +18,7 @@ Usage:
 """
 
 import requests
-import json
-import time
-from typing import Dict, Any, Optional
-import base64
+from typing import Dict
 
 
 class RBACTester:
@@ -75,7 +72,7 @@ class RBACTester:
         }
 
         # Test each role
-        for role, user in self.test_users.items():
+        for role in self.test_users.keys():
             try:
                 response = requests.patch(
                     f"{self.base_url}/api/alert/{alert_id}/override",
@@ -113,7 +110,7 @@ class RBACTester:
         print("=" * 50)
 
         # Test each role
-        for role, user in self.test_users.items():
+        for role in self.test_users.keys():
             try:
                 response = requests.get(
                     f"{self.base_url}/api/audit?limit=5",

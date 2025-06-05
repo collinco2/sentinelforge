@@ -61,7 +61,7 @@ def test_timeline_route():
                                 event["timestamp"].replace("Z", "+00:00")
                             )
                             formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-                        except:
+                        except (ValueError, AttributeError):
                             formatted_time = event["timestamp"]
 
                         print(

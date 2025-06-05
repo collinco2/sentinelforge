@@ -4,7 +4,6 @@ Demo script to test the enhanced Alert model and API with risk_score functionali
 """
 
 import requests
-import json
 
 
 def test_risk_score_enhancements():
