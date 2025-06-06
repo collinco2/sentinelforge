@@ -1,8 +1,14 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Moon, Bell, Search } from "lucide-react";
+import { Moon, Bell, Search, LogOut, User } from "lucide-react";
 import { UserRoleSelector } from "./UserRoleSelector";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useAuth } from "../hooks/useAuth";
 
 interface TopbarProps {
   className?: string;
@@ -10,6 +16,14 @@ interface TopbarProps {
 }
 
 export function Topbar({ className, title = "Dashboard" }: TopbarProps) {
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    // Redirect to login page
+    window.location.href = "/login";
+  };
+
   return (
     <div
       className={cn(
@@ -52,6 +66,42 @@ export function Topbar({ className, title = "Dashboard" }: TopbarProps) {
           >
             <Bell size={20} />
           </Button>
+
+          {/* User Menu */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
+                aria-label="User menu"
+              >
+                <User size={20} />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-2" align="end">
+              <div className="space-y-2">
+                {user && (
+                  <div className="px-2 py-1.5 text-sm">
+                    <div className="font-medium text-foreground">
+                      {user.username}
+                    </div>
+                    <div className="text-muted-foreground">{user.role}</div>
+                  </div>
+                )}
+                <div className="border-t border-border my-1"></div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           <Button
             variant="ghost"

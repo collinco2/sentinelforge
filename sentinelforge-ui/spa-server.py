@@ -97,7 +97,8 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                     "GET, POST, PUT, PATCH, DELETE, OPTIONS",
                 )
                 self.send_header(
-                    "Access-Control-Allow-Headers", "Content-Type, Authorization"
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Authorization, X-Session-Token",
                 )
 
                 self.end_headers()
@@ -116,10 +117,47 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
         # Handle HEAD requests the same way as GET requests
         return self.do_GET()
 
+    def do_POST(self):
+        """Handle POST requests by proxying to API server."""
+        if self.path.startswith("/api/"):
+            return self.proxy_api_request()
+        else:
+            self.send_error(404, "Not Found")
+
     def do_PATCH(self):
         """Handle PATCH requests by proxying to API server."""
         if self.path.startswith("/api/"):
             return self.proxy_api_request()
+        else:
+            self.send_error(404, "Not Found")
+
+    def do_PUT(self):
+        """Handle PUT requests by proxying to API server."""
+        if self.path.startswith("/api/"):
+            return self.proxy_api_request()
+        else:
+            self.send_error(404, "Not Found")
+
+    def do_DELETE(self):
+        """Handle DELETE requests by proxying to API server."""
+        if self.path.startswith("/api/"):
+            return self.proxy_api_request()
+        else:
+            self.send_error(404, "Not Found")
+
+    def do_OPTIONS(self):
+        """Handle OPTIONS requests for CORS preflight."""
+        if self.path.startswith("/api/"):
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, X-Session-Token",
+            )
+            self.end_headers()
         else:
             self.send_error(404, "Not Found")
 
@@ -129,7 +167,10 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         )
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, X-Session-Token",
+        )
         super().end_headers()
 
 

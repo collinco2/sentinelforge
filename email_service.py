@@ -6,7 +6,6 @@ Handles sending password reset emails using SendGrid integration.
 
 import logging
 import os
-from typing import Optional
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
