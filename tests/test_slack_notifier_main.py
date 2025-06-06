@@ -12,12 +12,12 @@ except ImportError:
     import os
 
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "sentinelforge"))
-    import notifications.slack_notifier as slack_notifier
-    from notifications.slack_notifier import send_high_severity_alert
+    import notifications.slack_notifier as slack_notifier  # noqa: F401
+    from notifications.slack_notifier import send_high_severity_alert  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
-def reload_notifier_module(monkeypatch):
+def reload_notifier_module(monkeypatch):  # noqa: ARG001
     """Ensure the notifier module re-evaluates env vars for each test."""
     # Critical: Since the webhook client is initialized at the module level,
     # we need to force a reload or patch the module-level variable for
@@ -52,7 +52,7 @@ def test_send_alert_success(mock_webhook_client):
     # Assert that the mocked client's send method was called once
     mock_webhook_client.send.assert_called_once()
     # Check some basic content of the call args
-    args, kwargs = mock_webhook_client.send.call_args
+    args, kwargs = mock_webhook_client.send.call_args  # noqa: F841
 
     # Check text field (contains basic info)
     assert "High-Severity IOC Detected" in kwargs.get("text", "")

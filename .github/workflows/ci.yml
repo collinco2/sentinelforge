@@ -25,10 +25,6 @@ jobs:
           pip install -r requirements-ml.txt
           # Ensure critical dependencies are installed
           pip install numpy pydantic-settings email-validator flask flask-cors
-      - name: Lint Python code
-        run: |
-          ruff format . --check
-          ruff check .
       - name: Clean Python cache
         run: |
           # Remove any __pycache__ directories and .pyc files to prevent import conflicts
@@ -37,6 +33,12 @@ jobs:
       - name: Debug Python environment and imports
         run: |
           python test_imports.py
+      - name: Lint Python code
+        env:
+          PYTHONPATH: .:sentinelforge
+        run: |
+          ruff format . --check
+          ruff check .
       - name: Run Python tests
         env:
           PYTHONPATH: .:sentinelforge

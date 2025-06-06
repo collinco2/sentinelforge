@@ -10,7 +10,7 @@ except ImportError:
     sys.path.insert(
         0, os.path.join(os.path.dirname(__file__), "..", "..", "sentinelforge")
     )
-    from ml.scoring_model import extract_features, predict_score
+    from ml.scoring_model import extract_features, predict_score  # noqa: F401
 
 
 def test_extract_features_ip():
@@ -104,7 +104,7 @@ def test_predict_score_no_model(monkeypatch):
         sys.path.insert(
             0, os.path.join(os.path.dirname(__file__), "..", "..", "sentinelforge")
         )
-        from ml import scoring_model
+        from ml import scoring_model  # noqa: F401
 
     monkeypatch.setattr(scoring_model, "_model", None)
 
@@ -119,7 +119,7 @@ class MockRandomForestClassifier:
     def __init__(self, probas=None):
         self.predict_proba_return = probas or np.array([[0.3, 0.7]])
 
-    def predict_proba(self, X):
+    def predict_proba(self, X):  # noqa: ARG002
         return self.predict_proba_return
 
 
@@ -138,7 +138,7 @@ def test_predict_score_with_model(monkeypatch):
         sys.path.insert(
             0, os.path.join(os.path.dirname(__file__), "..", "..", "sentinelforge")
         )
-        from ml import scoring_model
+        from ml import scoring_model  # noqa: F401
 
     monkeypatch.setattr(scoring_model, "_model", mock_model)
 
