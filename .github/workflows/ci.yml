@@ -39,12 +39,20 @@ jobs:
         run: |
           ruff format . --check
           ruff check .
+      - name: Test specific modules first
+        env:
+          PYTHONPATH: .:sentinelforge
+        run: |
+          echo "Testing individual modules to isolate issues..."
+          python -m pytest tests/test_slack_notifier_main.py -v || echo "Slack notifier tests failed"
+          python -m pytest tests/test_ml/test_scoring_model_main.py -v || echo "ML scoring tests failed"
+          python -m pytest tests/test_taxii_main.py -v || echo "TAXII tests failed"
       - name: Run Python tests
         env:
           PYTHONPATH: .:sentinelforge
         run: |
           # Run tests with more verbose output and specific test selection
-          python -m pytest tests/ -v --tb=short --maxfail=5
+          python -m pytest tests/ -v --tb=short --maxfail=5 --durations=10
 
   node-tests:
     name: React Frontend Tests
