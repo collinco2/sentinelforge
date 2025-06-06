@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify, request, redirect, url_for, Blueprint, g
+from flask import Flask, jsonify, request, redirect, url_for, Blueprint, g, session
 from flask_cors import CORS
 import os
 import sqlite3
@@ -7,17 +7,35 @@ import time
 import re
 import random
 import datetime
-from auth import require_role, require_authentication, UserRole
+import secrets
+from auth import (
+    require_role,
+    require_authentication,
+    UserRole,
+    get_user_by_credentials,
+    get_user_by_session,
+    create_session,
+    invalidate_session,
+)
 
 app = Flask(__name__)
+
+# Configure Flask session
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+app.config["SESSION_COOKIE_SECURE"] = False  # Set to True in production with HTTPS
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = 86400  # 24 hours
+
 # Enable CORS for all routes and all origins
 CORS(
     app,
     resources={
         r"/*": {
             "origins": "*",
-            "allow_headers": ["Content-Type", "Authorization"],
-            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Session-Token"],
+            "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+            "supports_credentials": True,
         }
     },
 )
@@ -1448,6 +1466,104 @@ def override_alert_risk_score(alert_id):
         return jsonify({"error": "Internal server error"}), 500
 
 
+# Authentication endpoints
+@ioc_bp.route("/api/login", methods=["POST"])
+def login():
+    """Authenticate user and create session."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        username = data.get("username")
+        password = data.get("password")
+
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
+
+        # Authenticate user
+        user = get_user_by_credentials(username, password)
+        if not user:
+            return jsonify({"error": "Invalid credentials"}), 401
+
+        # Create session
+        session_token = create_session(user.user_id)
+        if not session_token:
+            return jsonify({"error": "Failed to create session"}), 500
+
+        # Set session cookie
+        session["user_id"] = user.user_id
+        session["session_token"] = session_token
+        session.permanent = True
+
+        return jsonify(
+            {
+                "message": "Login successful",
+                "user": user.to_dict(),
+                "session_token": session_token,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error during login: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/logout", methods=["POST"])
+def logout():
+    """Logout user and invalidate session."""
+    try:
+        # Get session token from header or session
+        session_token = request.headers.get("X-Session-Token") or session.get(
+            "session_token"
+        )
+
+        if session_token:
+            # Invalidate session in database
+            invalidate_session(session_token)
+
+        # Clear Flask session
+        session.clear()
+
+        return jsonify({"message": "Logout successful"})
+
+    except Exception as e:
+        print(f"Error during logout: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/session", methods=["GET"])
+def get_session():
+    """Get current session information."""
+    try:
+        # Get session token from header or session
+        session_token = request.headers.get("X-Session-Token") or session.get(
+            "session_token"
+        )
+
+        if not session_token:
+            return jsonify({"authenticated": False, "user": None})
+
+        # Get user by session
+        user = get_user_by_session(session_token)
+        if not user:
+            # Session is invalid, clear it
+            session.clear()
+            return jsonify({"authenticated": False, "user": None})
+
+        return jsonify(
+            {
+                "authenticated": True,
+                "user": user.to_dict(),
+                "session_token": session_token,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error getting session: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @ioc_bp.route("/api/user/current", methods=["GET"])
 @require_authentication()
 def get_current_user_info():
@@ -1966,8 +2082,8 @@ def index():
 
 
 @app.errorhandler(404)
-def not_found(e):
-    return jsonify({"error": "Route not found"}), 404
+def not_found(error):
+    return jsonify({"error": "Route not found", "details": str(error)}), 404
 
 
 # Initialize IOCS and ALERTS lists at startup

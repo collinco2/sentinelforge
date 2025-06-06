@@ -290,6 +290,36 @@ def get_user_by_session(session_id: str) -> Optional[User]:
         return None
 
 
+def invalidate_session(session_id: str) -> bool:
+    """Invalidate a session by marking it as expired."""
+    if not session_id:
+        return False
+
+    conn = get_db_connection()
+    if not conn:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE sessions
+            SET expires_at = ?
+            WHERE session_id = ?
+        """,
+            (time.time() - 1, session_id),  # Set expiry to past time
+        )
+
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+
+    except Exception as e:
+        print(f"Error invalidating session: {e}")
+        conn.close()
+        return False
+
+
 def get_user_by_credentials(username: str, password: str) -> Optional[User]:
     """Authenticate user by username and password."""
     conn = get_db_connection()
