@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -184,6 +184,20 @@ export default function LoginPage() {
               </Button>
             </form>
 
+            {/* Forgot Password Link */}
+            <div className="text-center">
+              <Link to="/forgot-password">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-400 hover:text-white hover:bg-slate-700"
+                  disabled={isLoading}
+                >
+                  Forgot your password?
+                </Button>
+              </Link>
+            </div>
+
             {/* Demo Accounts */}
             <div className="space-y-3">
               <div className="relative">
@@ -212,7 +226,7 @@ export default function LoginPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDemoLogin("analyst", "analyst123")}
+                  onClick={() => handleDemoLogin("analyst1", "analyst123")}
                   disabled={isLoading}
                   className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
                 >
@@ -222,7 +236,7 @@ export default function LoginPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDemoLogin("auditor", "auditor123")}
+                  onClick={() => handleDemoLogin("auditor1", "auditor123")}
                   disabled={isLoading}
                   className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
                 >
@@ -232,7 +246,7 @@ export default function LoginPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDemoLogin("viewer", "viewer123")}
+                  onClick={() => handleDemoLogin("viewer1", "viewer123")}
                   disabled={isLoading}
                   className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
                 >

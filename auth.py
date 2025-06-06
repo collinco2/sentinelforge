@@ -149,6 +149,21 @@ def init_auth_tables():
             )
         """)
 
+        # Create password reset tokens table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                token_id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                is_used BOOLEAN DEFAULT 0,
+                used_at TIMESTAMP NULL,
+                ip_address TEXT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        """)
+
         conn.commit()
 
         # Create default users if they don't exist
@@ -217,6 +232,155 @@ def verify_password(password: str, password_hash: str) -> bool:
         salt, hash_value = password_hash.split(":")
         return hashlib.sha256((password + salt).encode()).hexdigest() == hash_value
     except ValueError:
+        return False
+
+
+def update_user_password(user_id: int, new_password: str) -> bool:
+    """Update user's password with new hash."""
+    conn = get_db_connection()
+    if not conn:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        password_hash = hash_password(new_password)
+
+        cursor.execute(
+            """
+            UPDATE users
+            SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND is_active = 1
+            """,
+            (password_hash, user_id),
+        )
+
+        rows_affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return rows_affected > 0
+
+    except Exception as e:
+        print(f"Error updating user password: {e}")
+        conn.close()
+        return False
+
+
+def create_password_reset_token(email: str, ip_address: str = None) -> Optional[str]:
+    """Create a password reset token for the given email."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cursor = conn.cursor()
+
+        # First, check if user exists and is active
+        cursor.execute(
+            "SELECT user_id FROM users WHERE email = ? AND is_active = 1", (email,)
+        )
+
+        user_row = cursor.fetchone()
+        if not user_row:
+            # Don't reveal if email exists or not for security
+            conn.close()
+            return None
+
+        user_id = user_row["user_id"]
+
+        # Generate secure token
+        token_id = secrets.token_urlsafe(32)
+        expires_at = time.time() + (60 * 60)  # 1 hour expiry
+
+        # Insert reset token
+        cursor.execute(
+            """
+            INSERT INTO password_reset_tokens
+            (token_id, user_id, email, expires_at, ip_address)
+            VALUES (?, ?, ?, datetime(?, 'unixepoch'), ?)
+            """,
+            (token_id, user_id, email, expires_at, ip_address),
+        )
+
+        conn.commit()
+        conn.close()
+        return token_id
+
+    except Exception as e:
+        print(f"Error creating password reset token: {e}")
+        conn.close()
+        return None
+
+
+def validate_password_reset_token(token_id: str) -> Optional[Dict[str, Any]]:
+    """Validate password reset token and return user info if valid."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT prt.user_id, prt.email, prt.created_at, prt.expires_at,
+                   u.username, u.is_active
+            FROM password_reset_tokens prt
+            JOIN users u ON prt.user_id = u.user_id
+            WHERE prt.token_id = ?
+            AND prt.is_used = 0
+            AND prt.expires_at > datetime('now')
+            AND u.is_active = 1
+            """,
+            (token_id,),
+        )
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            return {
+                "user_id": row["user_id"],
+                "email": row["email"],
+                "username": row["username"],
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+            }
+        return None
+
+    except Exception as e:
+        print(f"Error validating password reset token: {e}")
+        conn.close()
+        return None
+
+
+def use_password_reset_token(token_id: str, ip_address: str = None) -> bool:
+    """Mark password reset token as used."""
+    conn = get_db_connection()
+    if not conn:
+        return False
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            UPDATE password_reset_tokens
+            SET is_used = 1, used_at = CURRENT_TIMESTAMP, ip_address = ?
+            WHERE token_id = ? AND is_used = 0
+            """,
+            (ip_address, token_id),
+        )
+
+        rows_affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return rows_affected > 0
+
+    except Exception as e:
+        print(f"Error marking password reset token as used: {e}")
+        conn.close()
         return False
 
 

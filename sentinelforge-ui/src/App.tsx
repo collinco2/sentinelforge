@@ -6,6 +6,8 @@ import ProtectedRoute, {
   AuditorRoute,
 } from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
+import PasswordResetRequestPage from "./pages/PasswordResetRequestPage";
+import PasswordResetPage from "./pages/PasswordResetPage";
 import { Dashboard } from "./pages/Dashboard";
 import { IocDetailPage } from "./pages/IocDetailPage";
 import { ShareableIocView } from "./pages/ShareableIocView";
@@ -23,6 +25,11 @@ function App() {
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/forgot-password"
+                element={<PasswordResetRequestPage />}
+              />
+              <Route path="/reset-password" element={<PasswordResetPage />} />
               <Route
                 path="/share/ioc/:iocValue"
                 element={<ShareableIocView />}

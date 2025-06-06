@@ -16,6 +16,14 @@ from auth import (
     get_user_by_session,
     create_session,
     invalidate_session,
+    create_password_reset_token,
+    validate_password_reset_token,
+    use_password_reset_token,
+    update_user_password,
+)
+from email_service import (
+    send_password_reset_email,
+    send_password_reset_confirmation_email,
 )
 
 app = Flask(__name__)
@@ -1529,6 +1537,125 @@ def logout():
 
     except Exception as e:
         print(f"Error during logout: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/request-password-reset", methods=["POST"])
+def request_password_reset():
+    """Request a password reset token via email."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        email = data.get("email", "").strip().lower()
+
+        if not email:
+            return jsonify({"error": "Email address is required"}), 400
+
+        # Basic email validation
+        if "@" not in email or "." not in email:
+            return jsonify({"error": "Invalid email address format"}), 400
+
+        # Get client IP for logging
+        client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr)
+
+        # Create password reset token
+        reset_token = create_password_reset_token(email, client_ip)
+
+        if reset_token:
+            # Send password reset email
+            # Note: We get username from the token validation for security
+            token_info = validate_password_reset_token(reset_token)
+            if token_info:
+                email_sent = send_password_reset_email(
+                    email=email,
+                    username=token_info["username"],
+                    reset_token=reset_token,
+                )
+
+                if email_sent:
+                    print(f"Password reset email sent to {email}")
+                else:
+                    print(f"Failed to send password reset email to {email}")
+
+        # Always return success to prevent email enumeration attacks
+        return jsonify(
+            {
+                "message": "If an account with that email exists, a password reset link has been sent."
+            }
+        )
+
+    except Exception as e:
+        print(f"Error during password reset request: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/reset-password", methods=["POST"])
+def reset_password():
+    """Reset user password using a valid token."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        token = data.get("token", "").strip()
+        new_password = data.get("new_password", "")
+
+        if not token:
+            return jsonify({"error": "Reset token is required"}), 400
+
+        if not new_password:
+            return jsonify({"error": "New password is required"}), 400
+
+        # Password strength validation
+        if len(new_password) < 8:
+            return jsonify(
+                {"error": "Password must be at least 8 characters long"}
+            ), 400
+
+        # Validate reset token
+        token_info = validate_password_reset_token(token)
+        if not token_info:
+            return jsonify({"error": "Invalid or expired reset token"}), 401
+
+        # Get client IP for logging
+        client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.remote_addr)
+
+        # Update user password
+        password_updated = update_user_password(token_info["user_id"], new_password)
+        if not password_updated:
+            return jsonify({"error": "Failed to update password"}), 500
+
+        # Mark token as used
+        token_used = use_password_reset_token(token, client_ip)
+        if not token_used:
+            print(
+                f"Warning: Failed to mark reset token as used for user {token_info['user_id']}"
+            )
+
+        # Send confirmation email
+        confirmation_sent = send_password_reset_confirmation_email(
+            email=token_info["email"], username=token_info["username"]
+        )
+
+        if not confirmation_sent:
+            print(
+                f"Warning: Failed to send password reset confirmation to {token_info['email']}"
+            )
+
+        print(
+            f"Password successfully reset for user {token_info['username']} ({token_info['email']})"
+        )
+
+        return jsonify(
+            {
+                "message": "Password has been successfully reset. You can now log in with your new password."
+            }
+        )
+
+    except Exception as e:
+        print(f"Error during password reset: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
 
