@@ -1,5 +1,11 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute, {
+  AdminRoute,
+  AuditorRoute,
+} from "./components/ProtectedRoute";
+import LoginPage from "./pages/LoginPage";
 import { Dashboard } from "./pages/Dashboard";
 import { IocDetailPage } from "./pages/IocDetailPage";
 import { ShareableIocView } from "./pages/ShareableIocView";
@@ -13,16 +19,79 @@ function App() {
     <div className="dark">
       <div className="min-h-screen bg-background text-foreground">
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/threat-intel/:iocId" element={<IocDetailPage />} />
-            <Route path="/ioc/:iocId" element={<IocDetailPage />} />
-            <Route path="/share/ioc/:iocValue" element={<ShareableIocView />} />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/alerts/timeline" element={<AlertTimelinePage />} />
-            <Route path="/role-management" element={<RoleManagementPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AuthProvider>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/share/ioc/:iocValue"
+                element={<ShareableIocView />}
+              />
+
+              {/* Protected routes - require authentication */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Navigate to="/dashboard" replace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/threat-intel/:iocId"
+                element={
+                  <ProtectedRoute>
+                    <IocDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ioc/:iocId"
+                element={
+                  <ProtectedRoute>
+                    <IocDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/alerts"
+                element={
+                  <ProtectedRoute>
+                    <AlertsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/alerts/timeline"
+                element={
+                  <AuditorRoute>
+                    <AlertTimelinePage />
+                  </AuditorRoute>
+                }
+              />
+
+              {/* Admin-only routes */}
+              <Route
+                path="/role-management"
+                element={
+                  <AdminRoute>
+                    <RoleManagementPage />
+                  </AdminRoute>
+                }
+              />
+
+              {/* Fallback route */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </AuthProvider>
         </BrowserRouter>
       </div>
     </div>

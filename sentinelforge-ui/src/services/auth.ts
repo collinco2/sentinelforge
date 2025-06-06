@@ -137,14 +137,20 @@ class AuthService {
       "Content-Type": "application/json",
     };
 
-    // Add demo user header for testing
+    // Add session token from localStorage if available
+    const sessionToken = localStorage.getItem("session_token");
+    if (sessionToken) {
+      headers["X-Session-Token"] = sessionToken;
+    }
+
+    // Add demo user header for testing (fallback)
     const demoUserId = localStorage.getItem("demo_user_id");
-    if (demoUserId) {
+    if (demoUserId && !sessionToken) {
       headers["X-Demo-User-ID"] = demoUserId;
     }
 
-    // Add session token if available
-    if (this.authToken) {
+    // Add legacy auth token if available (fallback)
+    if (this.authToken && !sessionToken) {
       headers["X-Session-Token"] = this.authToken;
     }
 
@@ -152,24 +158,31 @@ class AuthService {
   }
 
   /**
-   * Login with username and password
+   * Login with username and password using session-based authentication
    */
   async login(username: string, password: string): Promise<User | AuthError> {
     try {
-      const credentials = btoa(`${username}:${password}`);
-      const response = await fetch("/api/user/current", {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        credentials: "include",
         headers: {
-          Authorization: `Basic ${credentials}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ username, password }),
       });
 
       if (response.ok) {
-        const user = await response.json();
-        this.currentUser = user;
-        this.authToken = credentials;
+        const data = await response.json();
+        this.currentUser = data.user;
+
+        // Store session token for API requests
+        if (data.session_token) {
+          this.authToken = data.session_token;
+          localStorage.setItem("session_token", data.session_token);
+        }
+
         this.saveAuth();
-        return user;
+        return data.user;
       } else {
         const error = await response.json();
         return error as AuthError;
@@ -183,14 +196,35 @@ class AuthService {
   }
 
   /**
-   * Logout current user
+   * Logout current user and invalidate session
    */
-  logout(): void {
-    this.currentUser = null;
-    this.authToken = null;
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("demo_user_id");
-    localStorage.removeItem("current_user");
+  async logout(): Promise<void> {
+    try {
+      // Get session token for logout request
+      const sessionToken =
+        localStorage.getItem("session_token") || this.authToken;
+
+      if (sessionToken) {
+        await fetch("/api/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Session-Token": sessionToken,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      // Always clear local state regardless of API response
+      this.currentUser = null;
+      this.authToken = null;
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("demo_user_id");
+      localStorage.removeItem("current_user");
+      localStorage.removeItem("session_token");
+    }
   }
 
   /**
