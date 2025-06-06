@@ -3,8 +3,17 @@ from unittest.mock import MagicMock  # Using patch might be cleaner sometimes
 from slack_sdk.webhook import WebhookClient
 
 # Module under test
-import sentinelforge.notifications.slack_notifier as slack_notifier
-from sentinelforge.notifications.slack_notifier import send_high_severity_alert
+try:
+    import sentinelforge.notifications.slack_notifier as slack_notifier
+    from sentinelforge.notifications.slack_notifier import send_high_severity_alert
+except ImportError:
+    # Try alternative import path for CI environment
+    import sys
+    import os
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "sentinelforge"))
+    import notifications.slack_notifier as slack_notifier
+    from notifications.slack_notifier import send_high_severity_alert
 
 
 @pytest.fixture(autouse=True)

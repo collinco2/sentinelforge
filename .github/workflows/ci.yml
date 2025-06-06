@@ -34,15 +34,12 @@ jobs:
           # Remove any __pycache__ directories and .pyc files to prevent import conflicts
           find . -type d -name '__pycache__' -exec rm -rf {} +
           find . -type f -name '*.pyc' -delete
-      - name: Debug Python environment
+      - name: Debug Python environment and imports
         run: |
-          python --version
-          python -c "import sys; print('Python path:', sys.path)"
-          python -c "import sentinelforge; print('SentinelForge imported successfully')"
-          ls -la tests/
+          python test_imports.py
       - name: Run Python tests
         env:
-          PYTHONPATH: .
+          PYTHONPATH: .:sentinelforge
         run: |
           # Run tests with more verbose output and specific test selection
           python -m pytest tests/ -v --tb=short --maxfail=5

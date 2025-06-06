@@ -1,5 +1,16 @@
 import numpy as np
-from sentinelforge.ml.scoring_model import extract_features, predict_score
+
+try:
+    from sentinelforge.ml.scoring_model import extract_features, predict_score
+except ImportError:
+    # Try alternative import path for CI environment
+    import sys
+    import os
+
+    sys.path.insert(
+        0, os.path.join(os.path.dirname(__file__), "..", "..", "sentinelforge")
+    )
+    from ml.scoring_model import extract_features, predict_score
 
 
 def test_extract_features_ip():
@@ -84,7 +95,16 @@ def test_extract_features_unknown_type():
 def test_predict_score_no_model(monkeypatch):
     """Test prediction behavior when model is not available."""
     # Patch the _model to be None
-    from sentinelforge.ml import scoring_model
+    try:
+        from sentinelforge.ml import scoring_model
+    except ImportError:
+        import sys
+        import os
+
+        sys.path.insert(
+            0, os.path.join(os.path.dirname(__file__), "..", "..", "sentinelforge")
+        )
+        from ml import scoring_model
 
     monkeypatch.setattr(scoring_model, "_model", None)
 
@@ -109,7 +129,16 @@ def test_predict_score_with_model(monkeypatch):
     mock_model = MockRandomForestClassifier()
 
     # Patch the _model to use our mock
-    from sentinelforge.ml import scoring_model
+    try:
+        from sentinelforge.ml import scoring_model
+    except ImportError:
+        import sys
+        import os
+
+        sys.path.insert(
+            0, os.path.join(os.path.dirname(__file__), "..", "..", "sentinelforge")
+        )
+        from ml import scoring_model
 
     monkeypatch.setattr(scoring_model, "_model", mock_model)
 
