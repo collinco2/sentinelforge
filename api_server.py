@@ -2387,11 +2387,11 @@ def update_ioc(ioc_value):
                 new_value = data[field]
 
                 # Type validation
-                if field_type == int and not isinstance(new_value, int):
+                if field_type is int and not isinstance(new_value, int):
                     return jsonify({"error": f"{field} must be an integer"}), 400
-                elif field_type == str and not isinstance(new_value, str):
+                elif field_type is str and not isinstance(new_value, str):
                     return jsonify({"error": f"{field} must be a string"}), 400
-                elif field_type == list and not isinstance(new_value, list):
+                elif field_type is list and not isinstance(new_value, list):
                     if isinstance(new_value, str):
                         new_value = [
                             tag.strip() for tag in new_value.split(",") if tag.strip()

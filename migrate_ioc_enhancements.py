@@ -259,7 +259,7 @@ def main():
         cursor.execute("SELECT COUNT(*) FROM ioc_audit_logs")
         audit_count = cursor.fetchone()[0]
 
-        print(f"\n📊 Migration Summary:")
+        print("\n📊 Migration Summary:")
         print(f"  • Total IOCs: {ioc_count}")
         print(f"  • Audit log entries: {audit_count}")
         print(f"  • Backup created: {backup_path or 'No backup created'}")

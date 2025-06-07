@@ -213,7 +213,7 @@ class FeedIngestionTester:
             skipped = result.get("skipped_count", 0)
             errors = result.get("errors", [])
 
-            print(f"  ✅ CSV import completed")
+            print("  ✅ CSV import completed")
             print(f"    📥 Imported: {imported}")
             print(f"    ⏭️  Skipped: {skipped}")
             print(f"    ❌ Errors: {len(errors)}")
@@ -252,7 +252,7 @@ class FeedIngestionTester:
             skipped = result.get("skipped_count", 0)
             errors = result.get("errors", [])
 
-            print(f"  ✅ JSON import completed")
+            print("  ✅ JSON import completed")
             print(f"    📥 Imported: {imported}")
             print(f"    ⏭️  Skipped: {skipped}")
             print(f"    ❌ Errors: {len(errors)}")
@@ -286,7 +286,7 @@ class FeedIngestionTester:
             skipped = result.get("skipped_count", 0)
             errors = result.get("errors", [])
 
-            print(f"  ✅ TXT import completed")
+            print("  ✅ TXT import completed")
             print(f"    📥 Imported: {imported}")
             print(f"    ⏭️  Skipped: {skipped}")
             print(f"    ❌ Errors: {len(errors)}")
@@ -336,7 +336,7 @@ class FeedIngestionTester:
             imported2 = result2.get("imported_count", 0)
             skipped2 = result2.get("skipped_count", 0)
 
-            print(f"  ✅ Duplicate handling test completed")
+            print("  ✅ Duplicate handling test completed")
             print(f"    📥 First import: {imported1}")
             print(f"    📥 Second import: {imported2}")
             print(f"    ⏭️  Skipped duplicates: {skipped2}")
@@ -440,7 +440,7 @@ class FeedIngestionTester:
             result = response.json()
             imported = result.get("imported_count", 0)
 
-            print(f"  ✅ Large file import completed")
+            print("  ✅ Large file import completed")
             print(f"    📥 Imported: {imported} IOCs")
             print(f"    ⏱️  Duration: {duration:.2f} seconds")
             print(f"    🚀 Rate: {imported / duration:.1f} IOCs/second")

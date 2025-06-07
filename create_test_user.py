@@ -98,7 +98,7 @@ def create_test_user():
     conn.commit()
     conn.close()
 
-    print(f"✅ Created admin user:")
+    print("✅ Created admin user:")
     print(f"   Username: {username}")
     print(f"   Email: {email}")
     print(f"   Password: {password}")
