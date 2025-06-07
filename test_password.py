@@ -3,6 +3,7 @@
 
 import hashlib
 
+
 def verify_password(password: str, password_hash: str) -> bool:
     """Verify password against hash."""
     try:
@@ -10,6 +11,7 @@ def verify_password(password: str, password_hash: str) -> bool:
         return hashlib.sha256((password + salt).encode()).hexdigest() == hash_value
     except ValueError:
         return False
+
 
 # Test with the actual hash from database
 password = "admin123"

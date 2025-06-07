@@ -2215,18 +2215,24 @@ def create_ioc():
         # Validate IOC type
         valid_types = ["ip", "domain", "url", "hash", "email", "file"]
         if data["ioc_type"] not in valid_types:
-            return jsonify({"error": f"Invalid IOC type. Must be one of: {valid_types}"}), 400
+            return jsonify(
+                {"error": f"Invalid IOC type. Must be one of: {valid_types}"}
+            ), 400
 
         # Validate severity
         valid_severities = ["low", "medium", "high", "critical"]
         severity = data.get("severity", "medium")
         if severity not in valid_severities:
-            return jsonify({"error": f"Invalid severity. Must be one of: {valid_severities}"}), 400
+            return jsonify(
+                {"error": f"Invalid severity. Must be one of: {valid_severities}"}
+            ), 400
 
         # Validate confidence
         confidence = data.get("confidence", 50)
         if not isinstance(confidence, int) or confidence < 0 or confidence > 100:
-            return jsonify({"error": "Confidence must be an integer between 0 and 100"}), 400
+            return jsonify(
+                {"error": "Confidence must be an integer between 0 and 100"}
+            ), 400
 
         # Sanitize IOC value
         ioc_value = data["ioc_value"].strip()
@@ -2241,7 +2247,7 @@ def create_ioc():
         cursor = conn.cursor()
         cursor.execute(
             "SELECT ioc_type, ioc_value FROM iocs WHERE ioc_type = ? AND ioc_value = ?",
-            (data["ioc_type"], ioc_value)
+            (data["ioc_type"], ioc_value),
         )
         existing_ioc = cursor.fetchone()
 
@@ -2255,64 +2261,72 @@ def create_ioc():
         if isinstance(tags, str):
             tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO iocs (
                 ioc_type, ioc_value, source_feed, first_seen, last_seen,
                 score, category, severity, tags, confidence, created_by,
                 updated_by, created_at, updated_at, is_active
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            data["ioc_type"],
-            ioc_value,
-            data["source_feed"],
-            now,
-            now,
-            data.get("score", 0),
-            data.get("category", "low"),
-            severity,
-            json.dumps(tags),
-            confidence,
-            current_user.user_id,
-            current_user.user_id,
-            now,
-            now,
-            True
-        ))
+        """,
+            (
+                data["ioc_type"],
+                ioc_value,
+                data["source_feed"],
+                now,
+                now,
+                data.get("score", 0),
+                data.get("category", "low"),
+                severity,
+                json.dumps(tags),
+                confidence,
+                current_user.user_id,
+                current_user.user_id,
+                now,
+                now,
+                True,
+            ),
+        )
 
         # Log the creation
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO ioc_audit_logs (
                 ioc_type, ioc_value, action, user_id, changes, justification,
                 timestamp, source_ip, user_agent
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            data["ioc_type"],
-            ioc_value,
-            "CREATE",
-            current_user.user_id,
-            json.dumps({"created": data}),
-            data.get("justification", "IOC created via API"),
-            now,
-            request.remote_addr,
-            request.headers.get("User-Agent", "")
-        ))
+        """,
+            (
+                data["ioc_type"],
+                ioc_value,
+                "CREATE",
+                current_user.user_id,
+                json.dumps({"created": data}),
+                data.get("justification", "IOC created via API"),
+                now,
+                request.remote_addr,
+                request.headers.get("User-Agent", ""),
+            ),
+        )
 
         conn.commit()
         conn.close()
 
-        return jsonify({
-            "message": "IOC created successfully",
-            "ioc": {
-                "ioc_type": data["ioc_type"],
-                "ioc_value": ioc_value,
-                "source_feed": data["source_feed"],
-                "severity": severity,
-                "confidence": confidence,
-                "tags": tags,
-                "created_by": current_user.user_id,
-                "created_at": now.isoformat()
+        return jsonify(
+            {
+                "message": "IOC created successfully",
+                "ioc": {
+                    "ioc_type": data["ioc_type"],
+                    "ioc_value": ioc_value,
+                    "source_feed": data["source_feed"],
+                    "severity": severity,
+                    "confidence": confidence,
+                    "tags": tags,
+                    "created_by": current_user.user_id,
+                    "created_at": now.isoformat(),
+                },
             }
-        }), 201
+        ), 201
 
     except Exception as e:
         print(f"Error creating IOC: {e}")
@@ -2344,7 +2358,7 @@ def update_ioc(ioc_value):
         # Check if IOC exists
         cursor.execute(
             "SELECT * FROM iocs WHERE ioc_type = ? AND ioc_value = ? AND is_active = 1",
-            (ioc_type, ioc_value)
+            (ioc_type, ioc_value),
         )
         existing_ioc = cursor.fetchone()
 
@@ -2365,7 +2379,7 @@ def update_ioc(ioc_value):
             "severity": str,
             "confidence": int,
             "tags": list,
-            "summary": str
+            "summary": str,
         }
 
         for field, field_type in updatable_fields.items():
@@ -2379,20 +2393,39 @@ def update_ioc(ioc_value):
                     return jsonify({"error": f"{field} must be a string"}), 400
                 elif field_type == list and not isinstance(new_value, list):
                     if isinstance(new_value, str):
-                        new_value = [tag.strip() for tag in new_value.split(",") if tag.strip()]
+                        new_value = [
+                            tag.strip() for tag in new_value.split(",") if tag.strip()
+                        ]
                     else:
-                        return jsonify({"error": f"{field} must be a list or comma-separated string"}), 400
+                        return jsonify(
+                            {
+                                "error": f"{field} must be a list or comma-separated string"
+                            }
+                        ), 400
 
                 # Special validations
-                if field == "severity" and new_value not in ["low", "medium", "high", "critical"]:
+                if field == "severity" and new_value not in [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical",
+                ]:
                     return jsonify({"error": "Invalid severity"}), 400
                 elif field == "confidence" and (new_value < 0 or new_value > 100):
-                    return jsonify({"error": "Confidence must be between 0 and 100"}), 400
+                    return jsonify(
+                        {"error": "Confidence must be between 0 and 100"}
+                    ), 400
 
                 # Store for audit log
-                old_value = existing_ioc[field] if field in existing_ioc.keys() else None
+                old_value = (
+                    existing_ioc[field] if field in existing_ioc.keys() else None
+                )
                 if field == "tags" and old_value:
-                    old_value = json.loads(old_value) if isinstance(old_value, str) else old_value
+                    old_value = (
+                        json.loads(old_value)
+                        if isinstance(old_value, str)
+                        else old_value
+                    )
 
                 if old_value != new_value:
                     changes[field] = {"old": old_value, "new": new_value}
@@ -2416,36 +2449,36 @@ def update_ioc(ioc_value):
 
         # Execute update
         update_query = f"""
-            UPDATE iocs SET {', '.join(update_fields)}
+            UPDATE iocs SET {", ".join(update_fields)}
             WHERE ioc_type = ? AND ioc_value = ?
         """
         cursor.execute(update_query, update_values)
 
         # Log the update
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO ioc_audit_logs (
                 ioc_type, ioc_value, action, user_id, changes, justification,
                 timestamp, source_ip, user_agent
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            ioc_type,
-            ioc_value,
-            "UPDATE",
-            current_user.user_id,
-            json.dumps(changes),
-            data.get("justification", "IOC updated via API"),
-            now,
-            request.remote_addr,
-            request.headers.get("User-Agent", "")
-        ))
+        """,
+            (
+                ioc_type,
+                ioc_value,
+                "UPDATE",
+                current_user.user_id,
+                json.dumps(changes),
+                data.get("justification", "IOC updated via API"),
+                now,
+                request.remote_addr,
+                request.headers.get("User-Agent", ""),
+            ),
+        )
 
         conn.commit()
         conn.close()
 
-        return jsonify({
-            "message": "IOC updated successfully",
-            "changes": changes
-        }), 200
+        return jsonify({"message": "IOC updated successfully", "changes": changes}), 200
 
     except Exception as e:
         print(f"Error updating IOC: {e}")
@@ -2473,7 +2506,7 @@ def delete_ioc(ioc_value):
         # Check if IOC exists and is active
         cursor.execute(
             "SELECT * FROM iocs WHERE ioc_type = ? AND ioc_value = ? AND is_active = 1",
-            (ioc_type, ioc_value)
+            (ioc_type, ioc_value),
         )
         existing_ioc = cursor.fetchone()
 
@@ -2483,28 +2516,36 @@ def delete_ioc(ioc_value):
 
         # Soft delete the IOC
         now = datetime.datetime.utcnow()
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE iocs SET is_active = 0, updated_by = ?, updated_at = ?
             WHERE ioc_type = ? AND ioc_value = ?
-        """, (current_user.user_id, now, ioc_type, ioc_value))
+        """,
+            (current_user.user_id, now, ioc_type, ioc_value),
+        )
 
         # Log the deletion
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO ioc_audit_logs (
                 ioc_type, ioc_value, action, user_id, changes, justification,
                 timestamp, source_ip, user_agent
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            ioc_type,
-            ioc_value,
-            "DELETE",
-            current_user.user_id,
-            json.dumps({"deleted": True}),
-            request.get_json().get("justification", "IOC deleted via API") if request.is_json else "IOC deleted via API",
-            now,
-            request.remote_addr,
-            request.headers.get("User-Agent", "")
-        ))
+        """,
+            (
+                ioc_type,
+                ioc_value,
+                "DELETE",
+                current_user.user_id,
+                json.dumps({"deleted": True}),
+                request.get_json().get("justification", "IOC deleted via API")
+                if request.is_json
+                else "IOC deleted via API",
+                now,
+                request.remote_addr,
+                request.headers.get("User-Agent", ""),
+            ),
+        )
 
         conn.commit()
         conn.close()
@@ -2524,39 +2565,43 @@ def import_iocs():
         current_user = g.current_user
 
         # Check if file was uploaded
-        if 'file' not in request.files:
+        if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
 
-        file = request.files['file']
-        if file.filename == '':
+        file = request.files["file"]
+        if file.filename == "":
             return jsonify({"error": "No file selected"}), 400
 
         # Get additional parameters
-        source_feed = request.form.get('source_feed', 'imported')
-        justification = request.form.get('justification', 'Bulk import via API')
+        source_feed = request.form.get("source_feed", "imported")
+        justification = request.form.get("justification", "Bulk import via API")
 
         # Validate file type
-        allowed_extensions = {'.csv', '.json', '.txt'}
+        allowed_extensions = {".csv", ".json", ".txt"}
         file_ext = os.path.splitext(file.filename)[1].lower()
         if file_ext not in allowed_extensions:
-            return jsonify({"error": f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"}), 400
+            return jsonify(
+                {
+                    "error": f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+                }
+            ), 400
 
         # Read file content
         try:
-            content = file.read().decode('utf-8')
+            content = file.read().decode("utf-8")
         except UnicodeDecodeError:
             return jsonify({"error": "File must be UTF-8 encoded"}), 400
 
         # Parse content based on file type
         iocs_to_import = []
 
-        if file_ext == '.json':
+        if file_ext == ".json":
             try:
                 data = json.loads(content)
                 iocs_to_import = parse_json_feed(data)
             except json.JSONDecodeError as e:
                 return jsonify({"error": f"Invalid JSON format: {str(e)}"}), 400
-        elif file_ext == '.csv':
+        elif file_ext == ".csv":
             iocs_to_import = parse_csv_feed(content)
         else:  # .txt - assume one IOC per line
             iocs_to_import = parse_text_feed(content)
@@ -2579,87 +2624,99 @@ def import_iocs():
         for ioc_data in iocs_to_import:
             try:
                 # Validate required fields
-                if not all(key in ioc_data for key in ['ioc_type', 'ioc_value']):
+                if not all(key in ioc_data for key in ["ioc_type", "ioc_value"]):
                     errors.append(f"Missing required fields for IOC: {ioc_data}")
                     continue
 
-                ioc_type = ioc_data['ioc_type']
-                ioc_value = ioc_data['ioc_value'].strip()
+                ioc_type = ioc_data["ioc_type"]
+                ioc_value = ioc_data["ioc_value"].strip()
 
                 # Check if IOC already exists
                 cursor.execute(
                     "SELECT ioc_type, ioc_value FROM iocs WHERE ioc_type = ? AND ioc_value = ?",
-                    (ioc_type, ioc_value)
+                    (ioc_type, ioc_value),
                 )
                 if cursor.fetchone():
                     skipped_count += 1
                     continue
 
                 # Insert new IOC
-                tags = ioc_data.get('tags', [])
+                tags = ioc_data.get("tags", [])
                 if isinstance(tags, str):
                     tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO iocs (
                         ioc_type, ioc_value, source_feed, first_seen, last_seen,
                         score, category, severity, tags, confidence, created_by,
                         updated_by, created_at, updated_at, is_active
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    ioc_type,
-                    ioc_value,
-                    source_feed,
-                    now,
-                    now,
-                    ioc_data.get('score', 0),
-                    ioc_data.get('category', 'low'),
-                    ioc_data.get('severity', 'medium'),
-                    json.dumps(tags),
-                    ioc_data.get('confidence', 50),
-                    current_user.user_id,
-                    current_user.user_id,
-                    now,
-                    now,
-                    True
-                ))
+                """,
+                    (
+                        ioc_type,
+                        ioc_value,
+                        source_feed,
+                        now,
+                        now,
+                        ioc_data.get("score", 0),
+                        ioc_data.get("category", "low"),
+                        ioc_data.get("severity", "medium"),
+                        json.dumps(tags),
+                        ioc_data.get("confidence", 50),
+                        current_user.user_id,
+                        current_user.user_id,
+                        now,
+                        now,
+                        True,
+                    ),
+                )
 
                 imported_count += 1
 
             except Exception as e:
-                errors.append(f"Error importing IOC {ioc_data.get('ioc_value', 'unknown')}: {str(e)}")
+                errors.append(
+                    f"Error importing IOC {ioc_data.get('ioc_value', 'unknown')}: {str(e)}"
+                )
 
         # Log the import operation
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO ioc_audit_logs (
                 ioc_type, ioc_value, action, user_id, changes, justification,
                 timestamp, source_ip, user_agent
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            "bulk",
-            f"import_{file.filename}",
-            "IMPORT",
-            current_user.user_id,
-            json.dumps({
-                "imported_count": imported_count,
-                "skipped_count": skipped_count,
-                "errors": errors[:10]  # Limit errors in log
-            }),
-            justification,
-            now,
-            request.remote_addr,
-            request.headers.get("User-Agent", "")
-        ))
+        """,
+            (
+                "bulk",
+                f"import_{file.filename}",
+                "IMPORT",
+                current_user.user_id,
+                json.dumps(
+                    {
+                        "imported_count": imported_count,
+                        "skipped_count": skipped_count,
+                        "errors": errors[:10],  # Limit errors in log
+                    }
+                ),
+                justification,
+                now,
+                request.remote_addr,
+                request.headers.get("User-Agent", ""),
+            ),
+        )
 
         conn.commit()
         conn.close()
 
-        return jsonify({
-            "message": "Import completed",
-            "imported_count": imported_count,
-            "skipped_count": skipped_count,
-            "errors": errors
-        }), 200
+        return jsonify(
+            {
+                "message": "Import completed",
+                "imported_count": imported_count,
+                "skipped_count": skipped_count,
+                "errors": errors,
+            }
+        ), 200
 
     except Exception as e:
         print(f"Error importing IOCs: {e}")
@@ -2680,9 +2737,9 @@ def parse_json_feed(data):
                     iocs.append(ioc)
     elif isinstance(data, dict):
         # Single IOC or nested structure
-        if 'iocs' in data:
+        if "iocs" in data:
             # Nested structure with 'iocs' key
-            for item in data['iocs']:
+            for item in data["iocs"]:
                 ioc = normalize_ioc_data(item)
                 if ioc:
                     iocs.append(ioc)
@@ -2715,19 +2772,21 @@ def parse_text_feed(content):
     """Parse text feed (one IOC per line) into IOC format."""
     iocs = []
 
-    for line in content.strip().split('\n'):
+    for line in content.strip().split("\n"):
         line = line.strip()
-        if line and not line.startswith('#'):  # Skip empty lines and comments
+        if line and not line.startswith("#"):  # Skip empty lines and comments
             ioc_type = infer_ioc_type(line)
-            if ioc_type != 'unknown':
-                iocs.append({
-                    'ioc_type': ioc_type,
-                    'ioc_value': line,
-                    'score': 5,  # Default score
-                    'category': 'medium',
-                    'severity': 'medium',
-                    'confidence': 50
-                })
+            if ioc_type != "unknown":
+                iocs.append(
+                    {
+                        "ioc_type": ioc_type,
+                        "ioc_value": line,
+                        "score": 5,  # Default score
+                        "category": "medium",
+                        "severity": "medium",
+                        "confidence": 50,
+                    }
+                )
 
     return iocs
 
@@ -2739,15 +2798,15 @@ def normalize_ioc_data(data):
 
     # Map common field names to our schema
     field_mappings = {
-        'type': 'ioc_type',
-        'indicator_type': 'ioc_type',
-        'value': 'ioc_value',
-        'indicator': 'ioc_value',
-        'ioc': 'ioc_value',
-        'threat_score': 'score',
-        'risk_score': 'score',
-        'malware_family': 'category',
-        'threat_type': 'category'
+        "type": "ioc_type",
+        "indicator_type": "ioc_type",
+        "value": "ioc_value",
+        "indicator": "ioc_value",
+        "ioc": "ioc_value",
+        "threat_score": "score",
+        "risk_score": "score",
+        "malware_family": "category",
+        "threat_type": "category",
     }
 
     normalized = {}
@@ -2758,18 +2817,18 @@ def normalize_ioc_data(data):
         normalized[mapped_key] = value
 
     # Ensure required fields exist
-    if 'ioc_value' not in normalized:
+    if "ioc_value" not in normalized:
         return None
 
     # Infer IOC type if not provided
-    if 'ioc_type' not in normalized:
-        normalized['ioc_type'] = infer_ioc_type(normalized['ioc_value'])
+    if "ioc_type" not in normalized:
+        normalized["ioc_type"] = infer_ioc_type(normalized["ioc_value"])
 
     # Set defaults for optional fields
-    normalized.setdefault('score', 5)
-    normalized.setdefault('category', 'medium')
-    normalized.setdefault('severity', 'medium')
-    normalized.setdefault('confidence', 50)
+    normalized.setdefault("score", 5)
+    normalized.setdefault("category", "medium")
+    normalized.setdefault("severity", "medium")
+    normalized.setdefault("confidence", 50)
 
     return normalized
 
@@ -3156,6 +3215,7 @@ if __name__ == "__main__":
 
     # Initialize authentication tables and default users
     from auth import init_auth_tables
+
     if init_auth_tables():
         print("[AUTH] Authentication tables initialized successfully")
     else:

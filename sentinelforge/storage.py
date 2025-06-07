@@ -47,7 +47,9 @@ class IOC(Base):
     explanation_data = Column(JSON, nullable=True)  # SHAP explanation data
 
     # Enhanced fields for IOC management
-    severity = Column(String, nullable=False, default="medium")  # low, medium, high, critical
+    severity = Column(
+        String, nullable=False, default="medium"
+    )  # low, medium, high, critical
     tags = Column(JSON, nullable=True)  # Array of tags for categorization
     confidence = Column(Integer, nullable=False, default=50)  # 0-100 confidence score
     created_by = Column(Integer, nullable=True)  # User ID who created this IOC

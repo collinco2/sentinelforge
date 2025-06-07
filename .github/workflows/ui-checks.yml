@@ -3,17 +3,17 @@ name: React UI CI
 on:
   push:
     paths:
-      - 'sentinelforge-ui/**'
+      - 'ui/**'
   pull_request:
     paths:
-      - 'sentinelforge-ui/**'
+      - 'ui/**'
 
 jobs:
   react-ui-checks:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sentinelforge-ui
+        working-directory: ui
 
     steps:
       - name: ⬇️ Checkout repository
