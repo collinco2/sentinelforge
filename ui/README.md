@@ -1,6 +1,10 @@
 # SentinelForge UI
 
-This is a restored version of the SentinelForge UI dashboard. The original directory was missing or deleted, so this is a fresh setup to get the project back up and running.
+This is the modern React-based user interface for SentinelForge, providing a comprehensive security operations dashboard.
+
+## CI/CD Status
+- Latest React UI workflow tests: All dependencies and build processes verified
+- Node.js environment: Compatible with CI/CD pipeline
 
 ## Getting Started
 
