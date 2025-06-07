@@ -9,6 +9,7 @@ from sqlalchemy import (
     Text,
     Table,
     ForeignKey,
+    Boolean,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
@@ -44,6 +45,18 @@ class IOC(Base):
     enrichment_data = Column(JSON, nullable=True)
     summary = Column(String, nullable=True)
     explanation_data = Column(JSON, nullable=True)  # SHAP explanation data
+
+    # Enhanced fields for IOC management
+    severity = Column(String, nullable=False, default="medium")  # low, medium, high, critical
+    tags = Column(JSON, nullable=True)  # Array of tags for categorization
+    confidence = Column(Integer, nullable=False, default=50)  # 0-100 confidence score
+    created_by = Column(Integer, nullable=True)  # User ID who created this IOC
+    updated_by = Column(Integer, nullable=True)  # User ID who last updated this IOC
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+    is_active = Column(Boolean, default=True)  # Soft delete flag
 
     # Relationship to alerts
     alerts = relationship(
@@ -85,6 +98,22 @@ class AuditLogEntry(Base):
 
     # Relationship to Alert
     alert = relationship("Alert", backref="audit_logs")
+
+
+class IOCAuditLogEntry(Base):
+    __tablename__ = "ioc_audit_logs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ioc_type = Column(String, nullable=False)  # IOC type
+    ioc_value = Column(String, nullable=False)  # IOC value
+    action = Column(String, nullable=False)  # CREATE, UPDATE, DELETE, IMPORT
+    user_id = Column(Integer, nullable=False)  # User who performed the action
+    changes = Column(JSON, nullable=True)  # JSON of what changed
+    justification = Column(Text, nullable=True)  # Reason for the change
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    # Additional metadata
+    source_ip = Column(String, nullable=True)  # IP address of the user
+    user_agent = Column(String, nullable=True)  # User agent string
 
 
 def init_db():

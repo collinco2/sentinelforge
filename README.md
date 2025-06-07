@@ -101,6 +101,76 @@ lsof -i :5101  # Alerts Timeline
 lsof -i :8000  # TAXII API
 ```
 
+## ⚠️ Development vs Production Server Guide
+
+### Understanding the Two Server Types
+
+SentinelForge has **two different ways** to serve the React UI:
+
+#### 🏭 Production Server (Recommended)
+- **Command**: `python3 spa-server.py 3000`
+- **Serves**: Built React app from `ui/build/` directory
+- **Port**: 3000
+- **When to use**: Normal usage, testing, production
+- **Pros**: Fast, stable, matches production environment
+- **Cons**: Requires rebuild after code changes
+
+#### 🔧 Development Server (Development Only)
+- **Command**: `npm start` (in ui/ directory)
+- **Serves**: Live React app with hot reload
+- **Port**: 3000 (attempts to use same port!)
+- **When to use**: Only when actively developing React components
+- **Pros**: Hot reload, instant code changes
+- **Cons**: Slower, development-only features
+
+### ⚠️ Critical Port Conflict Issue
+
+**Both servers try to use port 3000!** This causes confusion:
+
+1. If production server is running → development server fails silently
+2. If development server is running → production server can't start
+3. Browser shows wrong version of the app
+
+### 🔄 Switching Between Servers
+
+#### To Switch from Production → Development:
+```bash
+# 1. Stop production server
+lsof -i :3000  # Find PID
+kill <PID>     # Stop spa-server.py
+
+# 2. Start development server
+cd ui
+npm start
+```
+
+#### To Switch from Development → Production:
+```bash
+# 1. Stop development server (Ctrl+C in terminal)
+# 2. Build latest changes
+cd ui
+npm run build
+
+# 3. Start production server
+python3 spa-server.py 3000
+```
+
+### 🎯 How to Tell Which Server is Running
+
+#### Check Process:
+```bash
+lsof -i :3000
+# Look for:
+# - "Python spa-server.py" = Production
+# - "node" or "npm" = Development
+```
+
+#### Check Browser:
+- **Production**: Title shows "SentinelForge"
+- **Development**: Title shows "SentinelForge" + hot reload indicators
+- **Production**: Console shows API calls only
+- **Development**: Console shows React dev messages
+
 ## 🛠 Troubleshooting
 
 ### Common Issues

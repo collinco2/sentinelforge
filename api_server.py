@@ -8,6 +8,7 @@ import re
 import random
 import datetime
 import secrets
+import json
 from auth import (
     require_role,
     require_authentication,
@@ -2193,14 +2194,595 @@ def generate_mock_timeline(alert_id, alert_info):
     return timeline_events
 
 
+# IOC CRUD endpoints
+@ioc_bp.route("/api/ioc", methods=["POST"])
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def create_ioc():
+    """Create a new IOC. Requires analyst or admin role."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        current_user = g.current_user
+
+        # Validate required fields
+        required_fields = ["ioc_type", "ioc_value", "source_feed"]
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Validate IOC type
+        valid_types = ["ip", "domain", "url", "hash", "email", "file"]
+        if data["ioc_type"] not in valid_types:
+            return jsonify({"error": f"Invalid IOC type. Must be one of: {valid_types}"}), 400
+
+        # Validate severity
+        valid_severities = ["low", "medium", "high", "critical"]
+        severity = data.get("severity", "medium")
+        if severity not in valid_severities:
+            return jsonify({"error": f"Invalid severity. Must be one of: {valid_severities}"}), 400
+
+        # Validate confidence
+        confidence = data.get("confidence", 50)
+        if not isinstance(confidence, int) or confidence < 0 or confidence > 100:
+            return jsonify({"error": "Confidence must be an integer between 0 and 100"}), 400
+
+        # Sanitize IOC value
+        ioc_value = data["ioc_value"].strip()
+        if not ioc_value:
+            return jsonify({"error": "IOC value cannot be empty"}), 400
+
+        # Check if IOC already exists
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT ioc_type, ioc_value FROM iocs WHERE ioc_type = ? AND ioc_value = ?",
+            (data["ioc_type"], ioc_value)
+        )
+        existing_ioc = cursor.fetchone()
+
+        if existing_ioc:
+            conn.close()
+            return jsonify({"error": "IOC already exists"}), 409
+
+        # Create new IOC
+        now = datetime.datetime.utcnow()
+        tags = data.get("tags", [])
+        if isinstance(tags, str):
+            tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+
+        cursor.execute("""
+            INSERT INTO iocs (
+                ioc_type, ioc_value, source_feed, first_seen, last_seen,
+                score, category, severity, tags, confidence, created_by,
+                updated_by, created_at, updated_at, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data["ioc_type"],
+            ioc_value,
+            data["source_feed"],
+            now,
+            now,
+            data.get("score", 0),
+            data.get("category", "low"),
+            severity,
+            json.dumps(tags),
+            confidence,
+            current_user.user_id,
+            current_user.user_id,
+            now,
+            now,
+            True
+        ))
+
+        # Log the creation
+        cursor.execute("""
+            INSERT INTO ioc_audit_logs (
+                ioc_type, ioc_value, action, user_id, changes, justification,
+                timestamp, source_ip, user_agent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data["ioc_type"],
+            ioc_value,
+            "CREATE",
+            current_user.user_id,
+            json.dumps({"created": data}),
+            data.get("justification", "IOC created via API"),
+            now,
+            request.remote_addr,
+            request.headers.get("User-Agent", "")
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "message": "IOC created successfully",
+            "ioc": {
+                "ioc_type": data["ioc_type"],
+                "ioc_value": ioc_value,
+                "source_feed": data["source_feed"],
+                "severity": severity,
+                "confidence": confidence,
+                "tags": tags,
+                "created_by": current_user.user_id,
+                "created_at": now.isoformat()
+            }
+        }), 201
+
+    except Exception as e:
+        print(f"Error creating IOC: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/ioc/<path:ioc_value>", methods=["PATCH"])
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def update_ioc(ioc_value):
+    """Update an existing IOC. Requires analyst or admin role."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        current_user = g.current_user
+
+        # Get IOC type from query parameter or data
+        ioc_type = request.args.get("type") or data.get("ioc_type")
+        if not ioc_type:
+            return jsonify({"error": "IOC type must be provided"}), 400
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Check if IOC exists
+        cursor.execute(
+            "SELECT * FROM iocs WHERE ioc_type = ? AND ioc_value = ? AND is_active = 1",
+            (ioc_type, ioc_value)
+        )
+        existing_ioc = cursor.fetchone()
+
+        if not existing_ioc:
+            conn.close()
+            return jsonify({"error": "IOC not found"}), 404
+
+        # Build update query dynamically
+        update_fields = []
+        update_values = []
+        changes = {}
+
+        # Fields that can be updated
+        updatable_fields = {
+            "source_feed": str,
+            "score": int,
+            "category": str,
+            "severity": str,
+            "confidence": int,
+            "tags": list,
+            "summary": str
+        }
+
+        for field, field_type in updatable_fields.items():
+            if field in data:
+                new_value = data[field]
+
+                # Type validation
+                if field_type == int and not isinstance(new_value, int):
+                    return jsonify({"error": f"{field} must be an integer"}), 400
+                elif field_type == str and not isinstance(new_value, str):
+                    return jsonify({"error": f"{field} must be a string"}), 400
+                elif field_type == list and not isinstance(new_value, list):
+                    if isinstance(new_value, str):
+                        new_value = [tag.strip() for tag in new_value.split(",") if tag.strip()]
+                    else:
+                        return jsonify({"error": f"{field} must be a list or comma-separated string"}), 400
+
+                # Special validations
+                if field == "severity" and new_value not in ["low", "medium", "high", "critical"]:
+                    return jsonify({"error": "Invalid severity"}), 400
+                elif field == "confidence" and (new_value < 0 or new_value > 100):
+                    return jsonify({"error": "Confidence must be between 0 and 100"}), 400
+
+                # Store for audit log
+                old_value = existing_ioc[field] if field in existing_ioc.keys() else None
+                if field == "tags" and old_value:
+                    old_value = json.loads(old_value) if isinstance(old_value, str) else old_value
+
+                if old_value != new_value:
+                    changes[field] = {"old": old_value, "new": new_value}
+                    update_fields.append(f"{field} = ?")
+                    if field == "tags":
+                        update_values.append(json.dumps(new_value))
+                    else:
+                        update_values.append(new_value)
+
+        if not update_fields:
+            conn.close()
+            return jsonify({"message": "No changes detected"}), 200
+
+        # Add updated_by and updated_at
+        update_fields.extend(["updated_by = ?", "updated_at = ?"])
+        now = datetime.datetime.utcnow()
+        update_values.extend([current_user.user_id, now])
+
+        # Add WHERE clause values
+        update_values.extend([ioc_type, ioc_value])
+
+        # Execute update
+        update_query = f"""
+            UPDATE iocs SET {', '.join(update_fields)}
+            WHERE ioc_type = ? AND ioc_value = ?
+        """
+        cursor.execute(update_query, update_values)
+
+        # Log the update
+        cursor.execute("""
+            INSERT INTO ioc_audit_logs (
+                ioc_type, ioc_value, action, user_id, changes, justification,
+                timestamp, source_ip, user_agent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            ioc_type,
+            ioc_value,
+            "UPDATE",
+            current_user.user_id,
+            json.dumps(changes),
+            data.get("justification", "IOC updated via API"),
+            now,
+            request.remote_addr,
+            request.headers.get("User-Agent", "")
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "message": "IOC updated successfully",
+            "changes": changes
+        }), 200
+
+    except Exception as e:
+        print(f"Error updating IOC: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/ioc/<path:ioc_value>", methods=["DELETE"])
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def delete_ioc(ioc_value):
+    """Delete an IOC (soft delete). Requires analyst or admin role."""
+    try:
+        current_user = g.current_user
+
+        # Get IOC type from query parameter
+        ioc_type = request.args.get("type")
+        if not ioc_type:
+            return jsonify({"error": "IOC type must be provided"}), 400
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Check if IOC exists and is active
+        cursor.execute(
+            "SELECT * FROM iocs WHERE ioc_type = ? AND ioc_value = ? AND is_active = 1",
+            (ioc_type, ioc_value)
+        )
+        existing_ioc = cursor.fetchone()
+
+        if not existing_ioc:
+            conn.close()
+            return jsonify({"error": "IOC not found"}), 404
+
+        # Soft delete the IOC
+        now = datetime.datetime.utcnow()
+        cursor.execute("""
+            UPDATE iocs SET is_active = 0, updated_by = ?, updated_at = ?
+            WHERE ioc_type = ? AND ioc_value = ?
+        """, (current_user.user_id, now, ioc_type, ioc_value))
+
+        # Log the deletion
+        cursor.execute("""
+            INSERT INTO ioc_audit_logs (
+                ioc_type, ioc_value, action, user_id, changes, justification,
+                timestamp, source_ip, user_agent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            ioc_type,
+            ioc_value,
+            "DELETE",
+            current_user.user_id,
+            json.dumps({"deleted": True}),
+            request.get_json().get("justification", "IOC deleted via API") if request.is_json else "IOC deleted via API",
+            now,
+            request.remote_addr,
+            request.headers.get("User-Agent", "")
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"message": "IOC deleted successfully"}), 200
+
+    except Exception as e:
+        print(f"Error deleting IOC: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/iocs/import", methods=["POST"])
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def import_iocs():
+    """Import IOCs from uploaded file (CSV, JSON, or STIX). Requires analyst or admin role."""
+    try:
+        current_user = g.current_user
+
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Get additional parameters
+        source_feed = request.form.get('source_feed', 'imported')
+        justification = request.form.get('justification', 'Bulk import via API')
+
+        # Validate file type
+        allowed_extensions = {'.csv', '.json', '.txt'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"}), 400
+
+        # Read file content
+        try:
+            content = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            return jsonify({"error": "File must be UTF-8 encoded"}), 400
+
+        # Parse content based on file type
+        iocs_to_import = []
+
+        if file_ext == '.json':
+            try:
+                data = json.loads(content)
+                iocs_to_import = parse_json_feed(data)
+            except json.JSONDecodeError as e:
+                return jsonify({"error": f"Invalid JSON format: {str(e)}"}), 400
+        elif file_ext == '.csv':
+            iocs_to_import = parse_csv_feed(content)
+        else:  # .txt - assume one IOC per line
+            iocs_to_import = parse_text_feed(content)
+
+        if not iocs_to_import:
+            return jsonify({"error": "No valid IOCs found in file"}), 400
+
+        # Import IOCs to database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        imported_count = 0
+        skipped_count = 0
+        errors = []
+
+        now = datetime.datetime.utcnow()
+
+        for ioc_data in iocs_to_import:
+            try:
+                # Validate required fields
+                if not all(key in ioc_data for key in ['ioc_type', 'ioc_value']):
+                    errors.append(f"Missing required fields for IOC: {ioc_data}")
+                    continue
+
+                ioc_type = ioc_data['ioc_type']
+                ioc_value = ioc_data['ioc_value'].strip()
+
+                # Check if IOC already exists
+                cursor.execute(
+                    "SELECT ioc_type, ioc_value FROM iocs WHERE ioc_type = ? AND ioc_value = ?",
+                    (ioc_type, ioc_value)
+                )
+                if cursor.fetchone():
+                    skipped_count += 1
+                    continue
+
+                # Insert new IOC
+                tags = ioc_data.get('tags', [])
+                if isinstance(tags, str):
+                    tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+
+                cursor.execute("""
+                    INSERT INTO iocs (
+                        ioc_type, ioc_value, source_feed, first_seen, last_seen,
+                        score, category, severity, tags, confidence, created_by,
+                        updated_by, created_at, updated_at, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    ioc_type,
+                    ioc_value,
+                    source_feed,
+                    now,
+                    now,
+                    ioc_data.get('score', 0),
+                    ioc_data.get('category', 'low'),
+                    ioc_data.get('severity', 'medium'),
+                    json.dumps(tags),
+                    ioc_data.get('confidence', 50),
+                    current_user.user_id,
+                    current_user.user_id,
+                    now,
+                    now,
+                    True
+                ))
+
+                imported_count += 1
+
+            except Exception as e:
+                errors.append(f"Error importing IOC {ioc_data.get('ioc_value', 'unknown')}: {str(e)}")
+
+        # Log the import operation
+        cursor.execute("""
+            INSERT INTO ioc_audit_logs (
+                ioc_type, ioc_value, action, user_id, changes, justification,
+                timestamp, source_ip, user_agent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "bulk",
+            f"import_{file.filename}",
+            "IMPORT",
+            current_user.user_id,
+            json.dumps({
+                "imported_count": imported_count,
+                "skipped_count": skipped_count,
+                "errors": errors[:10]  # Limit errors in log
+            }),
+            justification,
+            now,
+            request.remote_addr,
+            request.headers.get("User-Agent", "")
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            "message": "Import completed",
+            "imported_count": imported_count,
+            "skipped_count": skipped_count,
+            "errors": errors
+        }), 200
+
+    except Exception as e:
+        print(f"Error importing IOCs: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+def parse_json_feed(data):
+    """Parse JSON feed data into IOC format."""
+    iocs = []
+
+    # Handle different JSON structures
+    if isinstance(data, list):
+        # Array of IOCs
+        for item in data:
+            if isinstance(item, dict):
+                ioc = normalize_ioc_data(item)
+                if ioc:
+                    iocs.append(ioc)
+    elif isinstance(data, dict):
+        # Single IOC or nested structure
+        if 'iocs' in data:
+            # Nested structure with 'iocs' key
+            for item in data['iocs']:
+                ioc = normalize_ioc_data(item)
+                if ioc:
+                    iocs.append(ioc)
+        else:
+            # Single IOC
+            ioc = normalize_ioc_data(data)
+            if ioc:
+                iocs.append(ioc)
+
+    return iocs
+
+
+def parse_csv_feed(content):
+    """Parse CSV feed data into IOC format."""
+    import csv
+    from io import StringIO
+
+    iocs = []
+    reader = csv.DictReader(StringIO(content))
+
+    for row in reader:
+        ioc = normalize_ioc_data(row)
+        if ioc:
+            iocs.append(ioc)
+
+    return iocs
+
+
+def parse_text_feed(content):
+    """Parse text feed (one IOC per line) into IOC format."""
+    iocs = []
+
+    for line in content.strip().split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#'):  # Skip empty lines and comments
+            ioc_type = infer_ioc_type(line)
+            if ioc_type != 'unknown':
+                iocs.append({
+                    'ioc_type': ioc_type,
+                    'ioc_value': line,
+                    'score': 5,  # Default score
+                    'category': 'medium',
+                    'severity': 'medium',
+                    'confidence': 50
+                })
+
+    return iocs
+
+
+def normalize_ioc_data(data):
+    """Normalize IOC data from various formats."""
+    if not isinstance(data, dict):
+        return None
+
+    # Map common field names to our schema
+    field_mappings = {
+        'type': 'ioc_type',
+        'indicator_type': 'ioc_type',
+        'value': 'ioc_value',
+        'indicator': 'ioc_value',
+        'ioc': 'ioc_value',
+        'threat_score': 'score',
+        'risk_score': 'score',
+        'malware_family': 'category',
+        'threat_type': 'category'
+    }
+
+    normalized = {}
+
+    # Apply field mappings
+    for key, value in data.items():
+        mapped_key = field_mappings.get(key.lower(), key.lower())
+        normalized[mapped_key] = value
+
+    # Ensure required fields exist
+    if 'ioc_value' not in normalized:
+        return None
+
+    # Infer IOC type if not provided
+    if 'ioc_type' not in normalized:
+        normalized['ioc_type'] = infer_ioc_type(normalized['ioc_value'])
+
+    # Set defaults for optional fields
+    normalized.setdefault('score', 5)
+    normalized.setdefault('category', 'medium')
+    normalized.setdefault('severity', 'medium')
+    normalized.setdefault('confidence', 50)
+
+    return normalized
+
+
 # Register the Blueprint with the main app
 app.register_blueprint(ioc_bp)
 
 
-@app.route("/iocs")
-def iocs_redirect():
-    """Redirect /iocs to /api/iocs with the same query parameters."""
-    return redirect(url_for("ioc.get_iocs", **request.args))
+# Removed /iocs redirect to avoid conflict with React UI routing
+# @app.route("/iocs")
+# def iocs_redirect():
+#     """Redirect /iocs to /api/iocs with the same query parameters."""
+#     return redirect(url_for("ioc.get_iocs", **request.args))
 
 
 @app.route("/")
@@ -2571,6 +3153,14 @@ def initialize_alerts():
 if __name__ == "__main__":
     port = 5059
     print(f"Starting API server on port {port}")
+
+    # Initialize authentication tables and default users
+    from auth import init_auth_tables
+    if init_auth_tables():
+        print("[AUTH] Authentication tables initialized successfully")
+    else:
+        print("[AUTH] Warning: Failed to initialize authentication tables")
+
     initialize_iocs()  # Initialize IOCS list before starting the server
     initialize_alerts()  # Initialize ALERTS list before starting the server
     app.run(host="0.0.0.0", port=port, debug=True)
