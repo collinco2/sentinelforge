@@ -2,7 +2,12 @@ import React, { useState } from "react";
 import { DashboardLayout } from "../layout/DashboardLayout";
 import { IocTable, IOCData } from "../components/IocTable";
 import { IocDetailModal } from "../components/IocDetailModal";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
@@ -58,7 +63,7 @@ const initialFormData: IocFormData = {
 export function IocManagementPage() {
   const { hasRole } = useAuth();
   const { iocs, isLoading, mutate } = useIocs(defaultFilters);
-  
+
   // State management
   const [selectedIoc, setSelectedIoc] = useState<IOCData | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -71,13 +76,16 @@ export function IocManagementPage() {
 
   // Permission checks
   const canModify = hasRole([UserRole.ANALYST, UserRole.ADMIN]);
-  const canDelete = hasRole([UserRole.ADMIN]);
+  // const canDelete = hasRole([UserRole.ADMIN]); // TODO: Implement delete functionality
 
   // Filter IOCs based on search and filters
   const filteredIocs = iocs.filter((ioc) => {
-    const matchesSearch = ioc.value.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = ioc.value
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === "all" || ioc.type === typeFilter;
-    const matchesSeverity = severityFilter === "all" || ioc.severity === severityFilter;
+    const matchesSeverity =
+      severityFilter === "all" || ioc.severity === severityFilter;
     return matchesSearch && matchesType && matchesSeverity;
   });
 
@@ -89,7 +97,7 @@ export function IocManagementPage() {
 
   // Handle form input changes
   const handleInputChange = (field: keyof IocFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   // Handle create IOC
@@ -112,7 +120,10 @@ export function IocManagementPage() {
           ioc_value: formData.value,
           severity: formData.severity,
           source: formData.source,
-          tags: formData.tags.split(",").map(tag => tag.trim()).filter(Boolean),
+          tags: formData.tags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean),
           description: formData.description,
         }),
       });
@@ -134,8 +145,6 @@ export function IocManagementPage() {
     }
   };
 
-
-
   // Handle bulk import
   const handleBulkImport = () => {
     // TODO: Implement bulk import functionality
@@ -154,15 +163,20 @@ export function IocManagementPage() {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">IOC Management</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              IOC Management
+            </h1>
             <p className="text-muted-foreground">
               Manage Indicators of Compromise (IOCs) for threat intelligence
             </p>
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
             {canModify && (
-              <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+              <Dialog
+                open={isCreateModalOpen}
+                onOpenChange={setIsCreateModalOpen}
+              >
                 <DialogTrigger asChild>
                   <Button className="bg-blue-600 hover:bg-blue-700">
                     <Plus className="h-4 w-4 mr-2" />
@@ -180,13 +194,20 @@ export function IocManagementPage() {
                         id="ioc-value"
                         placeholder="e.g., 192.168.1.1, malicious.com"
                         value={formData.value}
-                        onChange={(e) => handleInputChange("value", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("value", e.target.value)
+                        }
                       />
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="ioc-type">Type</Label>
-                      <Select value={formData.type} onValueChange={(value) => handleInputChange("type", value)}>
+                      <Select
+                        value={formData.type}
+                        onValueChange={(value) =>
+                          handleInputChange("type", value)
+                        }
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -199,10 +220,15 @@ export function IocManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="ioc-severity">Severity</Label>
-                      <Select value={formData.severity} onValueChange={(value) => handleInputChange("severity", value)}>
+                      <Select
+                        value={formData.severity}
+                        onValueChange={(value) =>
+                          handleInputChange("severity", value)
+                        }
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -214,38 +240,44 @@ export function IocManagementPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="ioc-source">Source</Label>
                       <Input
                         id="ioc-source"
                         placeholder="e.g., Manual Entry, OSINT"
                         value={formData.source}
-                        onChange={(e) => handleInputChange("source", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("source", e.target.value)
+                        }
                       />
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="ioc-tags">Tags (comma-separated)</Label>
                       <Input
                         id="ioc-tags"
                         placeholder="e.g., malware, phishing, apt"
                         value={formData.tags}
-                        onChange={(e) => handleInputChange("tags", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("tags", e.target.value)
+                        }
                       />
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="ioc-description">Description</Label>
                       <Textarea
                         id="ioc-description"
                         placeholder="Additional context about this IOC"
                         value={formData.description}
-                        onChange={(e) => handleInputChange("description", e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange("description", e.target.value)
+                        }
                         rows={3}
                       />
                     </div>
-                    
+
                     <div className="flex justify-end gap-2">
                       <Button
                         variant="outline"
@@ -265,17 +297,17 @@ export function IocManagementPage() {
                 </DialogContent>
               </Dialog>
             )}
-            
+
             <Button variant="outline" onClick={handleBulkImport}>
               <Upload className="h-4 w-4 mr-2" />
               Import
             </Button>
-            
+
             <Button variant="outline" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
-            
+
             <Button variant="outline" onClick={() => mutate()}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -296,42 +328,46 @@ export function IocManagementPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Critical</p>
                   <p className="text-2xl font-bold text-red-500">
-                    {iocs.filter(ioc => ioc.severity === "critical").length}
+                    {iocs.filter((ioc) => ioc.severity === "critical").length}
                   </p>
                 </div>
                 <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">High</p>
                   <p className="text-2xl font-bold text-orange-500">
-                    {iocs.filter(ioc => ioc.severity === "high").length}
+                    {iocs.filter((ioc) => ioc.severity === "high").length}
                   </p>
                 </div>
                 <AlertCircle className="h-8 w-8 text-orange-500" />
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Active Filters</p>
+                  <p className="text-sm text-muted-foreground">
+                    Active Filters
+                  </p>
                   <p className="text-2xl font-bold">
-                    {(searchTerm ? 1 : 0) + (typeFilter !== "all" ? 1 : 0) + (severityFilter !== "all" ? 1 : 0)}
+                    {(searchTerm ? 1 : 0) +
+                      (typeFilter !== "all" ? 1 : 0) +
+                      (severityFilter !== "all" ? 1 : 0)}
                   </p>
                 </div>
                 <Filter className="h-8 w-8 text-green-500" />
@@ -371,7 +407,10 @@ export function IocManagementPage() {
                   </SelectContent>
                 </Select>
 
-                <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                <Select
+                  value={severityFilter}
+                  onValueChange={setSeverityFilter}
+                >
                   <SelectTrigger className="w-32">
                     <SelectValue placeholder="Severity" />
                   </SelectTrigger>
@@ -387,10 +426,15 @@ export function IocManagementPage() {
             </div>
 
             {/* Active Filters Display */}
-            {(searchTerm || typeFilter !== "all" || severityFilter !== "all") && (
+            {(searchTerm ||
+              typeFilter !== "all" ||
+              severityFilter !== "all") && (
               <div className="flex flex-wrap gap-2 mt-4">
                 {searchTerm && (
-                  <Badge variant="secondary" className="flex items-center gap-1">
+                  <Badge
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
                     Search: {searchTerm}
                     <button
                       onClick={() => setSearchTerm("")}
@@ -401,7 +445,10 @@ export function IocManagementPage() {
                   </Badge>
                 )}
                 {typeFilter !== "all" && (
-                  <Badge variant="secondary" className="flex items-center gap-1">
+                  <Badge
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
                     Type: {typeFilter}
                     <button
                       onClick={() => setTypeFilter("all")}
@@ -412,7 +459,10 @@ export function IocManagementPage() {
                   </Badge>
                 )}
                 {severityFilter !== "all" && (
-                  <Badge variant="secondary" className="flex items-center gap-1">
+                  <Badge
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
                     Severity: {severityFilter}
                     <button
                       onClick={() => setSeverityFilter("all")}
