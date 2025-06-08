@@ -14,6 +14,7 @@ import { ShareableIocView } from "./pages/ShareableIocView";
 import { AlertTimelinePage } from "./pages/AlertTimelinePage";
 import { AlertsPage } from "./pages/AlertsPage";
 import { RoleManagementPage } from "./pages/RoleManagementPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { IocManagementPage } from "./pages/IocManagementPage";
 import { FeedManagementPage } from "./pages/FeedManagementPage";
 import "./App.css";
@@ -110,6 +111,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <FeedManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <SettingsPage />
                   </ProtectedRoute>
                 }
               />
