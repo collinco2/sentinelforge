@@ -94,7 +94,7 @@ def get_db_connection():
     try:
         conn = sqlite3.connect(db_path)
 
-        # Custom row factory to avoid "tuple indices must be integers or slices, not str" error
+        # Custom row factory to avoid tuple index errors
         def dict_factory(cursor, row):
             d = {}
             for idx, col in enumerate(cursor.description):
@@ -527,7 +527,8 @@ def get_ioc_by_value(ioc_value):
         stored_value = str(ioc.get("value", ""))
         stored_value_lower = stored_value.lower()
         print(
-            f"[API] Comparing with IOC #{i}: '{stored_value}' (lower: '{stored_value_lower}')"
+            f"[API] Comparing with IOC #{i}: '{stored_value}' "
+            f"(lower: '{stored_value_lower}')"
         )
 
         if stored_value_lower == ioc_value_lower:
@@ -926,13 +927,13 @@ def get_threats_metrics():
 
             # Get daily threat counts for the last 7 days
             cursor.execute("""
-                SELECT 
+                SELECT
                     DATE(first_seen) as day,
                     SUM(CASE WHEN score >= 9.0 THEN 1 ELSE 0 END) as critical,
                     SUM(CASE WHEN score >= 7.5 AND score < 9.0 THEN 1 ELSE 0 END) as high,
                     SUM(CASE WHEN score >= 5.0 AND score < 7.5 THEN 1 ELSE 0 END) as medium,
                     SUM(CASE WHEN score < 5.0 THEN 1 ELSE 0 END) as low
-                FROM iocs 
+                FROM iocs
                 WHERE first_seen >= date('now', '-7 days')
                 GROUP BY DATE(first_seen)
                 ORDER BY day DESC
