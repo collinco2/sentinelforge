@@ -273,8 +273,8 @@ class TestFeedHealthAPI(unittest.TestCase):
         log = cursor.fetchone()
 
         self.assertIsNotNone(log)
-        self.assertEqual(log[3], status)  # status column
-        self.assertEqual(log[4], http_code)  # http_code column
+        self.assertEqual(log[4], status)  # status column (index 4)
+        self.assertEqual(log[5], http_code)  # http_code column (index 5)
 
         conn.close()
 
@@ -333,9 +333,9 @@ class TestFeedHealthAPI(unittest.TestCase):
         log = cursor.fetchone()
 
         self.assertIsNotNone(log)
-        self.assertEqual(log[3], status)  # status column
-        self.assertEqual(log[4], http_code)  # http_code column
-        self.assertEqual(log[7], error_message)  # error_message column
+        self.assertEqual(log[4], status)  # status column (index 4)
+        self.assertEqual(log[5], http_code)  # http_code column (index 5)
+        self.assertEqual(log[7], error_message)  # error_message column (index 7)
 
         conn.close()
 
