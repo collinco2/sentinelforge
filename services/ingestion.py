@@ -20,10 +20,9 @@ import csv
 import json
 import re
 import time
-import hashlib
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime
-from io import StringIO, TextIOWrapper
+from typing import Dict, List, Any, Tuple
+from datetime import datetime, timezone
+from io import StringIO
 import sqlite3
 from pathlib import Path
 
@@ -89,7 +88,7 @@ class IOCValidator:
             errors.append("IOC type is required")
 
         # Validate IOC type
-        valid_types = ["ip", "domain", "url", "hash", "email"]
+        valid_types = ["ip", "domain", "url", "hash", "email", "file"]
         ioc_type = ioc_data.get("ioc_type", "").lower()
         if ioc_type not in valid_types:
             errors.append(
@@ -168,10 +167,10 @@ class IOCValidator:
             normalized["tags"] = []
 
         # Timestamps
-        normalized["first_seen"] = datetime.utcnow()
-        normalized["last_seen"] = datetime.utcnow()
-        normalized["created_at"] = datetime.utcnow()
-        normalized["updated_at"] = datetime.utcnow()
+        normalized["first_seen"] = datetime.now(timezone.utc)
+        normalized["last_seen"] = datetime.now(timezone.utc)
+        normalized["created_at"] = datetime.now(timezone.utc)
+        normalized["updated_at"] = datetime.now(timezone.utc)
         normalized["is_active"] = True
 
         return normalized
@@ -467,7 +466,7 @@ class FeedIngestionService:
                 log_data.get("duration_seconds"),
                 log_data["user_id"],
                 log_data.get("justification"),
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
             ),
         )
         return cursor.lastrowid
@@ -481,8 +480,6 @@ class FeedIngestionService:
         feed_id: int = None,
     ) -> Dict[str, Any]:
         """Import IOCs from a file."""
-        start_time = time.time()
-
         # Read file
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -624,7 +621,6 @@ class FeedIngestionService:
                     errors.append(f"{row_ref}: {str(e)}")
 
             # Determine import status
-            total_processed = imported_count + skipped_count + error_count
             if error_count == 0:
                 import_status = "success"
             elif imported_count > 0:
