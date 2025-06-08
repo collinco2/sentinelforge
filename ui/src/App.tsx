@@ -15,13 +15,16 @@ import { AlertTimelinePage } from "./pages/AlertTimelinePage";
 import { AlertsPage } from "./pages/AlertsPage";
 import { RoleManagementPage } from "./pages/RoleManagementPage";
 import { IocManagementPage } from "./pages/IocManagementPage";
+import { FeedManagementPage } from "./pages/FeedManagementPage";
 import "./App.css";
 
 function App() {
   // Log server type for debugging
   React.useEffect(() => {
-    const isDev = process.env.NODE_ENV === 'development';
-    const serverType = isDev ? 'DEVELOPMENT (npm start)' : 'PRODUCTION (spa-server.py)';
+    const isDev = process.env.NODE_ENV === "development";
+    const serverType = isDev
+      ? "DEVELOPMENT (npm start)"
+      : "PRODUCTION (spa-server.py)";
     console.log(`🚀 SentinelForge UI Server: ${serverType}`);
     console.log(`📍 Environment: ${process.env.NODE_ENV}`);
     console.log(`🌐 URL: ${window.location.origin}`);
@@ -99,6 +102,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <IocManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/feed-management"
+                element={
+                  <ProtectedRoute>
+                    <FeedManagementPage />
                   </ProtectedRoute>
                 }
               />

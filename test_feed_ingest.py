@@ -204,7 +204,7 @@ class FeedIngestionTester:
             }
 
             response = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         if response.status_code == 200:
@@ -243,7 +243,7 @@ class FeedIngestionTester:
             }
 
             response = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         if response.status_code == 200:
@@ -277,7 +277,7 @@ class FeedIngestionTester:
             }
 
             response = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         if response.status_code == 200:
@@ -313,7 +313,7 @@ class FeedIngestionTester:
             }
 
             response1 = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         # Second import (should detect duplicates)
@@ -325,7 +325,7 @@ class FeedIngestionTester:
             }
 
             response2 = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         if response1.status_code == 200 and response2.status_code == 200:
@@ -366,7 +366,7 @@ class FeedIngestionTester:
             data = {"source_feed": "Invalid Test"}
 
             response = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         if response.status_code == 400:
@@ -385,7 +385,7 @@ class FeedIngestionTester:
             }
 
             response = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         if response.status_code == 200:
@@ -430,7 +430,7 @@ class FeedIngestionTester:
             }
 
             response = self.session.post(
-                f"{self.base_url}/api/iocs/import", files=files, data=data
+                f"{self.base_url}/api/feeds/upload", files=files, data=data
             )
 
         end_time = datetime.now()

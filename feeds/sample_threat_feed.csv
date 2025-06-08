@@ -1,0 +1,11 @@
+ioc_type,ioc_value,source_feed,severity,confidence,score,tags
+domain,malicious-test-domain.com,Sample Threat Feed,high,85,8.5,malware,apt
+ip,192.168.100.50,Sample Threat Feed,medium,70,6.0,botnet
+url,https://evil-test-site.com/payload.exe,Sample Threat Feed,critical,95,9.2,ransomware,download
+hash,d41d8cd98f00b204e9800998ecf8427e,Sample Threat Feed,high,80,7.8,trojan
+email,attacker@malicious-test.com,Sample Threat Feed,medium,60,5.5,phishing
+domain,suspicious-test.org,Sample Threat Feed,medium,75,6.5,suspicious
+ip,10.0.0.100,Sample Threat Feed,low,40,3.5,scanner
+url,http://phishing-test.com/login.php,Sample Threat Feed,high,88,8.0,phishing,credential-theft
+hash,5d41402abc4b2a76b9719d911017c592,Sample Threat Feed,medium,65,6.2,malware
+domain,c2-test-server.net,Sample Threat Feed,critical,92,9.0,c2,apt

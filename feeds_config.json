@@ -1,0 +1,90 @@
+[
+  {
+    "name": "Test Local CSV Feed",
+    "url": null,
+    "format": "csv",
+    "requires_auth": false,
+    "parser": "standard_csv",
+    "enabled": true
+  },
+  {
+    "name": "IPsum Project",
+    "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt",
+    "format": "txt",
+    "requires_auth": false,
+    "parser": "ip_list",
+    "enabled": true
+  },
+  {
+    "name": "MalwareDomainList",
+    "url": "http://www.malwaredomainlist.com/hostslist/hosts.txt",
+    "format": "txt",
+    "requires_auth": false,
+    "parser": "domain_list",
+    "enabled": true
+  },
+  {
+    "name": "AlienVault OTX",
+    "url": "https://otx.alienvault.com/feeds/fullhash",
+    "format": "txt",
+    "requires_auth": false,
+    "parser": "alienvault_hash",
+    "enabled": true
+  },
+  {
+    "name": "Abuse.ch URLhaus",
+    "url": "https://urlhaus.abuse.ch/downloads/csv/",
+    "format": "csv",
+    "requires_auth": false,
+    "parser": "urlhaus_csv",
+    "enabled": true
+  },
+  {
+    "name": "PhishTank",
+    "url": "https://data.phishtank.com/data/online-valid.json",
+    "format": "json",
+    "requires_auth": true,
+    "parser": "phishtank_json",
+    "enabled": true
+  },
+  {
+    "name": "MISP OSINT Feed",
+    "url": "https://www.circl.lu/doc/misp/feed-osint/manifest.json",
+    "format": "json",
+    "requires_auth": false,
+    "parser": "misp_manifest",
+    "enabled": false
+  },
+  {
+    "name": "CyberCrime Tracker",
+    "url": "https://cybercrime-tracker.net/all.php",
+    "format": "txt",
+    "requires_auth": false,
+    "parser": "generic_txt",
+    "enabled": false
+  },
+  {
+    "name": "Spamhaus DROP List",
+    "url": "https://www.spamhaus.org/drop/drop.txt",
+    "format": "txt",
+    "requires_auth": false,
+    "parser": "ip_range_list",
+    "enabled": false
+  },
+  {
+    "name": "Proofpoint Emerging Threats",
+    "url": "https://rules.emergingthreats.net/openioc/",
+    "format": "stix",
+    "requires_auth": true,
+    "parser": "proofpoint_stix",
+    "enabled": false
+  },
+  {
+    "name": "Limo TAXII Feeds (Anomali)",
+    "url": "https://limo.anomali.com/api/v1/taxii2/",
+    "format": "stix-taxii",
+    "requires_auth": true,
+    "parser": "taxii_client",
+    "enabled": false
+  }
+]

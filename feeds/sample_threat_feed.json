@@ -1,0 +1,60 @@
+{
+  "feed_info": {
+    "name": "Sample JSON Threat Feed",
+    "version": "1.0",
+    "description": "Sample threat intelligence feed in JSON format"
+  },
+  "iocs": [
+    {
+      "ioc_type": "domain",
+      "ioc_value": "json-malicious.com",
+      "source_feed": "Sample JSON Feed",
+      "severity": "high",
+      "confidence": 90,
+      "score": 8.7,
+      "tags": ["malware", "json-test"],
+      "first_seen": "2024-01-15T10:30:00Z",
+      "description": "Known malicious domain serving malware"
+    },
+    {
+      "type": "ip",
+      "value": "203.0.113.100",
+      "source_feed": "Sample JSON Feed",
+      "severity": "critical",
+      "confidence": 95,
+      "score": 9.5,
+      "tags": ["c2", "apt", "critical"],
+      "description": "Command and control server"
+    },
+    {
+      "ioc_type": "url",
+      "ioc_value": "https://json-evil.com/backdoor",
+      "source_feed": "Sample JSON Feed",
+      "severity": "high",
+      "confidence": 85,
+      "score": 8.2,
+      "tags": ["backdoor", "remote-access"],
+      "description": "Backdoor download URL"
+    },
+    {
+      "ioc_type": "hash",
+      "ioc_value": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_feed": "Sample JSON Feed",
+      "severity": "medium",
+      "confidence": 75,
+      "score": 6.8,
+      "tags": ["trojan"],
+      "description": "SHA256 hash of known trojan"
+    },
+    {
+      "ioc_type": "email",
+      "ioc_value": "json-phisher@evil.com",
+      "source_feed": "Sample JSON Feed",
+      "severity": "medium",
+      "confidence": 70,
+      "score": 5.9,
+      "tags": ["phishing", "social-engineering"],
+      "description": "Email address used in phishing campaigns"
+    }
+  ]
+}

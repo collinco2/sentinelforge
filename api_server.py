@@ -26,6 +26,10 @@ from email_service import (
     send_password_reset_email,
     send_password_reset_confirmation_email,
 )
+from services.ingestion import FeedIngestionService
+import tempfile
+import requests
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -3207,6 +3211,502 @@ def initialize_alerts():
     IOCS.clear()
     IOCS.extend(fallback_iocs)
     print(f"[API] Loaded {len(IOCS)} enhanced mock IOCs")
+
+
+# ============================================================================
+# THREAT FEED INGESTION ENDPOINTS
+# ============================================================================
+
+
+@app.route("/api/feeds", methods=["GET"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def get_feeds():
+    """Get all registered threat feeds."""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT f.*, u.username as created_by_username
+            FROM threat_feeds f
+            LEFT JOIN users u ON f.created_by = u.user_id
+            ORDER BY f.created_at DESC
+        """)
+
+        feeds = []
+        for row in cursor.fetchall():
+            feed = dict(row)
+            # Parse format_config JSON
+            if feed.get("format_config"):
+                try:
+                    feed["format_config"] = json.loads(feed["format_config"])
+                except:
+                    feed["format_config"] = {}
+            feeds.append(feed)
+
+        conn.close()
+        return jsonify({"feeds": feeds})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to get feeds: {str(e)}"}), 500
+
+
+@app.route("/api/feeds", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def create_feed():
+    """Create a new threat feed configuration."""
+    try:
+        data = request.get_json()
+        current_user = g.current_user
+
+        # Validate required fields
+        required_fields = ["name", "feed_type"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Validate feed type
+        valid_types = ["csv", "json", "txt", "stix"]
+        if data["feed_type"] not in valid_types:
+            return jsonify(
+                {
+                    "error": f"Invalid feed type. Must be one of: {', '.join(valid_types)}"
+                }
+            ), 400
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Check for duplicate name
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM threat_feeds WHERE name = ?", (data["name"],)
+        )
+        if cursor.fetchone()["count"] > 0:
+            conn.close()
+            return jsonify({"error": "Feed name already exists"}), 409
+
+        # Insert new feed
+        now = datetime.datetime.utcnow()
+        cursor.execute(
+            """
+            INSERT INTO threat_feeds (
+                name, description, url, feed_type, format_config,
+                is_active, auto_import, import_frequency, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                data["name"],
+                data.get("description", ""),
+                data.get("url", ""),
+                data["feed_type"],
+                json.dumps(data.get("format_config", {})),
+                data.get("is_active", True),
+                data.get("auto_import", False),
+                data.get("import_frequency", 24),
+                current_user.user_id,
+                now,
+                now,
+            ),
+        )
+
+        feed_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return jsonify(
+            {"message": "Feed created successfully", "feed_id": feed_id}
+        ), 201
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to create feed: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/<int:feed_id>", methods=["PATCH"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def update_feed(feed_id):
+    """Update a threat feed configuration."""
+    try:
+        data = request.get_json()
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Check if feed exists
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM threat_feeds WHERE id = ?", (feed_id,))
+        feed = cursor.fetchone()
+        if not feed:
+            conn.close()
+            return jsonify({"error": "Feed not found"}), 404
+
+        # Build update query
+        update_fields = []
+        update_values = []
+
+        for field in [
+            "name",
+            "description",
+            "url",
+            "feed_type",
+            "is_active",
+            "auto_import",
+            "import_frequency",
+        ]:
+            if field in data:
+                update_fields.append(f"{field} = ?")
+                update_values.append(data[field])
+
+        if "format_config" in data:
+            update_fields.append("format_config = ?")
+            update_values.append(json.dumps(data["format_config"]))
+
+        if update_fields:
+            update_fields.append("updated_at = ?")
+            update_values.append(datetime.datetime.utcnow())
+            update_values.append(feed_id)
+
+            query = f"UPDATE threat_feeds SET {', '.join(update_fields)} WHERE id = ?"
+            cursor.execute(query, update_values)
+            conn.commit()
+
+        conn.close()
+        return jsonify({"message": "Feed updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to update feed: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/<int:feed_id>", methods=["DELETE"])
+@require_authentication()
+@require_role([UserRole.ADMIN])
+def delete_feed(feed_id):
+    """Delete a threat feed configuration."""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM threat_feeds WHERE id = ?", (feed_id,))
+
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Feed not found"}), 404
+
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Feed deleted successfully"})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to delete feed: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/upload", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def upload_feed():
+    """Upload and import IOCs from a file."""
+    try:
+        current_user = g.current_user
+
+        # Check if file was uploaded
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+
+        # Get form data
+        source_feed = request.form.get("source_feed", "Manual Upload")
+        justification = request.form.get("justification", "")
+
+        # Validate file type
+        allowed_extensions = {".csv", ".json", ".txt", ".stix"}
+        file_ext = (
+            "." + file.filename.rsplit(".", 1)[-1].lower()
+            if "." in file.filename
+            else ""
+        )
+
+        if file_ext not in allowed_extensions:
+            return jsonify(
+                {
+                    "error": f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+                }
+            ), 400
+
+        # Read file content
+        try:
+            content = file.read().decode("utf-8")
+        except UnicodeDecodeError:
+            return jsonify({"error": "File must be UTF-8 encoded"}), 400
+
+        # Initialize ingestion service
+        ingestion_service = FeedIngestionService()
+
+        # Import IOCs
+        result = ingestion_service.import_from_content(
+            content=content,
+            filename=secure_filename(file.filename),
+            source_feed=source_feed,
+            user_id=current_user.user_id,
+            justification=justification,
+        )
+
+        if result["success"]:
+            return jsonify(
+                {
+                    "message": "File imported successfully",
+                    "imported_count": result["imported_count"],
+                    "skipped_count": result["skipped_count"],
+                    "error_count": result["error_count"],
+                    "errors": result.get("errors", []),
+                    "total_records": result["total_records"],
+                    "duration_seconds": result["duration_seconds"],
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "error": result.get("error", "Import failed"),
+                    "imported_count": result["imported_count"],
+                    "skipped_count": result["skipped_count"],
+                    "error_count": result["error_count"],
+                    "errors": result.get("errors", []),
+                }
+            ), 400
+
+    except Exception as e:
+        return jsonify({"error": f"Upload failed: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/<int:feed_id>/import", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.ADMIN])
+def import_from_feed(feed_id):
+    """Import IOCs from a registered feed URL."""
+    try:
+        current_user = g.current_user
+        data = request.get_json() or {}
+        justification = data.get("justification", "")
+
+        # Get feed configuration
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM threat_feeds WHERE id = ?", (feed_id,))
+        feed = cursor.fetchone()
+        conn.close()
+
+        if not feed:
+            return jsonify({"error": "Feed not found"}), 404
+
+        if not feed["url"]:
+            return jsonify({"error": "Feed has no URL configured"}), 400
+
+        if not feed["is_active"]:
+            return jsonify({"error": "Feed is not active"}), 400
+
+        # Fetch content from URL
+        try:
+            # Prepare headers for authentication if needed
+            headers = {"User-Agent": "SentinelForge/1.0 (Threat Intelligence Platform)"}
+
+            # Add API key if configured
+            if feed.get("api_key"):
+                if "alienvault" in feed["url"].lower() or "otx" in feed["url"].lower():
+                    headers["X-OTX-API-KEY"] = feed["api_key"]
+                elif "virustotal" in feed["url"].lower():
+                    headers["x-apikey"] = feed["api_key"]
+                else:
+                    # Generic API key header
+                    headers["Authorization"] = f"Bearer {feed['api_key']}"
+
+            print(f"[FEED] Fetching from URL: {feed['url']}")
+            response = requests.get(feed["url"], headers=headers, timeout=30)
+
+            # Handle authentication errors specifically
+            if response.status_code == 401:
+                error_msg = (
+                    "Authentication required - please configure API key for this feed"
+                )
+                print(f"[FEED] Authentication error for {feed['name']}: {error_msg}")
+                return jsonify({"error": error_msg}), 401
+            elif response.status_code == 403:
+                error_msg = "Access forbidden - check API key permissions"
+                print(f"[FEED] Access forbidden for {feed['name']}: {error_msg}")
+                return jsonify({"error": error_msg}), 403
+            elif response.status_code == 429:
+                error_msg = "Rate limit exceeded - please try again later"
+                print(f"[FEED] Rate limit for {feed['name']}: {error_msg}")
+                return jsonify({"error": error_msg}), 429
+
+            response.raise_for_status()
+            content = response.text
+            print(
+                f"[FEED] Successfully fetched {len(content)} bytes from {feed['name']}"
+            )
+
+        except requests.Timeout:
+            error_msg = (
+                "Request timeout - feed server did not respond within 30 seconds"
+            )
+            print(f"[FEED] Timeout error for {feed['name']}")
+            return jsonify({"error": error_msg}), 408
+        except requests.ConnectionError:
+            error_msg = "Connection error - unable to reach feed server"
+            print(f"[FEED] Connection error for {feed['name']}")
+            return jsonify({"error": error_msg}), 503
+        except requests.RequestException as e:
+            error_msg = f"Failed to fetch feed: {str(e)}"
+            print(f"[FEED] Request error for {feed['name']}: {error_msg}")
+            return jsonify({"error": error_msg}), 400
+
+        # Initialize ingestion service
+        ingestion_service = FeedIngestionService()
+
+        # Import IOCs
+        result = ingestion_service.import_from_content(
+            content=content,
+            filename=f"feed_{feed_id}_{feed['feed_type']}",
+            source_feed=feed["name"],
+            user_id=current_user.user_id,
+            justification=justification,
+            feed_id=feed_id,
+        )
+
+        # Update feed last import status
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE threat_feeds
+                SET last_import = ?, last_import_status = ?, last_import_count = ?
+                WHERE id = ?
+            """,
+                (
+                    datetime.datetime.utcnow(),
+                    result["import_status"],
+                    result["imported_count"],
+                    feed_id,
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+        if result["success"]:
+            return jsonify(
+                {
+                    "message": "Feed imported successfully",
+                    "imported_count": result["imported_count"],
+                    "skipped_count": result["skipped_count"],
+                    "error_count": result["error_count"],
+                    "errors": result.get("errors", []),
+                    "total_records": result["total_records"],
+                    "duration_seconds": result["duration_seconds"],
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "error": result.get("error", "Import failed"),
+                    "imported_count": result["imported_count"],
+                    "skipped_count": result["skipped_count"],
+                    "error_count": result["error_count"],
+                    "errors": result.get("errors", []),
+                }
+            ), 400
+
+    except Exception as e:
+        return jsonify({"error": f"Import failed: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/import-logs", methods=["GET"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def get_import_logs():
+    """Get feed import logs with filtering."""
+    try:
+        # Parse query parameters
+        limit = request.args.get("limit", 50, type=int)
+        offset = request.args.get("offset", 0, type=int)
+        feed_id = request.args.get("feed_id", type=int)
+        import_status = request.args.get("import_status")
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        # Build query
+        query = """
+            SELECT l.*, f.name as feed_name, u.username as user_name
+            FROM feed_import_logs l
+            LEFT JOIN threat_feeds f ON l.feed_id = f.id
+            LEFT JOIN users u ON l.user_id = u.user_id
+            WHERE 1=1
+        """
+        params = []
+
+        if feed_id:
+            query += " AND l.feed_id = ?"
+            params.append(feed_id)
+
+        if import_status:
+            query += " AND l.import_status = ?"
+            params.append(import_status)
+
+        query += " ORDER BY l.timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+
+        logs = []
+        for row in cursor.fetchall():
+            log = dict(row)
+            # Parse errors JSON
+            if log.get("errors"):
+                try:
+                    log["errors"] = json.loads(log["errors"])
+                except:
+                    log["errors"] = []
+            logs.append(log)
+
+        # Get total count
+        count_query = """
+            SELECT COUNT(*) as count FROM feed_import_logs l
+            WHERE 1=1
+        """
+        count_params = []
+
+        if feed_id:
+            count_query += " AND l.feed_id = ?"
+            count_params.append(feed_id)
+
+        if import_status:
+            count_query += " AND l.import_status = ?"
+            count_params.append(import_status)
+
+        cursor.execute(count_query, count_params)
+        total = cursor.fetchone()["count"]
+
+        conn.close()
+        return jsonify({"logs": logs, "total": total})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to get import logs: {str(e)}"}), 500
 
 
 if __name__ == "__main__":

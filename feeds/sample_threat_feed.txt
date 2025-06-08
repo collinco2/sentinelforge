@@ -1,0 +1,31 @@
+# Sample Threat Feed - Text Format
+# One IOC per line, comments start with #
+# IOC types are auto-detected from patterns
+
+# Malicious domains
+txt-malicious.com
+txt-evil.org
+txt-suspicious.net
+
+# IP addresses
+198.51.100.50
+203.0.113.75
+192.0.2.100
+
+# URLs
+https://txt-phishing.com/login
+http://txt-malware.net/payload.exe
+https://txt-c2.org/beacon
+
+# File hashes (MD5)
+098f6bcd4621d373cade4e832627b4f6
+5d41402abc4b2a76b9719d911017c592
+e99a18c428cb38d5f260853678922e03
+
+# Email addresses
+txt-attacker@evil.com
+txt-phisher@malicious.org
+
+# More domains
+txt-botnet.com
+txt-ransomware.net

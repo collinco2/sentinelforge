@@ -13,6 +13,7 @@ import {
   X,
   Users,
   Database,
+  Download,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { UserRole } from "../services/auth";
@@ -38,7 +39,7 @@ export function Sidebar({ className }: SidebarProps) {
   const activePath = location.pathname;
 
   // Detect if running in development mode
-  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isDevelopment = process.env.NODE_ENV === "development";
 
   // Base navigation items
   const baseNavItems: NavItem[] = [
@@ -51,9 +52,15 @@ export function Sidebar({ className }: SidebarProps) {
     { icon: Settings, label: "Settings", path: "/settings" },
   ];
 
+  // Add analyst/admin-only items
+  const analystItems: NavItem[] = hasRole([UserRole.ANALYST, UserRole.ADMIN])
+    ? [{ icon: Download, label: "Feed Management", path: "/feed-management" }]
+    : [];
+
   // Add admin-only items
   const navItems: NavItem[] = [
     ...baseNavItems,
+    ...analystItems,
     ...(hasRole([UserRole.ADMIN])
       ? [{ icon: Users, label: "Role Management", path: "/role-management" }]
       : []),

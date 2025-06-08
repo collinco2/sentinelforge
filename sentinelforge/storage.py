@@ -118,6 +118,52 @@ class IOCAuditLogEntry(Base):
     user_agent = Column(String, nullable=True)  # User agent string
 
 
+class ThreatFeed(Base):
+    __tablename__ = "threat_feeds"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    url = Column(String(500), nullable=True)  # URL for remote feeds
+    feed_type = Column(String(50), nullable=False)  # csv, json, txt, stix
+    format_config = Column(JSON, nullable=True)  # Field mappings and parsing config
+    is_active = Column(Boolean, default=True)
+    auto_import = Column(Boolean, default=False)  # Enable automatic imports
+    import_frequency = Column(Integer, default=24)  # Hours between auto imports
+    last_import = Column(DateTime, nullable=True)
+    last_import_status = Column(String(50), nullable=True)  # success, error, pending
+    last_import_count = Column(Integer, default=0)
+    created_by = Column(Integer, nullable=False)  # User ID who created the feed
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
+
+
+class FeedImportLog(Base):
+    __tablename__ = "feed_import_logs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    feed_id = Column(
+        Integer, ForeignKey("threat_feeds.id"), nullable=True
+    )  # Null for manual uploads
+    feed_name = Column(String(200), nullable=False)  # Feed name for reference
+    import_type = Column(String(50), nullable=False)  # manual, automatic, scheduled
+    file_name = Column(String(255), nullable=True)  # Original filename
+    file_size = Column(Integer, nullable=True)  # File size in bytes
+    total_records = Column(Integer, default=0)  # Total records in file
+    imported_count = Column(Integer, default=0)  # Successfully imported
+    skipped_count = Column(Integer, default=0)  # Skipped (duplicates)
+    error_count = Column(Integer, default=0)  # Failed imports
+    errors = Column(JSON, nullable=True)  # Array of error messages
+    import_status = Column(String(50), nullable=False)  # success, partial, failed
+    duration_seconds = Column(Integer, nullable=True)  # Import duration
+    user_id = Column(Integer, nullable=False)  # User who triggered import
+    justification = Column(Text, nullable=True)  # Reason for import
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    # Relationship to feed
+    feed = relationship("ThreatFeed", backref="import_logs")
+
+
 def init_db():
     # Pass engine explicitly if Base.metadata needs it
     Base.metadata.create_all(bind=engine)

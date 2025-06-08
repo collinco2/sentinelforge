@@ -356,3 +356,232 @@ export async function getRoleChangeAuditLogs(
     throw error;
   }
 }
+
+// ============================================================================
+// THREAT FEED MANAGEMENT API
+// ============================================================================
+
+export interface ThreatFeed {
+  id: number;
+  name: string;
+  description: string;
+  url: string;
+  feed_type: string;
+  format_config: Record<string, any>;
+  is_active: boolean;
+  auto_import: boolean;
+  import_frequency: number;
+  last_import: string | null;
+  last_import_status: string | null;
+  last_import_count: number;
+  created_by: number;
+  created_by_username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedImportLog {
+  id: number;
+  feed_id: number | null;
+  feed_name: string;
+  import_type: string;
+  file_name: string | null;
+  file_size: number | null;
+  total_records: number;
+  imported_count: number;
+  skipped_count: number;
+  error_count: number;
+  errors: string[];
+  import_status: string;
+  duration_seconds: number | null;
+  user_id: number;
+  user_name: string;
+  justification: string | null;
+  timestamp: string;
+}
+
+export interface FeedCreateRequest {
+  name: string;
+  description?: string;
+  url?: string;
+  feed_type: string;
+  format_config?: Record<string, any>;
+  is_active?: boolean;
+  auto_import?: boolean;
+  import_frequency?: number;
+}
+
+export interface FeedUpdateRequest {
+  name?: string;
+  description?: string;
+  url?: string;
+  feed_type?: string;
+  format_config?: Record<string, any>;
+  is_active?: boolean;
+  auto_import?: boolean;
+  import_frequency?: number;
+}
+
+export interface ImportResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  imported_count: number;
+  skipped_count: number;
+  error_count: number;
+  errors: string[];
+  total_records: number;
+  duration_seconds: number;
+  log_id?: number;
+}
+
+// Get all threat feeds
+export async function getFeeds(): Promise<{ feeds: ThreatFeed[] }> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/api/feeds`, {
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching feeds:", error);
+    throw error;
+  }
+}
+
+// Create a new threat feed
+export async function createFeed(
+  feed: FeedCreateRequest,
+): Promise<{ message: string; feed_id: number }> {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/feeds`, feed, {
+      headers: {
+        ...getAuthHeaders(),
+        "Content-Type": "application/json",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error creating feed:", error);
+    throw error;
+  }
+}
+
+// Update a threat feed
+export async function updateFeed(
+  feedId: number,
+  updates: FeedUpdateRequest,
+): Promise<{ message: string }> {
+  try {
+    const response = await axios.patch(
+      `${API_BASE_URL}/api/feeds/${feedId}`,
+      updates,
+      {
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating feed:", error);
+    throw error;
+  }
+}
+
+// Delete a threat feed
+export async function deleteFeed(feedId: number): Promise<{ message: string }> {
+  try {
+    const response = await axios.delete(`${API_BASE_URL}/api/feeds/${feedId}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting feed:", error);
+    throw error;
+  }
+}
+
+// Import from a feed URL
+export async function importFromFeed(
+  feedId: number,
+  justification?: string,
+): Promise<ImportResult> {
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/api/feeds/${feedId}/import`,
+      { justification },
+      {
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error importing from feed:", error);
+    throw error;
+  }
+}
+
+// Upload and import a file
+export async function uploadFeed(
+  file: File,
+  sourceFeed: string,
+  justification?: string,
+): Promise<ImportResult> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("source_feed", sourceFeed);
+    if (justification) {
+      formData.append("justification", justification);
+    }
+
+    const response = await axios.post(
+      `${API_BASE_URL}/api/feeds/upload`,
+      formData,
+      {
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error uploading feed:", error);
+    throw error;
+  }
+}
+
+// Get import logs
+export async function getImportLogs(
+  filters: {
+    feed_id?: number;
+    import_status?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<{ logs: FeedImportLog[]; total: number }> {
+  try {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined) {
+        params.append(key, value.toString());
+      }
+    });
+
+    const response = await axios.get(
+      `${API_BASE_URL}/api/feeds/import-logs?${params.toString()}`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching import logs:", error);
+    throw error;
+  }
+}
