@@ -3445,6 +3445,9 @@ def check_feeds_health():
                 feed_type in ["csv", "txt"] and "phishtank" not in feed_name.lower()
             )
 
+            # Initialize response variable
+            response = None
+
             try:
                 # Setup headers
                 headers = {
@@ -3515,19 +3518,16 @@ def check_feeds_health():
                 response_time_ms = int((time.time() - start_time) * 1000)
                 status = "timeout"
                 error_message = "Request timeout"
-                response.status_code = None
 
             except requests.exceptions.ConnectionError as e:
                 response_time_ms = int((time.time() - start_time) * 1000)
                 status = "unreachable"
                 error_message = f"Connection error: {str(e)}"
-                response.status_code = None
 
             except requests.exceptions.RequestException as e:
                 response_time_ms = int((time.time() - start_time) * 1000)
                 status = "error"
                 error_message = f"Request error: {str(e)}"
-                response.status_code = None
 
             # Log the health check
             cursor.execute(
@@ -3756,6 +3756,9 @@ def get_single_feed_health(feed_id):
         # Determine request method
         use_head = feed_type in ["csv", "txt"] and "phishtank" not in feed_name.lower()
 
+        # Initialize response variable
+        response = None
+
         try:
             headers = {"User-Agent": "SentinelForge-HealthChecker/1.0", "Accept": "*/*"}
 
@@ -3813,19 +3816,16 @@ def get_single_feed_health(feed_id):
             response_time_ms = int((time.time() - start_time) * 1000)
             status = "timeout"
             error_message = "Request timeout"
-            response.status_code = None
 
         except requests.exceptions.ConnectionError as e:
             response_time_ms = int((time.time() - start_time) * 1000)
             status = "unreachable"
             error_message = f"Connection error: {str(e)}"
-            response.status_code = None
 
         except requests.exceptions.RequestException as e:
             response_time_ms = int((time.time() - start_time) * 1000)
             status = "error"
             error_message = f"Request error: {str(e)}"
-            response.status_code = None
 
         # Log the health check
         cursor.execute(
