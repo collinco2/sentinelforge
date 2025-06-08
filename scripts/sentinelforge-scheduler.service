@@ -1,0 +1,46 @@
+[Unit]
+Description=SentinelForge Scheduled Feed Importer
+Documentation=https://github.com/collinco2/sentinelforge
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=sentinelforge
+Group=sentinelforge
+WorkingDirectory=/opt/sentinelforge
+ExecStart=/opt/sentinelforge/venv/bin/python /opt/sentinelforge/scripts/run_scheduler.py --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sentinelforge-scheduler
+
+# Environment variables
+Environment=SENTINELFORGE_DB_PATH=/opt/sentinelforge/data/ioc_store.db
+Environment=SCHEDULER_LOG_FILE=/var/log/sentinelforge/scheduler.log
+Environment=SCHEDULER_LOG_LEVEL=INFO
+Environment=SCHEDULER_CRON=0 */6 * * *
+Environment=SCHEDULER_TIMEOUT=30
+Environment=SCHEDULER_MAX_RETRIES=3
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sentinelforge/data /var/log/sentinelforge /tmp
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=1G
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
