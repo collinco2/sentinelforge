@@ -231,7 +231,7 @@ class FeedParser:
                     row["_row_number"] = row_num
                     iocs.append(row)
 
-        except Exception as e:
+        except Exception:
             # Fallback to simple CSV parsing
             reader = csv.DictReader(StringIO(file_content))
             for row_num, row in enumerate(reader, start=2):

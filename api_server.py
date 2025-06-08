@@ -2973,7 +2973,7 @@ def get_feeds():
             if feed.get("format_config"):
                 try:
                     feed["format_config"] = json.loads(feed["format_config"])
-                except:
+                except (json.JSONDecodeError, TypeError):
                     feed["format_config"] = {}
             feeds.append(feed)
 
@@ -3410,7 +3410,7 @@ def get_import_logs():
             if log.get("errors"):
                 try:
                     log["errors"] = json.loads(log["errors"])
-                except:
+                except (json.JSONDecodeError, TypeError):
                     log["errors"] = []
             logs.append(log)
 

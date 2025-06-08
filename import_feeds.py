@@ -136,7 +136,7 @@ def main():
 
     # Summary
     print("-" * 50)
-    print(f"📊 Import Summary:")
+    print("📊 Import Summary:")
     print(f"   ✓ Successful: {success_count}")
     print(f"   ❌ Failed: {failure_count}")
     print(f"   📋 Total: {len(feeds)}")
