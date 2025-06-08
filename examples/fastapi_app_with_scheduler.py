@@ -272,7 +272,7 @@ def main():
     port = int(os.getenv("FASTAPI_PORT", 8000))
     reload = os.getenv("FASTAPI_RELOAD", "false").lower() == "true"
 
-    print(f"Starting SentinelForge Feed Importer Service (FastAPI)")
+    print("Starting SentinelForge Feed Importer Service (FastAPI)")
     print(f"Server: http://{host}:{port}")
     print(f"Scheduler CRON: {SchedulerConfig.CRON_EXPRESSION}")
     print(f"Database: {SchedulerConfig.DB_PATH}")

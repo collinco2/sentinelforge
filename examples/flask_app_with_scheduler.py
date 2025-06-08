@@ -194,7 +194,7 @@ def main():
     port = int(os.getenv("FLASK_PORT", 5000))
     debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 
-    print(f"Starting SentinelForge Feed Importer Service")
+    print("Starting SentinelForge Feed Importer Service")
     print(f"Server: http://{host}:{port}")
     print(f"Scheduler CRON: {SchedulerConfig.CRON_EXPRESSION}")
     print(f"Database: {SchedulerConfig.DB_PATH}")

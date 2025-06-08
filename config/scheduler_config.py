@@ -79,7 +79,7 @@ class SchedulerConfig:
             errors.append(f"Invalid base delay: {cls.BASE_DELAY}")
 
         if cls.MAX_DELAY <= cls.BASE_DELAY:
-            errors.append(f"Max delay must be greater than base delay")
+            errors.append("Max delay must be greater than base delay")
 
         if errors:
             print("Configuration validation errors:")

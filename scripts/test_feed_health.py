@@ -46,7 +46,7 @@ def test_feed_health_api(api_url, token=None):
 
             # Print summary
             summary = data.get("summary", {})
-            print(f"📊 Summary:")
+            print("📊 Summary:")
             print(f"   Total feeds: {summary.get('total_feeds', 0)}")
             print(f"   Healthy feeds: {summary.get('healthy_feeds', 0)}")
             print(f"   Unhealthy feeds: {summary.get('unhealthy_feeds', 0)}")
@@ -55,7 +55,7 @@ def test_feed_health_api(api_url, token=None):
             # Print feed details
             feeds = data.get("feeds", [])
             if feeds:
-                print(f"\n📋 Feed Details:")
+                print("\n📋 Feed Details:")
                 for feed in feeds[:5]:  # Show first 5 feeds
                     status_emoji = "✅" if feed["status"] == "ok" else "❌"
                     print(f"   {status_emoji} {feed['feed_name']}")
@@ -105,7 +105,7 @@ def test_feed_health_api(api_url, token=None):
             print(f"📊 Found {pagination.get('total', 0)} health check records")
 
             if health_logs:
-                print(f"\n📋 Recent Health Checks:")
+                print("\n📋 Recent Health Checks:")
                 for log in health_logs[:3]:  # Show first 3 logs
                     status_emoji = "✅" if log["status"] == "ok" else "❌"
                     print(f"   {status_emoji} {log['feed_name']}")
@@ -140,7 +140,7 @@ def test_feed_health_api(api_url, token=None):
             current_health = data.get("current_health", {})
             recent_checks = data.get("recent_checks", [])
 
-            print(f"📊 Current Health:")
+            print("📊 Current Health:")
             print(f"   Feed: {current_health.get('feed_name', 'Unknown')}")
             print(f"   Status: {current_health.get('status', 'Unknown')}")
             print(f"   HTTP Code: {current_health.get('http_code', 'N/A')}")

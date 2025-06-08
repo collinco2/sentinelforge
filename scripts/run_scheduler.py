@@ -260,7 +260,7 @@ Examples:
             logger.info("Running scheduled import once...")
             results = importer.run_once()
 
-            print(f"Import completed:")
+            print("Import completed:")
             print(f"  Successful: {results['successful_imports']}")
             print(f"  Failed: {results['failed_imports']}")
             print(f"  Skipped: {results['skipped_feeds']}")
@@ -277,7 +277,7 @@ Examples:
 
         else:
             # Interactive mode
-            print(f"Starting SentinelForge Scheduled Feed Importer")
+            print("Starting SentinelForge Scheduled Feed Importer")
             print(f"CRON: {SchedulerConfig.CRON_EXPRESSION}")
             print(f"Database: {SchedulerConfig.DB_PATH}")
             print(f"Log: {SchedulerConfig.LOG_FILE}")
