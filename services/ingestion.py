@@ -288,8 +288,6 @@ class FeedParser:
                     description = parts[3].strip()
 
                     # Validate IP address format
-                    import re
-
                     ip_pattern = r"^(\d{1,3}\.){3}\d{1,3}$"
                     if re.match(ip_pattern, ip_address):
                         ioc = {

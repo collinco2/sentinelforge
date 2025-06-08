@@ -19,7 +19,7 @@ import { useAuth } from "../hooks/useAuth";
 import { UserRole } from "../services/auth";
 
 export const FeedManagementPage: React.FC = () => {
-  const { user, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 

@@ -7,7 +7,6 @@ import { Textarea } from "./ui/textarea";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Upload, FileText, AlertCircle, CheckCircle, X } from "lucide-react";
-import { useAuth } from "../hooks/useAuth";
 import { toast } from "../lib/toast";
 
 interface UploadFeedModalProps {
@@ -32,7 +31,6 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sourceFeed, setSourceFeed] = useState("");
@@ -183,8 +181,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
     }
   };
 
-  const getFileIcon = (filename: string) => {
-    const extension = filename.split(".").pop()?.toLowerCase();
+  const getFileIcon = () => {
     return <FileText className="h-8 w-8 text-blue-500" />;
   };
 
@@ -219,7 +216,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
             >
               {selectedFile ? (
                 <div className="flex items-center justify-center space-x-3">
-                  {getFileIcon(selectedFile.name)}
+                  {getFileIcon()}
                   <div className="text-left">
                     <p className="font-medium text-gray-900">
                       {selectedFile.name}

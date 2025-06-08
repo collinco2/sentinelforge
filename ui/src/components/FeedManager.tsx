@@ -26,7 +26,6 @@ import {
   Edit,
   Plus,
   Trash2,
-  Upload,
   Clock,
   CheckCircle,
   XCircle,
@@ -75,7 +74,7 @@ interface ImportLog {
 }
 
 export const FeedManager: React.FC = () => {
-  const { user, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const [feeds, setFeeds] = useState<ThreatFeed[]>([]);
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [loading, setLoading] = useState(true);
