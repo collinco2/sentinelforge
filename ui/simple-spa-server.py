@@ -213,7 +213,7 @@ def main():
             print("=" * 60)
             print(f"📁 Serving from: {os.getcwd()}")
             print(f"🌐 Server running at: http://localhost:{port}")
-            print(f"🔧 Server type: Simple SPA Server with API Proxy")
+            print("🔧 Server type: Simple SPA Server with API Proxy")
             print("📋 API Proxy: localhost:5059 (main), localhost:5101 (timeline)")
             print("=" * 60)
             print("📋 Features:")
