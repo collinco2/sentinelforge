@@ -227,6 +227,38 @@ chmod +x start-all-services.sh
 chmod 644 *.py
 ```
 
+#### 6. Authentication Issues
+If you cannot sign in to SentinelForge:
+
+```bash
+# 1. Check if API server is running (most common cause)
+./check-services.sh
+
+# 2. Verify API server is accessible
+curl -X POST http://localhost:5059/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+
+# 3. Check database has users
+python3 -c "
+import sqlite3
+conn = sqlite3.connect('ioc_store.db')
+cursor = conn.cursor()
+cursor.execute('SELECT username, role FROM users')
+print('Available users:', cursor.fetchall())
+conn.close()
+"
+
+# 4. Reset admin password if needed
+python3 fix_admin_password.py
+```
+
+**Default Login Credentials:**
+- Username: `admin` / Password: `admin123` (Admin)
+- Username: `analyst1` / Password: `analyst123` (Analyst)
+- Username: `auditor1` / Password: `auditor123` (Auditor)
+- Username: `viewer1` / Password: `viewer123` (Viewer)
+
 ### Service-Specific Troubleshooting
 
 #### API Server (Port 5059)

@@ -186,7 +186,7 @@ export const PasswordChangeForm: React.FC = () => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* General Error */}
           {errors.general && (
             <Alert variant="destructive">
@@ -196,8 +196,10 @@ export const PasswordChangeForm: React.FC = () => {
           )}
 
           {/* Current Password */}
-          <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
+          <div className="space-y-3">
+            <Label htmlFor="current-password" className="text-sm font-medium">
+              Current Password
+            </Label>
             <div className="relative">
               <Input
                 id="current-password"
@@ -217,7 +219,9 @@ export const PasswordChangeForm: React.FC = () => {
                 className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                 aria-label={
-                  showCurrentPassword ? "Hide password" : "Show password"
+                  showCurrentPassword
+                    ? "Hide current password"
+                    : "Show current password"
                 }
               >
                 {showCurrentPassword ? (
@@ -225,6 +229,11 @@ export const PasswordChangeForm: React.FC = () => {
                 ) : (
                   <Eye className="h-4 w-4" />
                 )}
+                <span className="sr-only">
+                  {showCurrentPassword
+                    ? "Hide current password"
+                    : "Show current password"}
+                </span>
               </Button>
             </div>
             {errors.currentPassword && (
@@ -235,8 +244,10 @@ export const PasswordChangeForm: React.FC = () => {
           </div>
 
           {/* New Password */}
-          <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
+          <div className="space-y-3">
+            <Label htmlFor="new-password" className="text-sm font-medium">
+              New Password
+            </Label>
             <div className="relative">
               <Input
                 id="new-password"
@@ -245,7 +256,12 @@ export const PasswordChangeForm: React.FC = () => {
                 onChange={(e) => setNewPassword(e.target.value)}
                 className={errors.newPassword ? "border-red-500" : ""}
                 data-testid="new-password-input"
-                aria-describedby="new-password-help"
+                aria-describedby={
+                  errors.newPassword
+                    ? "new-password-error new-password-help"
+                    : "new-password-help"
+                }
+                aria-invalid={!!errors.newPassword}
               />
               <Button
                 type="button"
@@ -253,13 +269,18 @@ export const PasswordChangeForm: React.FC = () => {
                 size="sm"
                 className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                 onClick={() => setShowNewPassword(!showNewPassword)}
-                aria-label={showNewPassword ? "Hide password" : "Show password"}
+                aria-label={
+                  showNewPassword ? "Hide new password" : "Show new password"
+                }
               >
                 {showNewPassword ? (
                   <EyeOff className="h-4 w-4" />
                 ) : (
                   <Eye className="h-4 w-4" />
                 )}
+                <span className="sr-only">
+                  {showNewPassword ? "Hide new password" : "Show new password"}
+                </span>
               </Button>
             </div>
 
@@ -306,13 +327,17 @@ export const PasswordChangeForm: React.FC = () => {
             )}
 
             {errors.newPassword && (
-              <p className="text-sm text-red-600">{errors.newPassword}</p>
+              <p id="new-password-error" className="text-sm text-red-600 mt-1">
+                {errors.newPassword}
+              </p>
             )}
           </div>
 
           {/* Confirm Password */}
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
+          <div className="space-y-3">
+            <Label htmlFor="confirm-password" className="text-sm font-medium">
+              Confirm New Password
+            </Label>
             <div className="relative">
               <Input
                 id="confirm-password"
@@ -321,6 +346,10 @@ export const PasswordChangeForm: React.FC = () => {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className={errors.confirmPassword ? "border-red-500" : ""}
                 data-testid="confirm-password-input"
+                aria-describedby={
+                  errors.confirmPassword ? "confirm-password-error" : undefined
+                }
+                aria-invalid={!!errors.confirmPassword}
               />
               <Button
                 type="button"
@@ -329,7 +358,9 @@ export const PasswordChangeForm: React.FC = () => {
                 className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 aria-label={
-                  showConfirmPassword ? "Hide password" : "Show password"
+                  showConfirmPassword
+                    ? "Hide confirm password"
+                    : "Show confirm password"
                 }
               >
                 {showConfirmPassword ? (
@@ -337,6 +368,11 @@ export const PasswordChangeForm: React.FC = () => {
                 ) : (
                   <Eye className="h-4 w-4" />
                 )}
+                <span className="sr-only">
+                  {showConfirmPassword
+                    ? "Hide confirm password"
+                    : "Show confirm password"}
+                </span>
               </Button>
             </div>
             {confirmPassword &&
@@ -348,12 +384,17 @@ export const PasswordChangeForm: React.FC = () => {
                 </div>
               )}
             {errors.confirmPassword && (
-              <p className="text-sm text-red-600">{errors.confirmPassword}</p>
+              <p
+                id="confirm-password-error"
+                className="text-sm text-red-600 mt-1"
+              >
+                {errors.confirmPassword}
+              </p>
             )}
           </div>
 
           {/* Submit Button */}
-          <div className="pt-4">
+          <div className="pt-6 space-y-4">
             <Button
               type="submit"
               disabled={
@@ -367,10 +408,8 @@ export const PasswordChangeForm: React.FC = () => {
               <Shield className="h-4 w-4 mr-2" />
               {isSubmitting ? "Changing Password..." : "Change Password"}
             </Button>
-          </div>
 
-          {/* Security Notice */}
-          <div className="pt-2">
+            {/* Security Notice */}
             <p className="text-xs text-gray-500">
               Changing your password will log you out of all other sessions.
               Make sure to update any saved passwords in your browser or

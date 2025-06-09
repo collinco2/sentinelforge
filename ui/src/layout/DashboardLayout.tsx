@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { useSidebar } from "@/hooks/useSidebar";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -14,64 +15,47 @@ export function DashboardLayout({
   title = "Dashboard",
   className,
 }: DashboardLayoutProps) {
-  const [isMobileView, setIsMobileView] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Handle responsive sidebar visibility
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobileView(window.innerWidth < 768);
-      if (window.innerWidth < 768) {
-        setSidebarOpen(false);
-      } else {
-        setSidebarOpen(true);
-      }
-    };
-
-    // Set initial state
-    handleResize();
-
-    // Add event listener
-    window.addEventListener("resize", handleResize);
-
-    // Clean up
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  const { isCollapsed, isMobile, close } = useSidebar();
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      {/* Sidebar - hidden on mobile when closed */}
+      {/* Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-20 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          "transition-all duration-300 ease-in-out",
+          isMobile ? "fixed inset-y-0 left-0 z-20" : "relative",
+          isMobile && isCollapsed ? "-translate-x-full" : "translate-x-0",
         )}
       >
         <Sidebar />
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-col flex-1 w-full md:w-[calc(100%-16rem)] md:ml-auto">
+      <div
+        className={cn(
+          "flex flex-col flex-1 transition-all duration-300",
+          isMobile
+            ? "w-full"
+            : isCollapsed
+              ? "w-[calc(100%-4rem)]"
+              : "w-[calc(100%-16rem)]",
+        )}
+      >
         <Topbar title={title} />
-        
-        <main
-          className={cn(
-            "flex-1 overflow-auto p-4 md:p-6",
-            className
-          )}
-        >
+
+        <main className={cn("flex-1 overflow-auto p-4 md:p-6", className)}>
           {children}
         </main>
 
-        {/* Overlay for mobile sidebar */}
-        {isMobileView && sidebarOpen && (
+        {/* Overlay for mobile sidebar when expanded */}
+        {isMobile && !isCollapsed && (
           <div
             className="fixed inset-0 bg-black/50 z-10"
-            onClick={() => setSidebarOpen(false)}
+            onClick={close}
             aria-hidden="true"
           />
         )}
       </div>
     </div>
   );
-} 
+}

@@ -21,6 +21,13 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import {
   AlertCircle,
   Download,
   Edit,
@@ -73,10 +80,23 @@ interface ImportLog {
   timestamp: string;
 }
 
+interface FeedHealth {
+  feed_id: number;
+  feed_name: string;
+  url: string;
+  status: string;
+  http_code: number | null;
+  response_time_ms: number | null;
+  error_message: string | null;
+  last_checked: string;
+  checked_by: string;
+}
+
 export const FeedManager: React.FC = () => {
   const { hasRole } = useAuth();
   const [feeds, setFeeds] = useState<ThreatFeed[]>([]);
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
+  const [feedHealth, setFeedHealth] = useState<FeedHealth[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingFeed, setEditingFeed] = useState<ThreatFeed | null>(null);
@@ -99,6 +119,7 @@ export const FeedManager: React.FC = () => {
   useEffect(() => {
     fetchFeeds();
     fetchImportLogs();
+    fetchFeedHealth();
   }, []);
 
   const fetchFeeds = async () => {
@@ -139,6 +160,23 @@ export const FeedManager: React.FC = () => {
     }
   };
 
+  const fetchFeedHealth = async () => {
+    try {
+      const response = await fetch("/api/feeds/health", {
+        headers: {
+          "X-Session-Token": localStorage.getItem("session_token") || "",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setFeedHealth(data.health_checks || []);
+      }
+    } catch (error) {
+      console.error("Error fetching feed health:", error);
+    }
+  };
+
   const handleCreateFeed = async () => {
     try {
       const response = await fetch("/api/feeds", {
@@ -155,6 +193,7 @@ export const FeedManager: React.FC = () => {
         setShowCreateDialog(false);
         resetForm();
         fetchFeeds();
+        fetchFeedHealth();
       } else {
         const error = await response.json();
         toast.error(error.error || "Failed to create feed");
@@ -182,6 +221,7 @@ export const FeedManager: React.FC = () => {
         setEditingFeed(null);
         resetForm();
         fetchFeeds();
+        fetchFeedHealth();
       } else {
         const error = await response.json();
         toast.error(error.error || "Failed to update feed");
@@ -205,6 +245,7 @@ export const FeedManager: React.FC = () => {
       if (response.ok) {
         toast.success("Feed deleted successfully");
         fetchFeeds();
+        fetchFeedHealth();
       } else {
         const error = await response.json();
         toast.error(error.error || "Failed to delete feed");
@@ -238,6 +279,7 @@ export const FeedManager: React.FC = () => {
         );
         fetchFeeds();
         fetchImportLogs();
+        fetchFeedHealth();
       } else {
         toast.error(result.error || "Import failed");
       }
@@ -276,29 +318,191 @@ export const FeedManager: React.FC = () => {
   const getStatusIcon = (status: string | null) => {
     switch (status) {
       case "success":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return (
+          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+        );
       case "partial":
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+        return (
+          <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+        );
       case "failed":
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-destructive" />;
       default:
-        return <Clock className="h-4 w-4 text-gray-400" />;
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      success: "bg-green-100 text-green-800",
-      partial: "bg-yellow-100 text-yellow-800",
-      failed: "bg-red-100 text-red-800",
-      pending: "bg-blue-100 text-blue-800",
+      success:
+        "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400",
+      partial:
+        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400",
+      failed: "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400",
+      pending:
+        "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400",
     };
 
     return (
-      <Badge className={variants[status] || "bg-gray-100 text-gray-800"}>
+      <Badge className={variants[status] || "bg-muted text-muted-foreground"}>
         {status}
       </Badge>
     );
+  };
+
+  const getHealthStatusChip = (status: string) => {
+    switch (status) {
+      case "ok":
+        return {
+          label: "Healthy",
+          className:
+            "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800",
+        };
+      case "timeout":
+      case "unauthorized":
+      case "rate_limited":
+        return {
+          label: "Stale",
+          className:
+            "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800",
+        };
+      case "unreachable":
+      case "server_error":
+        return {
+          label: "Error",
+          className:
+            "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
+        };
+      default:
+        return {
+          label: "Unknown",
+          className: "bg-muted text-muted-foreground border-border",
+        };
+    }
+  };
+
+  const getFeedHealth = (feedId: number): FeedHealth | null => {
+    return feedHealth.find((health) => health.feed_id === feedId) || null;
+  };
+
+  const formatHealthTooltip = (health: FeedHealth | null): string => {
+    if (!health) {
+      return "Health status unknown";
+    }
+
+    const parts = [
+      `Status: ${health.status}`,
+      health.http_code ? `HTTP Code: ${health.http_code}` : null,
+      health.response_time_ms
+        ? `Response Time: ${health.response_time_ms}ms`
+        : null,
+      `Last Checked: ${new Date(health.last_checked).toLocaleString()}`,
+    ].filter(Boolean);
+
+    if (health.error_message) {
+      parts.push(`Error: ${health.error_message}`);
+    }
+
+    return parts.join("\n");
+  };
+
+  const getSourceLogo = (feedName: string) => {
+    const name = feedName.toLowerCase();
+
+    // Known threat intelligence sources
+    const sourceMap: Record<
+      string,
+      { logo?: string; initials: string; color: string; name: string }
+    > = {
+      // Government Sources
+      cisa: { initials: "CI", color: "bg-blue-600", name: "CISA" },
+      "us-cert": { initials: "UC", color: "bg-blue-600", name: "US-CERT" },
+      fbi: { initials: "FB", color: "bg-blue-800", name: "FBI" },
+      dhs: { initials: "DH", color: "bg-blue-700", name: "DHS" },
+
+      // Commercial Sources
+      alienvault: {
+        initials: "AV",
+        color: "bg-purple-600",
+        name: "AlienVault OTX",
+      },
+      otx: { initials: "OT", color: "bg-purple-600", name: "AlienVault OTX" },
+      virustotal: { initials: "VT", color: "bg-green-600", name: "VirusTotal" },
+      malwarebytes: {
+        initials: "MB",
+        color: "bg-orange-600",
+        name: "Malwarebytes",
+      },
+      crowdstrike: { initials: "CS", color: "bg-red-600", name: "CrowdStrike" },
+      fireeye: { initials: "FE", color: "bg-red-500", name: "FireEye" },
+      mandiant: { initials: "MD", color: "bg-red-500", name: "Mandiant" },
+      "palo alto": {
+        initials: "PA",
+        color: "bg-orange-500",
+        name: "Palo Alto",
+      },
+      unit42: { initials: "U4", color: "bg-orange-500", name: "Unit 42" },
+
+      // Open Source / Community
+      malwaredomainlist: {
+        initials: "MD",
+        color: "bg-gray-600",
+        name: "MalwareDomainList",
+      },
+      spamhaus: { initials: "SH", color: "bg-yellow-600", name: "Spamhaus" },
+      "abuse.ch": { initials: "AC", color: "bg-indigo-600", name: "Abuse.ch" },
+      urlhaus: { initials: "UH", color: "bg-indigo-600", name: "URLhaus" },
+      "malware bazaar": {
+        initials: "MZ",
+        color: "bg-indigo-600",
+        name: "Malware Bazaar",
+      },
+      phishtank: { initials: "PT", color: "bg-cyan-600", name: "PhishTank" },
+      openphish: { initials: "OP", color: "bg-cyan-500", name: "OpenPhish" },
+      ipsum: { initials: "IP", color: "bg-gray-700", name: "IPsum" },
+      emergingthreats: {
+        initials: "ET",
+        color: "bg-red-700",
+        name: "Emerging Threats",
+      },
+      proofpoint: { initials: "PP", color: "bg-blue-500", name: "Proofpoint" },
+
+      // MISP and TAXII
+      misp: { initials: "MI", color: "bg-green-700", name: "MISP" },
+      taxii: { initials: "TX", color: "bg-purple-700", name: "TAXII" },
+      stix: { initials: "ST", color: "bg-purple-700", name: "STIX" },
+
+      // Custom/Manual
+      manual: { initials: "MN", color: "bg-gray-500", name: "Manual Upload" },
+      custom: { initials: "CU", color: "bg-gray-500", name: "Custom Feed" },
+      internal: {
+        initials: "IN",
+        color: "bg-slate-600",
+        name: "Internal Feed",
+      },
+    };
+
+    // Try to match feed name with known sources
+    for (const [key, source] of Object.entries(sourceMap)) {
+      if (name.includes(key)) {
+        return source;
+      }
+    }
+
+    // Fallback: generate initials from feed name
+    const words = feedName.split(/[\s\-_]+/).filter((word) => word.length > 0);
+    const initials =
+      words.length >= 2
+        ? `${words[0][0]}${words[1][0]}`.toUpperCase()
+        : words[0]
+          ? words[0].substring(0, 2).toUpperCase()
+          : "TF";
+
+    return {
+      initials,
+      color: "bg-slate-500",
+      name: feedName,
+    };
   };
 
   if (loading) {
@@ -314,10 +518,10 @@ export const FeedManager: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-foreground">
             Threat Feed Management
           </h1>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             Manage external threat intelligence feeds
           </p>
         </div>
@@ -351,7 +555,7 @@ export const FeedManager: React.FC = () => {
         </CardHeader>
         <CardContent>
           {feeds.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-muted-foreground">
               No feeds configured. Add your first threat feed to get started.
             </div>
           ) : (
@@ -359,87 +563,181 @@ export const FeedManager: React.FC = () => {
               {feeds.map((feed) => (
                 <div
                   key={feed.id}
-                  className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  className="border border-border rounded-lg p-4 bg-card hover:bg-accent/50 transition-colors"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">
-                          {feed.name}
-                        </h3>
-                        <Badge
-                          variant={feed.is_active ? "default" : "secondary"}
-                        >
-                          {feed.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                        <Badge variant="outline">
-                          {feed.feed_type.toUpperCase()}
-                        </Badge>
-                        {feed.auto_import && (
-                          <Badge variant="outline" className="text-blue-600">
-                            Auto Import
+                  {/* Mobile-optimized layout */}
+                  <div className="space-y-4">
+                    {/* Header section with source icon, name, and health status */}
+                    <div className="flex items-start gap-3">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Avatar className="h-10 w-10 flex-shrink-0 cursor-help">
+                              {getSourceLogo(feed.name).logo ? (
+                                <AvatarImage
+                                  src={getSourceLogo(feed.name).logo}
+                                  alt={`${getSourceLogo(feed.name).name} logo`}
+                                />
+                              ) : null}
+                              <AvatarFallback
+                                className={`text-white text-sm font-semibold ${getSourceLogo(feed.name).color}`}
+                              >
+                                {getSourceLogo(feed.name).initials}
+                              </AvatarFallback>
+                            </Avatar>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <div className="text-xs">
+                              <div className="font-medium">Source</div>
+                              <div>{getSourceLogo(feed.name).name}</div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-foreground truncate text-base">
+                            {feed.name}
+                          </h3>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge
+                                  className={`text-xs font-medium border cursor-help flex-shrink-0 ${
+                                    getHealthStatusChip(
+                                      getFeedHealth(feed.id)?.status ||
+                                        "unknown",
+                                    ).className
+                                  }`}
+                                >
+                                  {
+                                    getHealthStatusChip(
+                                      getFeedHealth(feed.id)?.status ||
+                                        "unknown",
+                                    ).label
+                                  }
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <div className="text-xs space-y-1">
+                                  <div className="font-medium">
+                                    Health Status
+                                  </div>
+                                  <pre className="whitespace-pre-wrap">
+                                    {formatHealthTooltip(
+                                      getFeedHealth(feed.id),
+                                    )}
+                                  </pre>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+
+                        {/* Status badges - stacked on mobile */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={feed.is_active ? "default" : "secondary"}
+                            className="flex-shrink-0"
+                          >
+                            {feed.is_active ? "Active" : "Inactive"}
                           </Badge>
-                        )}
-                      </div>
-
-                      {feed.description && (
-                        <p className="text-gray-600 text-sm mb-2">
-                          {feed.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span>Created by {feed.created_by_username}</span>
-                        {feed.last_import && (
-                          <div className="flex items-center gap-1">
-                            {getStatusIcon(feed.last_import_status)}
-                            <span>
-                              Last import:{" "}
-                              {new Date(feed.last_import).toLocaleDateString()}(
-                              {feed.last_import_count} IOCs)
-                            </span>
-                          </div>
-                        )}
+                          <Badge variant="outline" className="flex-shrink-0">
+                            {feed.feed_type.toUpperCase()}
+                          </Badge>
+                          {feed.auto_import && (
+                            <Badge
+                              variant="outline"
+                              className="text-blue-600 flex-shrink-0"
+                            >
+                              Auto Import
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {canModify && feed.url && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleImportFeed(feed.id)}
-                          disabled={importingFeedId === feed.id}
-                        >
-                          {importingFeedId === feed.id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
-                          ) : (
-                            <Download className="h-4 w-4" />
-                          )}
-                          Import
-                        </Button>
-                      )}
+                    {/* Description */}
+                    {feed.description && (
+                      <div className="px-1">
+                        <p className="text-muted-foreground text-sm leading-relaxed">
+                          {feed.description}
+                        </p>
+                      </div>
+                    )}
 
-                      {canModify && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startEdit(feed)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                    {/* Metadata - stacked on mobile for better readability */}
+                    <div className="px-1 space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="font-medium">Created by:</span>
+                        <span>{feed.created_by_username}</span>
+                      </div>
+                      {feed.last_import && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                            {getStatusIcon(feed.last_import_status)}
+                            <span className="font-medium">Last import:</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1">
+                            <span>
+                              {new Date(feed.last_import).toLocaleDateString()}
+                            </span>
+                            <span className="text-xs">
+                              ({feed.last_import_count} IOCs)
+                            </span>
+                          </div>
+                        </div>
                       )}
+                    </div>
 
-                      {canDelete && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDeleteFeed(feed.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                    {/* Action buttons - full width on mobile, inline on desktop */}
+                    <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-border">
+                      <div className="flex gap-2 flex-1">
+                        {canModify && feed.url && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleImportFeed(feed.id)}
+                            disabled={importingFeedId === feed.id}
+                            className="flex items-center justify-center gap-2 flex-1 sm:flex-initial min-h-[44px]"
+                            aria-label={`Import feed ${feed.name}`}
+                          >
+                            {importingFeedId === feed.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                            <span>Import</span>
+                          </Button>
+                        )}
+
+                        {canModify && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startEdit(feed)}
+                            className="flex items-center justify-center gap-2 flex-1 sm:flex-initial min-h-[44px]"
+                            aria-label={`Edit feed ${feed.name}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                            <span>Edit</span>
+                          </Button>
+                        )}
+
+                        {canDelete && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteFeed(feed.id)}
+                            className="text-destructive hover:text-destructive/80 flex items-center justify-center gap-2 flex-1 sm:flex-initial min-h-[44px]"
+                            aria-label={`Delete feed ${feed.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>Delete</span>
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -456,32 +754,45 @@ export const FeedManager: React.FC = () => {
         </CardHeader>
         <CardContent>
           {importLogs.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-muted-foreground">
               No import activity yet.
             </div>
           ) : (
             <div className="space-y-3">
               {importLogs.slice(0, 10).map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium">{log.feed_name}</span>
-                      {getStatusBadge(log.import_status)}
-                      <span className="text-sm text-gray-500">
-                        by {log.user_name}
+                <div key={log.id} className="p-4 border rounded-lg space-y-3">
+                  {/* Header with feed name and status */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium truncate">
+                        {log.feed_name}
                       </span>
+                      {getStatusBadge(log.import_status)}
                     </div>
-                    <div className="text-sm text-gray-600">
-                      {log.imported_count} imported, {log.skipped_count}{" "}
-                      skipped, {log.error_count} errors
-                      {log.duration_seconds && ` • ${log.duration_seconds}s`}
+                    <div className="text-sm text-muted-foreground flex-shrink-0">
+                      {new Date(log.timestamp).toLocaleString()}
                     </div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {new Date(log.timestamp).toLocaleString()}
+
+                  {/* Import details */}
+                  <div className="space-y-1">
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium">{log.imported_count}</span>{" "}
+                      imported,{" "}
+                      <span className="font-medium">{log.skipped_count}</span>{" "}
+                      skipped,{" "}
+                      <span className="font-medium">{log.error_count}</span>{" "}
+                      errors
+                      {log.duration_seconds && (
+                        <span className="text-muted-foreground/70">
+                          {" "}
+                          • {log.duration_seconds}s
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      by {log.user_name}
+                    </div>
                   </div>
                 </div>
               ))}

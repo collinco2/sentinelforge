@@ -223,7 +223,7 @@ const PaginationControls = ({
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        <div className="mx-2 text-sm text-gray-200">Loading...</div>
+        <div className="mx-2 text-sm text-muted-foreground">Loading...</div>
 
         <Button
           variant="outline"
@@ -292,7 +292,7 @@ const PaginationControls = ({
       </div>
 
       {/* Mobile current page indicator */}
-      <div className="sm:hidden mx-2 text-sm text-gray-200">
+      <div className="sm:hidden mx-2 text-sm text-muted-foreground">
         Page {currentPage + 1} of {totalPages}
       </div>
 
@@ -342,7 +342,7 @@ const SortableColumnHeader = ({
 
   return (
     <th
-      className={`px-4 py-3 text-${align} text-sm font-medium text-gray-200 cursor-pointer group transition-colors hover:bg-zinc-800`}
+      className={`px-4 py-3 text-${align} text-sm font-medium text-muted-foreground cursor-pointer group transition-colors hover:bg-muted/50`}
       onClick={() => onSort(column)}
       aria-sort={
         isActive
@@ -359,9 +359,9 @@ const SortableColumnHeader = ({
         <div className="ml-1 flex items-center">
           {isActive ? (
             currentSortDirection === "asc" ? (
-              <ChevronUp className="h-4 w-4 text-blue-400" />
+              <ChevronUp className="h-4 w-4 text-primary" />
             ) : (
-              <ChevronDown className="h-4 w-4 text-blue-400" />
+              <ChevronDown className="h-4 w-4 text-primary" />
             )
           ) : (
             <ChevronDown className="h-4 w-4 opacity-0 group-hover:opacity-30 transition-opacity" />
@@ -722,7 +722,7 @@ export function IocTable({
             data={sortedData}
             variant="outline"
             size="default"
-            className="bg-zinc-800 border-zinc-700 text-gray-300 hover:bg-zinc-700 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+            className="bg-background border-input text-foreground hover:bg-accent focus:ring-2 focus:ring-ring focus:outline-none"
           />
         )}
       </div>
@@ -804,7 +804,7 @@ export function IocTable({
                   onSort={handleSort}
                   align="right"
                 />
-                <th className="px-4 py-3 text-right text-sm font-medium text-gray-200">
+                <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
                   <div className="flex items-center justify-end">Actions</div>
                 </th>
               </tr>
@@ -813,10 +813,10 @@ export function IocTable({
               {paginatedData.map((ioc) => (
                 <tr
                   key={ioc.value || ioc.id || `ioc-${Math.random()}`}
-                  className="bg-zinc-900 hover:bg-zinc-800 text-gray-100 border-b border-zinc-700 transition-colors cursor-pointer"
+                  className="bg-card hover:bg-accent/50 text-card-foreground border-b border-border transition-colors cursor-pointer"
                   onClick={() => handleRowClick(ioc)}
                 >
-                  <td className="px-4 py-2 text-gray-100 dark:text-gray-200">
+                  <td className="px-4 py-2 text-foreground">
                     <code className="font-mono">{ioc.value}</code>
                   </td>
                   <td className="px-4 py-2 text-sm">
@@ -845,28 +845,28 @@ export function IocTable({
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-sm text-gray-400 text-right">
+                  <td className="px-4 py-2 text-sm text-muted-foreground text-right">
                     <div className="flex items-center justify-end">
                       <Clock className="mr-1 h-3 w-3" />
                       {formatTimestamp(ioc.timestamp)}
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-sm text-gray-400 text-right">
+                  <td className="px-4 py-2 text-sm text-muted-foreground text-right">
                     <div className="flex justify-end items-center space-x-2">
                       <button
-                        className="p-1.5 rounded-md text-gray-400 hover:text-blue-400 hover:bg-blue-900/20 transition-colors"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                         onClick={(e) => handleShareIoc(e, ioc)}
                         aria-label={`Share link to ${ioc.value}`}
                         title="Copy link to share"
                       >
                         {copiedRowId === ioc.id ? (
-                          <Check className="h-4 w-4 text-green-400" />
+                          <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                         ) : (
                           <Link className="h-4 w-4" />
                         )}
                       </button>
                       <button
-                        className="p-1.5 rounded-md text-gray-400 hover:text-blue-400 hover:bg-blue-900/20 transition-colors"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                         onClick={(e) => handleViewDetails(e, ioc)}
                         aria-label={`View details for ${ioc.value}`}
                         title="Open in new tab"
@@ -882,7 +882,7 @@ export function IocTable({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-4 py-8 text-center text-gray-200"
+                    className="px-4 py-8 text-center text-muted-foreground"
                   >
                     {sortedData.length === 0
                       ? "No IOCs match the current filters"
@@ -896,8 +896,8 @@ export function IocTable({
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="border-t border-zinc-700 px-4 py-3 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-            <div className="text-sm text-gray-200">
+          <div className="border-t border-border px-4 py-3 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
               {isLoading ? (
                 <span className="animate-pulse">Loading results...</span>
               ) : externalControl && totalCount !== undefined ? (

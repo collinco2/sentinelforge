@@ -137,10 +137,10 @@ export const NotificationSettings: React.FC = () => {
           Notification Preferences
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {/* Email Alerts */}
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center gap-2">
               <Mail className="h-4 w-4" />
               Email Alerts
@@ -163,7 +163,7 @@ export const NotificationSettings: React.FC = () => {
 
         {/* Slack Notifications */}
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               Slack Notifications
@@ -185,7 +185,7 @@ export const NotificationSettings: React.FC = () => {
 
         {/* Weekly Summary */}
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <Label className="text-sm font-medium flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               Weekly Summary Digest

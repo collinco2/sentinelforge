@@ -16,8 +16,9 @@
  * - Accessibility compliance with ARIA labels
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { DashboardLayout } from "../layout/DashboardLayout";
+import { PageHeader, BREADCRUMB_CONFIGS } from "../components/PageHeader";
 import { TokenSettings } from "../components/settings/TokenSettings";
 import { UIPreferences } from "../components/settings/UIPreferences";
 import { NotificationSettings } from "../components/settings/NotificationSettings";
@@ -26,10 +27,17 @@ import { PasswordChangeForm } from "../components/settings/PasswordChangeForm";
 import { useAuth } from "../hooks/useAuth";
 import { UserRole } from "../services/auth";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Shield, AlertCircle } from "lucide-react";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../components/ui/tabs";
+import { Shield, AlertCircle, Key, Palette, Bell, Lock } from "lucide-react";
 
 export const SettingsPage: React.FC = () => {
   const { user, hasRole } = useAuth();
+  const [activeTab, setActiveTab] = useState("api-tokens");
 
   // Check if user has required permissions
   const canAccessSettings = hasRole([
@@ -37,6 +45,21 @@ export const SettingsPage: React.FC = () => {
     UserRole.AUDITOR,
     UserRole.ADMIN,
   ]);
+
+  // Get breadcrumbs based on active tab
+  const getBreadcrumbs = () => {
+    const tabBreadcrumbs: Record<
+      string,
+      Array<{ label: string; href?: string }>
+    > = {
+      "api-tokens": BREADCRUMB_CONFIGS.SETTINGS_API_TOKENS,
+      "ui-preferences": BREADCRUMB_CONFIGS.SETTINGS_UI_PREFERENCES,
+      notifications: BREADCRUMB_CONFIGS.SETTINGS_NOTIFICATIONS,
+      security: BREADCRUMB_CONFIGS.SETTINGS_SECURITY,
+    };
+
+    return tabBreadcrumbs[activeTab] || BREADCRUMB_CONFIGS.SETTINGS_API_TOKENS;
+  };
 
   if (!canAccessSettings) {
     return (
@@ -57,64 +80,124 @@ export const SettingsPage: React.FC = () => {
   return (
     <DashboardLayout title="Settings">
       <div className="space-y-6" data-testid="settings-page">
-        {/* Page Header */}
-        <div className="flex items-center gap-3">
-          <Shield className="h-8 w-8 text-blue-600" />
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-              Settings
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Manage your account preferences, security settings, and API access
-            </p>
-          </div>
-        </div>
+        {/* Page Header with Breadcrumbs */}
+        <PageHeader
+          title="Settings"
+          description="Manage your account preferences, security settings, and API access"
+          breadcrumbs={getBreadcrumbs()}
+          icon={Shield}
+        />
 
         {/* User Info Banner */}
         {user && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-blue-600 flex items-center justify-center">
-                <span className="text-white font-medium">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="h-12 w-12 sm:h-10 sm:w-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-medium text-lg sm:text-base">
                   {user.username.charAt(0).toUpperCase()}
                 </span>
               </div>
-              <div>
-                <p className="font-medium text-blue-900 dark:text-blue-100">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-blue-900 dark:text-blue-100 text-base sm:text-sm">
                   {user.username}
                 </p>
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  {user.email} •{" "}
-                  {user.role.charAt(0).toUpperCase() + user.role.slice(1)} Role
-                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm text-blue-700 dark:text-blue-300">
+                  <span className="truncate">{user.email}</span>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="text-xs sm:text-sm">
+                    {user.role.charAt(0).toUpperCase() + user.role.slice(1)}{" "}
+                    Role
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Settings Sections */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column */}
-          <div className="space-y-6">
-            {/* Authentication Tokens */}
-            <TokenSettings />
+        {/* Settings Tabs */}
+        <Tabs
+          defaultValue="api-tokens"
+          className="w-full"
+          onValueChange={setActiveTab}
+        >
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-muted">
+            <TabsTrigger
+              value="api-tokens"
+              className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground"
+              aria-label="API Keys and Tokens settings"
+            >
+              <Key className="h-4 w-4" />
+              <span className="hidden sm:inline">API & Tokens</span>
+              <span className="sm:hidden">API</span>
+              <span className="sr-only">API Keys and Tokens settings</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="ui-preferences"
+              className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground"
+              aria-label="User Interface Preferences settings"
+            >
+              <Palette className="h-4 w-4" />
+              <span className="hidden sm:inline">UI Preferences</span>
+              <span className="sm:hidden">UI</span>
+              <span className="sr-only">
+                User Interface Preferences settings
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="notifications"
+              className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground"
+              aria-label="Notification and Alert settings"
+            >
+              <Bell className="h-4 w-4" />
+              <span className="hidden sm:inline">Notifications</span>
+              <span className="sm:hidden">Alerts</span>
+              <span className="sr-only">Notification and Alert settings</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="security"
+              className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground"
+              aria-label="Security and Password settings"
+            >
+              <Lock className="h-4 w-4" />
+              <span className="hidden sm:inline">Security</span>
+              <span className="sm:hidden">Security</span>
+              <span className="sr-only">Security and Password settings</span>
+            </TabsTrigger>
+          </TabsList>
 
-            {/* UI Preferences */}
-            <UIPreferences />
+          {/* API & Tokens Tab */}
+          <TabsContent value="api-tokens" className="mt-6">
+            <div className="space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
+              <div className="space-y-6">
+                <TokenSettings />
+              </div>
+              <div className="space-y-6">
+                <ApiKeyManagement />
+              </div>
+            </div>
+          </TabsContent>
 
-            {/* Notification Settings */}
-            <NotificationSettings />
-          </div>
+          {/* UI Preferences Tab */}
+          <TabsContent value="ui-preferences" className="mt-6">
+            <div className="max-w-2xl">
+              <UIPreferences />
+            </div>
+          </TabsContent>
 
-          {/* Right Column */}
-          <div className="space-y-6">
-            {/* API Key Management */}
-            <ApiKeyManagement />
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="mt-6">
+            <div className="max-w-2xl">
+              <NotificationSettings />
+            </div>
+          </TabsContent>
 
-            {/* Password Change */}
-            <PasswordChangeForm />
-          </div>
-        </div>
+          {/* Security Tab */}
+          <TabsContent value="security" className="mt-6">
+            <div className="max-w-2xl">
+              <PasswordChangeForm />
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* Footer Information */}
         <div className="pt-8 border-t border-gray-200 dark:border-gray-700">

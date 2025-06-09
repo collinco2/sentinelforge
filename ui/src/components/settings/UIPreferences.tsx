@@ -129,9 +129,9 @@ export const UIPreferences: React.FC = () => {
           UI Preferences
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {/* Theme Selection */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Label className="text-sm font-medium flex items-center gap-2">
             <Monitor className="h-4 w-4" />
             Theme
@@ -168,7 +168,7 @@ export const UIPreferences: React.FC = () => {
         </div>
 
         {/* Table Density */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Label className="text-sm font-medium flex items-center gap-2">
             <Layout className="h-4 w-4" />
             Table Density
@@ -198,7 +198,7 @@ export const UIPreferences: React.FC = () => {
         </div>
 
         {/* Default Landing Page */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Label htmlFor="landing-page" className="text-sm font-medium">
             Default Landing Page
           </Label>
@@ -224,8 +224,8 @@ export const UIPreferences: React.FC = () => {
         </div>
 
         {/* Preview Section */}
-        <div className="pt-4 border-t">
-          <div className="space-y-2">
+        <div className="pt-6 border-t">
+          <div className="space-y-3">
             <Label className="text-sm font-medium">Preview</Label>
             <div className="p-3 border rounded-lg bg-muted/50">
               <div className="space-y-2">
