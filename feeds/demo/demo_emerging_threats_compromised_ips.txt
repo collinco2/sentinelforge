@@ -1,0 +1,9 @@
+# Demo feed data - for testing only
+# Feed: Emerging Threats - Compromised IPs
+# Generated: 2024-12-10T00:00:00
+
+185.220.100.240
+45.142.214.48
+91.219.236.166
+194.147.78.112
+23.129.64.131

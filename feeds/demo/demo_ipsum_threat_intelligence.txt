@@ -1,0 +1,9 @@
+# Demo feed data - for testing only
+# Feed: IPsum Threat Intelligence
+# Generated: 2024-12-10T00:00:00
+
+192.168.100.50
+10.0.0.100
+203.0.113.45
+198.51.100.78
+172.16.0.200

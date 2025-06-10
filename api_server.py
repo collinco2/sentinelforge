@@ -9,6 +9,8 @@ import random
 import datetime
 import secrets
 import json
+import hashlib
+import hmac
 from auth import (
     require_role,
     require_authentication,
@@ -110,6 +112,137 @@ def get_db_connection():
     except Exception as e:
         print(f"Database connection error: {e}")
         return None
+
+
+# ===== API KEY UTILITY FUNCTIONS =====
+
+
+def generate_api_key():
+    """Generate a secure API key with prefix."""
+    # Generate 32 bytes (256 bits) of random data
+    key_bytes = secrets.token_bytes(32)
+    # Convert to URL-safe base64 string
+    key_string = secrets.token_urlsafe(32)
+    # Add prefix to identify as SentinelForge API key
+    return f"sf_live_{key_string}"
+
+
+def hash_api_key(api_key):
+    """Hash an API key using SHA-256 with salt."""
+    # Use a consistent salt for API keys (in production, use environment variable)
+    salt = "sentinelforge_api_key_salt_2024"
+    return hashlib.sha256((api_key + salt).encode()).hexdigest()
+
+
+def create_api_key_preview(api_key):
+    """Create a preview version of the API key (first 8 chars + ... + last 4 chars)."""
+    if len(api_key) < 12:
+        return api_key[:4] + "..."
+    return api_key[:8] + "..." + api_key[-4:]
+
+
+def validate_api_key_from_header():
+    """
+    Validate API key from X-API-Key header and return user info.
+    Returns tuple: (is_valid, user_info, error_message)
+    """
+    api_key = request.headers.get("X-API-Key")
+    if not api_key:
+        return False, None, "Missing API key"
+
+    # Hash the provided key
+    key_hash = hash_api_key(api_key)
+
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return False, None, "Database connection failed"
+
+        cursor = conn.cursor()
+
+        # Look up the API key and get user info
+        cursor.execute(
+            """
+            SELECT uak.*, u.email, u.role, u.is_active as user_active
+            FROM user_api_keys uak
+            JOIN users u ON uak.user_id = u.user_id
+            WHERE uak.key_hash = ? AND uak.is_active = 1
+        """,
+            (key_hash,),
+        )
+
+        key_record = cursor.fetchone()
+        conn.close()
+
+        if not key_record:
+            return False, None, "Invalid API key"
+
+        # Check if user is active
+        if not key_record["user_active"]:
+            return False, None, "User account is inactive"
+
+        # Check if key is expired
+        if key_record["expires_at"]:
+            expires_at = datetime.datetime.fromisoformat(key_record["expires_at"])
+            if datetime.datetime.now() > expires_at:
+                return False, None, "API key has expired"
+
+        # Update last_used timestamp
+        try:
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    UPDATE user_api_keys
+                    SET last_used = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """,
+                    (key_record["id"],),
+                )
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            print(f"Warning: Could not update last_used timestamp: {e}")
+
+        # Return user info in format compatible with existing auth system
+        user_info = {
+            "user_id": key_record["user_id"],
+            "email": key_record["email"],
+            "role": key_record["role"],
+            "api_key_id": key_record["id"],
+            "api_key_name": key_record["name"],
+            "access_scope": json.loads(key_record["access_scope"])
+            if key_record["access_scope"]
+            else ["read"],
+        }
+
+        return True, user_info, None
+
+    except Exception as e:
+        print(f"Error validating API key: {e}")
+        return False, None, "Internal server error"
+
+
+def require_api_key_auth(f):
+    """Decorator to require valid API key authentication."""
+
+    def decorated_function(*args, **kwargs):
+        is_valid, user_info, error_msg = validate_api_key_from_header()
+
+        if not is_valid:
+            return jsonify(
+                {"error": f"API key authentication failed: {error_msg}"}
+            ), 401
+
+        # Inject user info into Flask's g object (similar to session auth)
+        g.current_user = type("User", (), user_info)()
+        g.auth_method = "api_key"
+
+        return f(*args, **kwargs)
+
+    decorated_function.__name__ = f.__name__
+    return decorated_function
 
 
 @ioc_bp.route("/api/stats")
@@ -1709,6 +1842,59 @@ def get_current_user_info():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@ioc_bp.route("/api/auth/token-info", methods=["GET"])
+@require_authentication()
+def get_token_info():
+    """Get current authentication token information."""
+    try:
+        current_user = g.current_user
+
+        # Get session token from header or session
+        session_token = request.headers.get("X-Session-Token") or session.get(
+            "session_token"
+        )
+
+        if not session_token:
+            return jsonify({"error": "No active session"}), 401
+
+        # Get session info from database
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT created_at, last_activity, expires_at
+            FROM user_sessions
+            WHERE session_token = ? AND user_id = ? AND is_active = 1
+        """,
+            (session_token, current_user.user_id),
+        )
+
+        session_info = cursor.fetchone()
+        conn.close()
+
+        if not session_info:
+            return jsonify({"error": "Session not found"}), 404
+
+        return jsonify(
+            {
+                "token_type": "session",
+                "user_id": current_user.user_id,
+                "username": current_user.username,
+                "created_at": session_info["created_at"],
+                "last_activity": session_info["last_activity"],
+                "expires_at": session_info["expires_at"],
+                "is_active": True,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error getting token info: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @ioc_bp.route("/api/users", methods=["GET"])
 @require_role([UserRole.ADMIN])
 def get_all_users():
@@ -2566,6 +2752,299 @@ def delete_ioc(ioc_value):
 
 
 # Legacy parsing functions removed - now handled by FeedIngestionService
+
+
+# ===== USER API KEY MANAGEMENT ROUTES =====
+
+
+@ioc_bp.route("/api/user/api-keys", methods=["GET"])
+@require_authentication()
+def list_user_api_keys():
+    """List all API keys for the current user."""
+    try:
+        current_user = g.current_user
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Get all active API keys for the user
+        cursor.execute(
+            """
+            SELECT id, name, key_preview, access_scope, created_at, last_used,
+                   expires_at, is_active, rate_limit_tier, description
+            FROM user_api_keys
+            WHERE user_id = ? AND is_active = 1
+            ORDER BY created_at DESC
+        """,
+            (current_user.user_id,),
+        )
+
+        keys = []
+        for row in cursor.fetchall():
+            key_data = dict(row)
+            # Parse access_scope JSON
+            try:
+                key_data["access_scope"] = (
+                    json.loads(key_data["access_scope"])
+                    if key_data["access_scope"]
+                    else ["read"]
+                )
+            except:
+                key_data["access_scope"] = ["read"]
+
+            keys.append(key_data)
+
+        conn.close()
+
+        return jsonify({"api_keys": keys})
+
+    except Exception as e:
+        print(f"Error listing API keys: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/user/api-keys", methods=["POST"])
+@require_authentication()
+def create_user_api_key():
+    """Create a new API key for the current user."""
+    try:
+        current_user = g.current_user
+        data = request.get_json()
+
+        # Validate required fields
+        if not data or not data.get("name"):
+            return jsonify({"error": "API key name is required"}), 400
+
+        name = data["name"].strip()
+        if len(name) < 3:
+            return jsonify({"error": "API key name must be at least 3 characters"}), 400
+
+        # Optional fields with defaults
+        description = data.get("description", "").strip()
+        access_scope = data.get("access_scope", ["read"])
+        rate_limit_tier = data.get("rate_limit_tier", "standard")
+        ip_restrictions = data.get("ip_restrictions", "").strip()
+        expires_in = data.get(
+            "expires_in"
+        )  # e.g., "30d", "90d", "1y", or None for never
+
+        # Validate access scope
+        valid_scopes = ["read", "write", "admin"]
+        if not isinstance(access_scope, list) or not all(
+            scope in valid_scopes for scope in access_scope
+        ):
+            return jsonify({"error": "Invalid access scope"}), 400
+
+        # Calculate expiration date
+        expires_at = None
+        if expires_in:
+            try:
+                if expires_in == "30d":
+                    expires_at = datetime.datetime.now() + datetime.timedelta(days=30)
+                elif expires_in == "90d":
+                    expires_at = datetime.datetime.now() + datetime.timedelta(days=90)
+                elif expires_in == "1y":
+                    expires_at = datetime.datetime.now() + datetime.timedelta(days=365)
+                else:
+                    return jsonify({"error": "Invalid expiration period"}), 400
+            except:
+                return jsonify({"error": "Invalid expiration period"}), 400
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Check if user already has a key with this name
+        cursor.execute(
+            """
+            SELECT id FROM user_api_keys
+            WHERE user_id = ? AND name = ? AND is_active = 1
+        """,
+            (current_user.user_id, name),
+        )
+
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({"error": "API key with this name already exists"}), 409
+
+        # Generate the API key
+        api_key = generate_api_key()
+        key_hash = hash_api_key(api_key)
+        key_preview = create_api_key_preview(api_key)
+        key_id = secrets.token_urlsafe(16)
+
+        # Insert the new API key
+        cursor.execute(
+            """
+            INSERT INTO user_api_keys
+            (id, user_id, name, key_hash, key_preview, access_scope,
+             expires_at, rate_limit_tier, ip_restrictions, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                key_id,
+                current_user.user_id,
+                name,
+                key_hash,
+                key_preview,
+                json.dumps(access_scope),
+                expires_at,
+                rate_limit_tier,
+                ip_restrictions if ip_restrictions else None,
+                description if description else None,
+            ),
+        )
+
+        # TODO: Add audit logging for API key creation
+        # Note: Current audit_logs table is specific to alert overrides
+        print(f"[API] Created API key '{name}' for user {current_user.user_id}")
+
+        conn.commit()
+        conn.close()
+
+        return jsonify(
+            {
+                "message": "API key created successfully",
+                "api_key": api_key,  # Only returned once!
+                "key_id": key_id,
+                "name": name,
+                "key_preview": key_preview,
+                "access_scope": access_scope,
+                "expires_at": expires_at.isoformat() if expires_at else None,
+            }
+        ), 201
+
+    except Exception as e:
+        print(f"Error creating API key: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/user/api-keys/<key_id>/rotate", methods=["POST"])
+@require_authentication()
+def rotate_user_api_key(key_id):
+    """Rotate (regenerate) an existing API key."""
+    try:
+        current_user = g.current_user
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Check if the key exists and belongs to the user
+        cursor.execute(
+            """
+            SELECT id, name, user_id FROM user_api_keys
+            WHERE id = ? AND user_id = ? AND is_active = 1
+        """,
+            (key_id, current_user.user_id),
+        )
+
+        key_record = cursor.fetchone()
+        if not key_record:
+            conn.close()
+            return jsonify({"error": "API key not found"}), 404
+
+        # Generate new API key
+        new_api_key = generate_api_key()
+        new_key_hash = hash_api_key(new_api_key)
+        new_key_preview = create_api_key_preview(new_api_key)
+
+        # Update the key in database
+        cursor.execute(
+            """
+            UPDATE user_api_keys
+            SET key_hash = ?, key_preview = ?, created_at = CURRENT_TIMESTAMP, last_used = NULL
+            WHERE id = ?
+        """,
+            (new_key_hash, new_key_preview, key_id),
+        )
+
+        # TODO: Add audit logging for API key rotation
+        print(
+            f"[API] Rotated API key '{key_record['name']}' for user {current_user.user_id}"
+        )
+
+        conn.commit()
+        conn.close()
+
+        return jsonify(
+            {
+                "message": "API key rotated successfully",
+                "api_key": new_api_key,  # Only returned once!
+                "key_id": key_id,
+                "name": key_record["name"],
+                "key_preview": new_key_preview,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error rotating API key: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@ioc_bp.route("/api/user/api-keys/<key_id>", methods=["DELETE"])
+@require_authentication()
+def revoke_user_api_key(key_id):
+    """Revoke (delete) an API key."""
+    try:
+        current_user = g.current_user
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+
+        # Check if the key exists and belongs to the user
+        cursor.execute(
+            """
+            SELECT id, name, user_id FROM user_api_keys
+            WHERE id = ? AND user_id = ? AND is_active = 1
+        """,
+            (key_id, current_user.user_id),
+        )
+
+        key_record = cursor.fetchone()
+        if not key_record:
+            conn.close()
+            return jsonify({"error": "API key not found"}), 404
+
+        # Soft delete the key (set is_active = 0)
+        cursor.execute(
+            """
+            UPDATE user_api_keys
+            SET is_active = 0
+            WHERE id = ?
+        """,
+            (key_id,),
+        )
+
+        # TODO: Add audit logging for API key revocation
+        print(
+            f"[API] Revoked API key '{key_record['name']}' for user {current_user.user_id}"
+        )
+
+        conn.commit()
+        conn.close()
+
+        return jsonify(
+            {
+                "message": "API key revoked successfully",
+                "key_id": key_id,
+                "name": key_record["name"],
+            }
+        )
+
+    except Exception as e:
+        print(f"Error revoking API key: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # Register the Blueprint with the main app
@@ -3673,6 +4152,387 @@ def get_feed_health_history():
 
     except Exception as e:
         return jsonify({"error": f"Failed to get health history: {str(e)}"}), 500
+
+
+@app.route("/api/admin/setup-demo-feeds", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ADMIN])
+def setup_demo_feeds():
+    """Setup demo threat feeds for testing/demo purposes. Admin only."""
+    try:
+        # Parse request data
+        data = request.get_json() if request.is_json else {}
+        confirm = data.get("confirm", False) or request.args.get("confirm") == "true"
+        import_data = (
+            data.get("import_data", False) or request.args.get("import_data") == "true"
+        )
+
+        if not confirm:
+            return jsonify(
+                {
+                    "error": "Confirmation required",
+                    "message": "Add ?confirm=true or include 'confirm': true in request body to proceed",
+                }
+            ), 400
+
+        current_user = g.current_user
+
+        # Demo feed configurations
+        demo_feeds = [
+            {
+                "name": "MalwareDomainList - Domains",
+                "feed_type": "txt",
+                "description": "Known malicious domains from MalwareDomainList project",
+                "url": "https://www.malwaredomainlist.com/hostslist/hosts.txt",
+                "ioc_type": "domain",
+                "format_config": {
+                    "delimiter": "\n",
+                    "comment_prefix": "#",
+                    "extract_pattern": r"0\.0\.0\.0\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+                },
+                "sample_data": [
+                    "malicious-domain1.com",
+                    "evil-site.net",
+                    "phishing-example.org",
+                    "malware-host.biz",
+                    "suspicious-domain.info",
+                ],
+            },
+            {
+                "name": "Abuse.ch URLhaus - Malware URLs",
+                "feed_type": "csv",
+                "description": "Malware URLs from Abuse.ch URLhaus database",
+                "url": "https://urlhaus.abuse.ch/downloads/csv_recent/",
+                "ioc_type": "url",
+                "format_config": {
+                    "has_header": True,
+                    "delimiter": ",",
+                    "url_column": "url",
+                    "threat_column": "threat",
+                    "tags_column": "tags",
+                },
+                "sample_data": [
+                    {
+                        "url": "http://malicious-payload.xyz/download.php?id=1234",
+                        "threat": "trojan",
+                        "tags": "exe,payload",
+                    },
+                    {
+                        "url": "https://evil-site.com/malware.zip",
+                        "threat": "ransomware",
+                        "tags": "zip,crypto",
+                    },
+                    {
+                        "url": "http://phishing-bank.net/login.html",
+                        "threat": "phishing",
+                        "tags": "banking,credential",
+                    },
+                    {
+                        "url": "https://fake-update.org/flash_update.exe",
+                        "threat": "trojan",
+                        "tags": "exe,fake-update",
+                    },
+                ],
+            },
+            {
+                "name": "IPsum Threat Intelligence",
+                "feed_type": "txt",
+                "description": "Malicious IP addresses from IPsum aggregated feeds",
+                "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt",
+                "ioc_type": "ip",
+                "format_config": {
+                    "delimiter": "\n",
+                    "comment_prefix": "#",
+                    "extract_pattern": r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})",
+                },
+                "sample_data": [
+                    "192.168.100.50",
+                    "10.0.0.100",
+                    "203.0.113.45",
+                    "198.51.100.78",
+                    "172.16.0.200",
+                ],
+            },
+            {
+                "name": "MITRE ATT&CK STIX Feed",
+                "feed_type": "json",
+                "description": "MITRE ATT&CK techniques and indicators in STIX 2.0 format",
+                "url": "https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json",
+                "ioc_type": "mixed",
+                "format_config": {
+                    "stix_version": "2.0",
+                    "bundle_key": "objects",
+                    "indicator_types": ["indicator", "malware", "tool"],
+                },
+                "sample_data": {
+                    "type": "bundle",
+                    "id": "bundle--demo-12345",
+                    "objects": [
+                        {
+                            "type": "indicator",
+                            "id": "indicator--demo-1",
+                            "created": "2024-01-01T00:00:00.000Z",
+                            "modified": "2024-01-01T00:00:00.000Z",
+                            "pattern": "[file:hashes.MD5 = 'd41d8cd98f00b204e9800998ecf8427e']",
+                            "labels": ["malicious-activity"],
+                        },
+                        {
+                            "type": "indicator",
+                            "id": "indicator--demo-2",
+                            "created": "2024-01-01T00:00:00.000Z",
+                            "modified": "2024-01-01T00:00:00.000Z",
+                            "pattern": "[domain-name:value = 'evil-command-control.com']",
+                            "labels": ["malicious-activity"],
+                        },
+                    ],
+                },
+            },
+            {
+                "name": "Emerging Threats - Compromised IPs",
+                "feed_type": "txt",
+                "description": "Compromised IP addresses from Emerging Threats",
+                "url": "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt",
+                "ioc_type": "ip",
+                "format_config": {
+                    "delimiter": "\n",
+                    "comment_prefix": "#",
+                    "extract_pattern": r"^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})",
+                },
+                "sample_data": [
+                    "185.220.100.240",
+                    "45.142.214.48",
+                    "91.219.236.166",
+                    "194.147.78.112",
+                    "23.129.64.131",
+                ],
+            },
+        ]
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+
+        cursor = conn.cursor()
+        feeds_created = []
+        iocs_imported = 0
+
+        try:
+            # Register demo feeds
+            for feed in demo_feeds:
+                # Check if feed already exists
+                cursor.execute(
+                    "SELECT id FROM threat_feeds WHERE name = ?", (feed["name"],)
+                )
+                if cursor.fetchone():
+                    continue  # Skip existing feeds
+
+                # Insert feed record (let database auto-generate ID)
+                cursor.execute(
+                    """
+                    INSERT INTO threat_feeds
+                    (name, feed_type, description, url, format_config,
+                     is_active, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        feed["name"],
+                        feed["feed_type"],
+                        feed["description"],
+                        feed["url"],
+                        json.dumps(feed["format_config"]),
+                        1,  # is_active
+                        current_user.user_id,
+                        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    ),
+                )
+
+                # Get the generated feed ID
+                feed_id = cursor.lastrowid
+
+                feeds_created.append(
+                    {"id": feed_id, "name": feed["name"], "type": feed["feed_type"]}
+                )
+
+                # Import sample data if requested
+                if import_data:
+                    # Create import log entry (let database auto-generate ID)
+                    cursor.execute(
+                        """
+                        INSERT INTO feed_import_logs
+                        (feed_id, feed_name, import_type, import_status, user_id, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                        (
+                            feed_id,
+                            feed["name"],
+                            "demo_setup",
+                            "processing",
+                            current_user.user_id,
+                            datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        ),
+                    )
+
+                    import_log_id = cursor.lastrowid
+
+                    # Process sample data based on type
+                    feed_iocs_imported = 0
+
+                    if feed["feed_type"] in ["txt"]:
+                        for ioc_value in feed["sample_data"]:
+                            cursor.execute(
+                                """
+                                INSERT OR IGNORE INTO iocs
+                                (ioc_type, ioc_value, source_feed, severity, confidence,
+                                 first_seen, last_seen, is_active, created_by, score, category)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                                (
+                                    feed["ioc_type"],
+                                    ioc_value,
+                                    feed["name"],
+                                    "medium",
+                                    85,
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat(),
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat(),
+                                    1,
+                                    current_user.user_id,
+                                    75,  # score
+                                    "malicious",  # category
+                                ),
+                            )
+                            if cursor.rowcount > 0:
+                                feed_iocs_imported += 1
+
+                    elif feed["feed_type"] == "csv":
+                        for item in feed["sample_data"]:
+                            cursor.execute(
+                                """
+                                INSERT OR IGNORE INTO iocs
+                                (ioc_type, ioc_value, source_feed, severity, confidence,
+                                 tags, first_seen, last_seen, is_active, created_by, score, category)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                                (
+                                    feed["ioc_type"],
+                                    item["url"],
+                                    feed["name"],
+                                    "high",
+                                    90,
+                                    item.get("tags", ""),
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat(),
+                                    datetime.datetime.now(
+                                        datetime.timezone.utc
+                                    ).isoformat(),
+                                    1,
+                                    current_user.user_id,
+                                    85,  # score
+                                    "malicious",  # category
+                                ),
+                            )
+                            if cursor.rowcount > 0:
+                                feed_iocs_imported += 1
+
+                    elif feed["feed_type"] == "json":
+                        # Process STIX bundle
+                        if "objects" in feed["sample_data"]:
+                            for obj in feed["sample_data"]["objects"]:
+                                if obj.get("type") == "indicator":
+                                    # Extract IOC from STIX pattern
+                                    pattern = obj.get("pattern", "")
+                                    if "domain-name:value" in pattern:
+                                        ioc_value = (
+                                            pattern.split("'")[1]
+                                            if "'" in pattern
+                                            else ""
+                                        )
+                                        ioc_type = "domain"
+                                    elif "file:hashes.MD5" in pattern:
+                                        ioc_value = (
+                                            pattern.split("'")[1]
+                                            if "'" in pattern
+                                            else ""
+                                        )
+                                        ioc_type = "hash"
+                                    else:
+                                        continue
+
+                                    if ioc_value:
+                                        cursor.execute(
+                                            """
+                                            INSERT OR IGNORE INTO iocs
+                                            (ioc_type, ioc_value, source_feed, severity, confidence,
+                                             first_seen, last_seen, is_active, created_by, score, category)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        """,
+                                            (
+                                                ioc_type,
+                                                ioc_value,
+                                                feed["name"],
+                                                "high",
+                                                95,
+                                                datetime.datetime.now(
+                                                    datetime.timezone.utc
+                                                ).isoformat(),
+                                                datetime.datetime.now(
+                                                    datetime.timezone.utc
+                                                ).isoformat(),
+                                                1,
+                                                current_user.user_id,
+                                                90,  # score
+                                                "malicious",  # category
+                                            ),
+                                        )
+                                        if cursor.rowcount > 0:
+                                            feed_iocs_imported += 1
+
+                    # Update import log
+                    cursor.execute(
+                        """
+                        UPDATE feed_import_logs
+                        SET import_status = ?, imported_count = ?,
+                            total_records = ?, timestamp = ?
+                        WHERE id = ?
+                    """,
+                        (
+                            "completed",
+                            feed_iocs_imported,
+                            len(feed["sample_data"])
+                            if isinstance(feed["sample_data"], list)
+                            else 2,
+                            datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                            import_log_id,
+                        ),
+                    )
+
+                    iocs_imported += feed_iocs_imported
+
+            conn.commit()
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Demo feeds setup completed successfully",
+                    "feeds_created": feeds_created,
+                    "total_feeds": len(feeds_created),
+                    "iocs_imported": iocs_imported if import_data else 0,
+                    "import_data": import_data,
+                }
+            )
+
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": f"Failed to setup demo feeds: {str(e)}"}), 500
+        finally:
+            conn.close()
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to setup demo feeds: {str(e)}"}), 500
 
 
 @app.route("/api/feeds/<int:feed_id>/health", methods=["GET"])
