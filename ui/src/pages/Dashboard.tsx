@@ -298,11 +298,11 @@ export function Dashboard() {
         <div className="md:hidden p-2 mb-4">
           <button
             onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="px-4 py-2 bg-zinc-800 text-gray-200 rounded flex items-center text-sm"
+            className="px-4 py-2 bg-slate-800/50 text-white rounded flex items-center text-sm"
           >
             Filters{" "}
             {activeFilterCount > 0 && (
-              <span className="ml-2 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              <span className="ml-2 bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                 {activeFilterCount}
               </span>
             )}
@@ -453,8 +453,8 @@ export function Dashboard() {
                     Active Indicators of Compromise
                   </h2>
                   {activeFilterCount > 0 && (
-                    <div className="text-sm text-gray-400">
-                      <span className="bg-blue-600/20 text-blue-400 px-2 py-1 rounded-full">
+                    <div className="text-sm text-muted-foreground">
+                      <span className="bg-primary/20 text-primary px-2 py-1 rounded-full">
                         {activeFilterCount}{" "}
                         {activeFilterCount === 1 ? "filter" : "filters"} active
                       </span>

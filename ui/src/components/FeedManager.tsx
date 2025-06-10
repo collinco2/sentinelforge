@@ -40,6 +40,7 @@ import {
 import { useAuth } from "../hooks/useAuth";
 import { UserRole } from "../services/auth";
 import { toast } from "../lib/toast";
+import { useThemeClass, getStatusBadgeClass } from "../hooks/useThemeClass";
 
 interface ThreatFeed {
   id: number;
@@ -94,6 +95,7 @@ interface FeedHealth {
 
 export const FeedManager: React.FC = () => {
   const { hasRole } = useAuth();
+  const theme = useThemeClass();
   const [feeds, setFeeds] = useState<ThreatFeed[]>([]);
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [feedHealth, setFeedHealth] = useState<FeedHealth[]>([]);
@@ -333,18 +335,17 @@ export const FeedManager: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, string> = {
-      success:
-        "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400",
-      partial:
-        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400",
-      failed: "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400",
-      pending:
-        "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400",
+    const statusMap: Record<string, "success" | "warning" | "error" | "info" | "default"> = {
+      success: "success",
+      partial: "warning",
+      failed: "error",
+      pending: "info",
     };
 
+    const statusType = statusMap[status] || "default";
+
     return (
-      <Badge className={variants[status] || "bg-muted text-muted-foreground"}>
+      <Badge className={getStatusBadgeClass(statusType)}>
         {status}
       </Badge>
     );
@@ -549,13 +550,13 @@ export const FeedManager: React.FC = () => {
       </div>
 
       {/* Feeds List */}
-      <Card>
+      <Card className={theme.card}>
         <CardHeader>
           <CardTitle>Registered Feeds ({feeds.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {feeds.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-slate-400">
               No feeds configured. Add your first threat feed to get started.
             </div>
           ) : (
@@ -563,7 +564,7 @@ export const FeedManager: React.FC = () => {
               {feeds.map((feed) => (
                 <div
                   key={feed.id}
-                  className="border border-border rounded-lg p-4 bg-card hover:bg-accent/50 transition-colors"
+                  className="border border-slate-600 rounded-lg p-4 bg-slate-800/30 hover:bg-slate-700/30 transition-colors"
                 >
                   {/* Mobile-optimized layout */}
                   <div className="space-y-4">
@@ -661,7 +662,7 @@ export const FeedManager: React.FC = () => {
                     {/* Description */}
                     {feed.description && (
                       <div className="px-1">
-                        <p className="text-muted-foreground text-sm leading-relaxed">
+                        <p className="text-slate-300 text-sm leading-relaxed">
                           {feed.description}
                         </p>
                       </div>
@@ -748,7 +749,7 @@ export const FeedManager: React.FC = () => {
       </Card>
 
       {/* Recent Import Logs */}
-      <Card>
+      <Card className={theme.card}>
         <CardHeader>
           <CardTitle>Recent Import Activity</CardTitle>
         </CardHeader>

@@ -11,6 +11,7 @@ import {
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import { useThemeClass, getStatusBadgeClass, getSeverityBadgeClass } from "../hooks/useThemeClass";
 import {
   HeartPulse,
   Shield,
@@ -56,6 +57,7 @@ interface RecentUpload {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const theme = useThemeClass();
 
   // State for dashboard data
   const [feedHealthSummary, setFeedHealthSummary] =
@@ -127,47 +129,41 @@ export function DashboardPage() {
     switch (status) {
       case "success":
         return (
-          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+          <Badge className={getStatusBadgeClass("success")}>
             Success
           </Badge>
         );
       case "partial":
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
+          <Badge className={getStatusBadgeClass("warning")}>
             Partial
           </Badge>
         );
       case "failed":
         return (
-          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400">
+          <Badge className={getStatusBadgeClass("error")}>
             Failed
           </Badge>
         );
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge className={getStatusBadgeClass("default")}>{status}</Badge>;
     }
   };
 
   const getSeverityBadge = (severity: string) => {
-    switch (severity) {
+    const severityLevel = severity.toLowerCase() as "critical" | "high" | "medium" | "low";
+
+    switch (severityLevel) {
       case "critical":
-        return <Badge variant="destructive">Critical</Badge>;
+        return <Badge className={getSeverityBadgeClass("critical")}>Critical</Badge>;
       case "high":
-        return (
-          <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400">
-            High
-          </Badge>
-        );
+        return <Badge className={getSeverityBadgeClass("high")}>High</Badge>;
       case "medium":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
-            Medium
-          </Badge>
-        );
+        return <Badge className={getSeverityBadgeClass("medium")}>Medium</Badge>;
       case "low":
-        return <Badge variant="secondary">Low</Badge>;
+        return <Badge className={getSeverityBadgeClass("low")}>Low</Badge>;
       default:
-        return <Badge variant="outline">{severity}</Badge>;
+        return <Badge className={getStatusBadgeClass("default")}>{severity}</Badge>;
     }
   };
 
@@ -211,7 +207,7 @@ export function DashboardPage() {
           {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Feed Health Snapshot */}
-            <Card>
+            <Card className={theme.card}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                   <HeartPulse className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -271,7 +267,7 @@ export function DashboardPage() {
             </Card>
 
             {/* High-Risk IOCs */}
-            <Card>
+            <Card className={theme.card}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                   <Shield className="h-5 w-5 text-red-600 dark:text-red-400" />
@@ -326,7 +322,7 @@ export function DashboardPage() {
           {/* Second Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Recent Uploads */}
-            <Card>
+            <Card className={theme.card}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                   <Upload className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -385,7 +381,7 @@ export function DashboardPage() {
             </Card>
 
             {/* Settings Quick Access */}
-            <Card>
+            <Card className={theme.card}>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                   <Settings className="h-5 w-5 text-muted-foreground" />

@@ -34,7 +34,7 @@ export interface FeedCardProps {
 export function FeedCard({
   title,
   icon: Icon,
-  iconColor = "text-muted-foreground dark:text-muted-foreground",
+  iconColor = "text-slate-400",
   onViewAll,
   viewAllLabel = "View All",
   className,
@@ -66,9 +66,9 @@ export function FeedCard({
     if (emptyState && React.Children.count(children) === 0) {
       const EmptyIcon = emptyState.icon;
       return (
-        <div className="text-center py-8 text-muted-foreground dark:text-muted-foreground">
-          <EmptyIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p className="text-sm">{emptyState.message}</p>
+        <div className="text-center py-8 text-muted-foreground">
+          <EmptyIcon className="h-12 w-12 mx-auto mb-3 opacity-50 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">{emptyState.message}</p>
         </div>
       );
     }
@@ -84,7 +84,7 @@ export function FeedCard({
       )}
     >
       <CardHeader className="p-4 md:p-6 flex flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-2 text-card-foreground dark:text-card-foreground">
+        <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-2 text-foreground">
           <Icon className={cn("h-6 w-6", iconColor)} />
           {title}
         </CardTitle>
@@ -100,7 +100,7 @@ export function FeedCard({
           </Button>
         )}
       </CardHeader>
-      <CardContent className="p-4 md:p-6 pt-0 text-card-foreground dark:text-card-foreground">
+      <CardContent className="p-4 md:p-6 pt-0 text-foreground">
         {renderContent()}
       </CardContent>
     </Card>
@@ -149,19 +149,19 @@ export function FeedHealthItem({
   return (
     <div
       className={cn(
-        "flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl border border-border/50 dark:border-border/50 transition-colors duration-200",
+        "flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-slate-600/50 transition-colors duration-200",
         className,
       )}
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 mb-1">
-          <span className="font-medium text-foreground dark:text-foreground truncate">
+          <span className="font-medium text-foreground truncate">
             {feedName}
           </span>
           <StatusBadge variant={getStatusVariant(status) as any} size="sm" />
         </div>
         {lastChecked && (
-          <p className="text-xs text-muted-foreground dark:text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Last checked: {lastChecked}
           </p>
         )}
@@ -212,12 +212,12 @@ export function IOCItem({
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 mb-2">
-          <code className="text-sm font-mono bg-background dark:bg-background px-2 py-1 rounded-md truncate border border-border dark:border-border">
+          <code className="text-sm font-mono bg-muted px-2 py-1 rounded-md truncate border border-border text-foreground">
             {value}
           </code>
           <SeverityBadge severity={severity} size="sm" />
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-medium">{type}</span>
           <span>•</span>
           <span>{feedName}</span>
@@ -271,17 +271,17 @@ export function UploadItem({
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3 mb-2">
-          <span className="font-medium truncate text-foreground dark:text-foreground">
+          <span className="font-medium truncate text-foreground">
             {feedName}
           </span>
           <ImportStatusBadge status={status} size="sm" />
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="font-medium">{importedCount} imported</span>
           {errorCount > 0 && (
             <>
               <span>•</span>
-              <span className="text-red-600 dark:text-red-400 font-medium">
+              <span className="text-destructive font-medium">
                 {errorCount} errors
               </span>
             </>

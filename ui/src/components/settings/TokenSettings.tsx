@@ -228,10 +228,10 @@ export const TokenSettings: React.FC = () => {
               <div className="space-y-6 md:grid md:grid-cols-2 md:gap-6 md:space-y-0">
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm font-medium">Issued At</span>
+                    <Clock className="h-4 w-4 text-slate-400" />
+                    <span className="text-sm font-medium text-white">Issued At</span>
                   </div>
-                  <p className="text-sm text-gray-600 ml-6 break-all">
+                  <p className="text-sm text-slate-300 ml-6 break-all">
                     {formatDate(tokenInfo.issued_at)}
                   </p>
                 </div>
@@ -310,7 +310,7 @@ export const TokenSettings: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+            <p className="text-sm text-slate-300 mb-4 leading-relaxed">
               Rotating your token will invalidate the current token and generate
               a new one. You may need to re-authenticate in other sessions.
             </p>

@@ -11,20 +11,20 @@ import {
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { Palette, Monitor, Layout } from "lucide-react";
 import { toast } from "../../lib/toast";
+import { useTheme } from "../../hooks/useTheme";
 
 interface UIPreferencesType {
-  theme: "light" | "dark" | "system";
   tableDensity: "compact" | "comfortable";
   defaultLandingPage: string;
 }
 
 const defaultPreferences: UIPreferencesType = {
-  theme: "system",
   tableDensity: "comfortable",
   defaultLandingPage: "/dashboard",
 };
 
 export const UIPreferences: React.FC = () => {
+  const { theme, setTheme, actualTheme } = useTheme();
   const [preferences, setPreferences] =
     useState<UIPreferencesType>(defaultPreferences);
   const [loading, setLoading] = useState(true);
@@ -52,9 +52,6 @@ export const UIPreferences: React.FC = () => {
       localStorage.setItem("ui_preferences", JSON.stringify(newPreferences));
       setPreferences(newPreferences);
 
-      // Apply theme immediately
-      applyTheme(newPreferences.theme);
-
       toast.success("UI preferences saved");
     } catch (error) {
       console.error("Error saving UI preferences:", error);
@@ -62,32 +59,8 @@ export const UIPreferences: React.FC = () => {
     }
   };
 
-  const applyTheme = (theme: string) => {
-    const root = document.documentElement;
-
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else if (theme === "light") {
-      root.classList.remove("dark");
-    } else {
-      // System theme
-      const prefersDark = window.matchMedia(
-        "(prefers-color-scheme: dark)",
-      ).matches;
-      if (prefersDark) {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-    }
-  };
-
-  const handleThemeChange = (theme: string) => {
-    const newPreferences = {
-      ...preferences,
-      theme: theme as UIPreferencesType["theme"],
-    };
-    savePreferences(newPreferences);
+  const handleThemeChange = (newTheme: string) => {
+    setTheme(newTheme as "light" | "dark" | "system");
   };
 
   const handleTableDensityChange = (density: string) => {
@@ -137,7 +110,7 @@ export const UIPreferences: React.FC = () => {
             Theme
           </Label>
           <RadioGroup
-            value={preferences.theme}
+            value={theme}
             onValueChange={handleThemeChange}
             className="grid grid-cols-3 gap-4"
             data-testid="theme-selector"
@@ -232,7 +205,7 @@ export const UIPreferences: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Current Theme:</span>
                   <span className="text-sm font-medium capitalize">
-                    {preferences.theme}
+                    {theme} ({actualTheme})
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

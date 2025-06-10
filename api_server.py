@@ -3847,231 +3847,154 @@ def import_from_feed(feed_id):
 @require_authentication()
 @require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
 def check_feeds_health():
-    """Check health status of all threat feeds."""
-    import requests
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
+    """Check health status of all threat feeds with caching support."""
+    from services.feed_health_monitor import FeedHealthMonitor
     import time
     from datetime import datetime, timezone
 
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection failed"}), 500
+        # Parse query parameters
+        force_check = request.args.get("force", "false").lower() == "true"
+        feed_id = request.args.get("feed_id", type=int)
 
-        # Ensure feed_health_logs table exists
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS feed_health_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                feed_id INTEGER NOT NULL,
-                feed_name TEXT NOT NULL,
-                url TEXT NOT NULL,
-                status TEXT NOT NULL,
-                http_code INTEGER,
-                response_time_ms INTEGER,
-                error_message TEXT,
-                last_checked DATETIME NOT NULL,
-                checked_by INTEGER NOT NULL,
-                FOREIGN KEY (feed_id) REFERENCES threat_feeds (id)
-            )
-        """)
-        conn.commit()
-
-        # Get all feeds with URLs
-        cursor.execute("""
-            SELECT id, name, url, feed_type, format_config, is_active
-            FROM threat_feeds
-            WHERE url IS NOT NULL AND url != ''
-            ORDER BY name
-        """)
-
-        feeds = cursor.fetchall()
-        health_results = []
-
-        # Setup HTTP session with retry strategy
-        session = requests.Session()
-        retry_strategy = Retry(
-            total=2,
-            status_forcelist=[429, 500, 502, 503, 504],
-            method_whitelist=["HEAD", "GET", "OPTIONS"],
-            backoff_factor=0.5,
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-
+        # Initialize health monitor
+        monitor = FeedHealthMonitor()
         current_user = g.current_user
 
-        for feed in feeds:
-            feed_id = feed["id"]
-            feed_name = feed["name"]
-            url = feed["url"]
-            feed_type = feed["feed_type"]
-            format_config = feed.get("format_config")
+        # Check if we should use cached results or force new check
+        if not force_check:
+            cached_health = monitor.get_cached_health()
+            if cached_health and "_last_update" in cached_health:
+                last_update = cached_health["_last_update"]
+                cache_age_seconds = (datetime.now(timezone.utc) - last_update).total_seconds()
 
-            # Parse format_config if it's a JSON string
-            if isinstance(format_config, str):
-                try:
-                    format_config = json.loads(format_config)
-                except (json.JSONDecodeError, TypeError):
-                    format_config = {}
+                # Use cache if less than 5 minutes old
+                if cache_age_seconds < 300:
+                    # Convert cached results to API format
+                    health_results = []
+                    for feed_id_key, result in cached_health.items():
+                        if feed_id_key != "_last_update":
+                            # Convert datetime back to string for JSON response
+                            if isinstance(result.get("last_checked"), datetime):
+                                result["last_checked"] = result["last_checked"].isoformat()
+                            health_results.append(result)
 
-            start_time = time.time()
-            last_checked = datetime.now(timezone.utc)
+                    # Calculate summary
+                    total_feeds = len(health_results)
+                    healthy_feeds = len([r for r in health_results if r["status"] == "ok"])
 
-            # Determine request method based on feed type
-            use_head = (
-                feed_type in ["csv", "txt"] and "phishtank" not in feed_name.lower()
-            )
+                    return jsonify({
+                        "success": True,
+                        "summary": {
+                            "total_feeds": total_feeds,
+                            "healthy_feeds": healthy_feeds,
+                            "unhealthy_feeds": total_feeds - healthy_feeds,
+                            "health_percentage": round(
+                                (healthy_feeds / total_feeds * 100) if total_feeds > 0 else 0, 1
+                            ),
+                        },
+                        "feeds": health_results,
+                        "checked_at": last_update.isoformat(),
+                        "checked_by": current_user.username,
+                        "from_cache": True,
+                        "cache_age_seconds": int(cache_age_seconds)
+                    })
 
-            # Initialize response variable
-            response = None
+        # Run fresh health check
+        result = monitor.run_health_check(feed_id=feed_id, checked_by=current_user.user_id)
 
-            try:
-                # Setup headers
-                headers = {
-                    "User-Agent": "SentinelForge-HealthChecker/1.0",
-                    "Accept": "*/*",
-                }
+        if not result.get("success"):
+            return jsonify({"error": result.get("error", "Health check failed")}), 500
 
-                # Handle authentication if needed
-                auth = None
-                params = {}
+        # Add API-specific fields
+        result["checked_by"] = current_user.username
+        result["from_cache"] = False
 
-                # Check for authentication configuration
-                if format_config and format_config.get("requires_auth"):
-                    auth_config = format_config.get("auth_config", {})
-
-                    if auth_config.get("api_key"):
-                        if "phishtank" in feed_name.lower():
-                            params["format"] = "json"
-                            params["api_key"] = auth_config["api_key"]
-                        else:
-                            headers["Authorization"] = (
-                                f"Bearer {auth_config['api_key']}"
-                            )
-                    elif auth_config.get("username") and auth_config.get("password"):
-                        auth = (auth_config["username"], auth_config["password"])
-
-                # Make the request
-                if use_head:
-                    response = session.head(
-                        url,
-                        headers=headers,
-                        params=params,
-                        auth=auth,
-                        timeout=10,
-                        allow_redirects=True,
-                    )
-                else:
-                    response = session.get(
-                        url,
-                        headers=headers,
-                        params=params,
-                        auth=auth,
-                        timeout=10,
-                        stream=True,  # Don't download full content
-                    )
-                    # Close the response to free up the connection
-                    response.close()
-
-                response_time_ms = int((time.time() - start_time) * 1000)
-
-                # Determine status based on response
-                if response.status_code == 200:
-                    status = "ok"
-                elif response.status_code in [401, 403]:
-                    status = "unauthorized"
-                elif response.status_code == 429:
-                    status = "rate_limited"
-                elif response.status_code >= 500:
-                    status = "server_error"
-                else:
-                    status = "unreachable"
-
-                error_message = None
-                if status != "ok":
-                    error_message = f"HTTP {response.status_code}: {response.reason}"
-
-            except requests.exceptions.Timeout:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                status = "timeout"
-                error_message = "Request timeout"
-
-            except requests.exceptions.ConnectionError as e:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                status = "unreachable"
-                error_message = f"Connection error: {str(e)}"
-
-            except requests.exceptions.RequestException as e:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                status = "error"
-                error_message = f"Request error: {str(e)}"
-
-            # Log the health check
-            cursor.execute(
-                """
-                INSERT INTO feed_health_logs (
-                    feed_id, feed_name, url, status, http_code,
-                    response_time_ms, error_message, last_checked, checked_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    feed_id,
-                    feed_name,
-                    url,
-                    status,
-                    getattr(response, "status_code", None),
-                    response_time_ms,
-                    error_message,
-                    last_checked,
-                    current_user.user_id,
-                ),
-            )
-
-            # Create result entry
-            health_result = {
-                "feed_id": feed_id,
-                "feed_name": feed_name,
-                "url": url,
-                "status": status,
-                "http_code": getattr(response, "status_code", None),
-                "response_time_ms": response_time_ms,
-                "last_checked": last_checked.isoformat(),
-                "is_active": bool(feed["is_active"]),
-                "error_message": error_message,
-            }
-
-            health_results.append(health_result)
-
-        conn.commit()
-        conn.close()
-
-        # Calculate summary statistics
-        total_feeds = len(health_results)
-        healthy_feeds = len([r for r in health_results if r["status"] == "ok"])
-        unhealthy_feeds = total_feeds - healthy_feeds
-
-        return jsonify(
-            {
-                "success": True,
-                "summary": {
-                    "total_feeds": total_feeds,
-                    "healthy_feeds": healthy_feeds,
-                    "unhealthy_feeds": unhealthy_feeds,
-                    "health_percentage": round(
-                        (healthy_feeds / total_feeds * 100) if total_feeds > 0 else 0, 1
-                    ),
-                },
-                "feeds": health_results,
-                "checked_at": datetime.now(timezone.utc).isoformat(),
-                "checked_by": current_user.username,
-            }
-        )
+        return jsonify(result)
 
     except Exception as e:
         return jsonify({"error": f"Health check failed: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/health/trigger", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def trigger_health_check():
+    """Trigger a one-time health check for all active feeds."""
+    from services.feed_health_monitor import FeedHealthMonitor
+
+    try:
+        # Parse request parameters
+        data = request.get_json() if request.is_json else {}
+        feed_id = data.get("feed_id") or request.args.get("feed_id", type=int)
+
+        current_user = g.current_user
+        monitor = FeedHealthMonitor()
+
+        # Run health check
+        result = monitor.run_health_check(feed_id=feed_id, checked_by=current_user.user_id)
+
+        if not result.get("success"):
+            return jsonify({"error": result.get("error", "Health check failed")}), 500
+
+        # Add trigger information
+        result["triggered_by"] = current_user.username
+        result["trigger_type"] = "manual"
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to trigger health check: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/health/scheduler", methods=["GET", "POST"])
+@require_authentication()
+@require_role([UserRole.ADMIN])
+def manage_health_scheduler():
+    """Manage the health check scheduler (Admin only)."""
+    from services.feed_health_monitor import FeedHealthMonitor
+
+    try:
+        monitor = FeedHealthMonitor()
+
+        if request.method == "GET":
+            # Get scheduler status
+            status = monitor.get_scheduler_status()
+            return jsonify({
+                "success": True,
+                "scheduler": status
+            })
+
+        elif request.method == "POST":
+            # Start/stop scheduler
+            data = request.get_json() if request.is_json else {}
+            action = data.get("action", "start")
+            interval_minutes = data.get("interval_minutes", 1)
+
+            if action == "start":
+                success = monitor.start_cron_scheduler(interval_minutes)
+                if success:
+                    return jsonify({
+                        "success": True,
+                        "message": f"Health check scheduler started with {interval_minutes}-minute interval",
+                        "scheduler": monitor.get_scheduler_status()
+                    })
+                else:
+                    return jsonify({"error": "Failed to start scheduler"}), 500
+
+            elif action == "stop":
+                monitor.stop_cron_scheduler()
+                return jsonify({
+                    "success": True,
+                    "message": "Health check scheduler stopped",
+                    "scheduler": monitor.get_scheduler_status()
+                })
+
+            else:
+                return jsonify({"error": "Invalid action. Use 'start' or 'stop'"}), 400
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to manage scheduler: {str(e)}"}), 500
 
 
 @app.route("/api/feeds/health/history", methods=["GET"])
@@ -4834,4 +4757,26 @@ if __name__ == "__main__":
 
     initialize_iocs()  # Initialize IOCS list before starting the server
     initialize_alerts()  # Initialize ALERTS list before starting the server
+
+    # Run startup health check
+    try:
+        from services.feed_health_monitor import run_startup_health_check
+        run_startup_health_check()
+    except Exception as e:
+        print(f"⚠️  Startup health check failed: {e}")
+
+    # Start health check scheduler
+    try:
+        from services.feed_health_monitor import FeedHealthMonitor
+        monitor = FeedHealthMonitor()
+
+        # Start with 1-minute interval for testing
+        if monitor.start_cron_scheduler(interval_minutes=1):
+            print("✅ Health check scheduler started (1-minute interval)")
+        else:
+            print("⚠️  Failed to start health check scheduler")
+    except Exception as e:
+        print(f"⚠️  Health scheduler startup failed: {e}")
+
+    print("🌐 API Server ready on http://0.0.0.0:5059")
     app.run(host="0.0.0.0", port=port, debug=True)

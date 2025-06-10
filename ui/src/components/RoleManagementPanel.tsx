@@ -250,7 +250,7 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-foreground flex items-center">
-              <Users className="h-6 w-6 mr-2" />
+              <Users className="h-6 w-6 mr-2 text-primary" />
               Role Management
             </h2>
             <p className="text-muted-foreground">
@@ -270,15 +270,15 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
         {/* Filters */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Filter className="h-5 w-5 mr-2" />
+            <CardTitle className="flex items-center text-foreground">
+              <Filter className="h-5 w-5 mr-2 text-primary" />
               Filters
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <label htmlFor="role-filter" className="text-sm font-medium">
+                <label htmlFor="role-filter" className="text-sm font-medium text-foreground">
                   Filter by Role:
                 </label>
                 <Select value={selectedRole} onValueChange={setSelectedRole}>
@@ -304,7 +304,7 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
         {/* Users Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Users ({filteredUsers.length})</CardTitle>
+            <CardTitle className="text-foreground">Users ({filteredUsers.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -324,7 +324,7 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         {getRoleIcon(user.role)}
-                        <span className="font-medium">{user.username}</span>
+                        <span className="font-medium text-foreground">{user.username}</span>
                         {user.user_id === currentUser?.user_id && (
                           <Badge variant="outline" className="text-xs">
                             You
@@ -332,7 +332,7 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{user.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{user.email}</TableCell>
                     <TableCell>
                       <Badge className={getRoleColor(user.role)}>
                         {user.role}
@@ -343,7 +343,7 @@ export function RoleManagementPanel({ className }: RoleManagementPanelProps) {
                         {user.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatDate(user.created_at)}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(user.created_at)}</TableCell>
                     <TableCell>
                       <Select
                         value={user.role}

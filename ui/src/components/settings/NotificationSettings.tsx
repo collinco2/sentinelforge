@@ -145,7 +145,7 @@ export const NotificationSettings: React.FC = () => {
               <Mail className="h-4 w-4" />
               Email Alerts
             </Label>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-400">
               Receive email notifications for critical alerts and security
               events
             </p>

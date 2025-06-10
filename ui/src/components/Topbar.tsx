@@ -7,8 +7,9 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Moon, Bell, Search, LogOut, User, PanelLeft } from "lucide-react";
+import { Bell, Search, LogOut, User, PanelLeft } from "lucide-react";
 import { UserRoleSelector } from "./UserRoleSelector";
+import { ThemeToggle } from "./ThemeToggle";
 import {
   Popover,
   PopoverContent,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { useAuth } from "../hooks/useAuth";
 import { useSidebar } from "../hooks/useSidebar";
+import { useThemeClass } from "../hooks/useThemeClass";
 
 interface TopbarProps {
   className?: string;
@@ -25,6 +27,7 @@ interface TopbarProps {
 export function Topbar({ className, title = "Dashboard" }: TopbarProps) {
   const { user, logout } = useAuth();
   const { isCollapsed, toggle } = useSidebar();
+  const theme = useThemeClass();
 
   const handleLogout = async () => {
     await logout();
@@ -36,7 +39,8 @@ export function Topbar({ className, title = "Dashboard" }: TopbarProps) {
     <TooltipProvider>
       <div
         className={cn(
-          "sticky top-0 z-10 w-full h-16 px-4 border-b border-border bg-card/80 backdrop-blur flex items-center justify-between",
+          "sticky top-0 z-10 w-full h-16 px-4 border-b backdrop-blur flex items-center justify-between",
+          "bg-card border-border text-card-foreground",
           className,
         )}
       >
@@ -78,18 +82,11 @@ export function Topbar({ className, title = "Dashboard" }: TopbarProps) {
               <input
                 type="text"
                 placeholder="Search..."
-                className="pl-9 pr-4 py-2 h-9 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-input"
+                className={cn("pl-9 pr-4 py-2 h-9 text-sm", theme.input)}
               />
             </div>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground"
-              aria-label="Toggle theme"
-            >
-              <Moon size={20} />
-            </Button>
+            <ThemeToggle variant="icon" />
 
             <Button
               variant="ghost"

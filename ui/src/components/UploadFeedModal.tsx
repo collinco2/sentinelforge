@@ -42,6 +42,7 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "../lib/toast";
+import { useThemeClass } from "../hooks/useThemeClass";
 
 interface UploadFeedModalProps {
   isOpen: boolean;
@@ -73,6 +74,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const theme = useThemeClass();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -386,7 +388,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-full max-w-screen-sm sm:max-w-2xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className={`w-full max-w-screen-sm sm:max-w-2xl max-h-[95vh] overflow-y-auto ${theme.modal}`}>
         <DialogHeader className="pb-4">
           <DialogTitle className="text-lg sm:text-xl">
             Upload Threat Feed
@@ -395,7 +397,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
 
         <div className="space-y-4 sm:space-y-6">
           {/* File Upload Area */}
-          <Card className="shadow-md">
+          <Card className={`shadow-md ${theme.card}`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5" />
@@ -413,7 +415,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                     {supportedFormats.map((format) => (
                       <Tooltip key={format}>
                         <TooltipTrigger asChild>
-                          <div className="flex flex-col items-center gap-1 p-2 rounded-md hover:bg-white hover:shadow-sm transition-all duration-200 cursor-help">
+                          <div className="flex flex-col items-center gap-1 p-2 rounded-md hover:bg-background dark:hover:bg-background hover:shadow-sm transition-all duration-200 cursor-help">
                             {getFormatIcon(format)}
                             <span className="text-xs font-medium text-muted-foreground uppercase">
                               {format.replace(".", "")}
@@ -432,15 +434,15 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                     ))}
                   </div>
                 </TooltipProvider>
-                <p className="text-xs text-muted-foreground text-center">
+                <p className="text-xs text-slate-400 text-center">
                   Maximum file size: 10MB
                 </p>
               </div>
               <div
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
                   dragOver
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:border-border/80"
+                    ? "border-purple-500 bg-purple-500/10"
+                    : "border-slate-600 hover:border-slate-500"
                 }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -450,10 +452,10 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                   <div className="flex items-center justify-center space-x-3">
                     {getFileIcon()}
                     <div className="text-left">
-                      <p className="font-medium text-foreground">
+                      <p className="font-medium text-white">
                         {selectedFile.name}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-slate-400">
                         {formatFileSize(selectedFile.size)}
                       </p>
                     </div>
@@ -519,7 +521,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                   data-testid="upload-source-feed-input"
                   className="min-h-[44px] sm:min-h-[40px]"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                   Specify the threat intelligence source for this data
                 </p>
               </div>
@@ -537,7 +539,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                   disabled={uploading}
                   className="min-h-[88px] resize-none"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                   Optional context for audit trail and compliance
                 </p>
               </div>
@@ -561,7 +563,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                   <AccordionContent className="space-y-6">
                     {/* Processing Options */}
                     <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-foreground dark:text-foreground flex items-center gap-2">
                         <ShieldCheck className="h-4 w-4" />
                         Processing Options
                       </h4>
@@ -571,7 +573,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                           <Label className="text-sm font-medium">
                             Enable Deduplication
                           </Label>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                             Remove duplicate IOCs during import
                           </p>
                         </div>
@@ -613,7 +615,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                           className="w-full"
                           disabled={uploading}
                         />
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                           Minimum confidence level for imported IOCs
                         </p>
                       </div>
@@ -621,7 +623,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
 
                     {/* Performance Options */}
                     <div className="space-y-4 pt-4 border-t">
-                      <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-foreground dark:text-foreground flex items-center gap-2">
                         <Zap className="h-4 w-4" />
                         Performance Options
                       </h4>
@@ -641,7 +643,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                           className="w-full"
                           disabled={uploading}
                         />
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-muted-foreground dark:text-muted-foreground">
                           Number of records to process in each batch
                         </p>
                       </div>
@@ -669,7 +671,7 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
 
                     {/* Scheduling Options */}
                     <div className="space-y-4 pt-4 border-t">
-                      <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-foreground dark:text-foreground flex items-center gap-2">
                         <Clock className="h-4 w-4" />
                         Scheduling Options
                       </h4>
@@ -691,8 +693,8 @@ export const UploadFeedModal: React.FC<UploadFeedModalProps> = ({
                       </div>
 
                       {enableScheduling && (
-                        <div className="ml-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <p className="text-xs text-blue-700">
+                        <div className="ml-4 p-3 bg-accent/10 dark:bg-accent/10 rounded-lg border border-accent/30 dark:border-accent/30">
+                          <p className="text-xs text-accent dark:text-accent">
                             <strong>Note:</strong> Scheduled uploads will be
                             queued and processed during the next maintenance
                             window (typically 2-4 AM UTC).

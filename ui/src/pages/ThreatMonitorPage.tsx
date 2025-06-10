@@ -310,20 +310,20 @@ export function ThreatMonitorPage() {
                           {threat.status.replace("_", " ")}
                         </Badge>
                       </div>
-                      <p className="text-sm font-medium text-foreground dark:text-foreground mb-1">
+                      <p className="text-sm font-medium text-foreground mb-1">
                         {threat.description}
                       </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-medium">{threat.source}</span>
                         <span>•</span>
-                        <code className="bg-background dark:bg-background px-1 py-0.5 rounded text-xs">
+                        <code className="bg-muted px-1 py-0.5 rounded text-xs text-foreground">
                           {threat.ioc_value}
                         </code>
                         <span>•</span>
                         <span>{formatTimeAgo(threat.timestamp)}</span>
                       </div>
                     </div>
-                    <Eye className="h-4 w-4 text-muted-foreground dark:text-muted-foreground ml-2 flex-shrink-0" />
+                    <Eye className="h-4 w-4 text-muted-foreground ml-2 flex-shrink-0" />
                   </div>
                 ))}
               </div>
@@ -335,13 +335,13 @@ export function ThreatMonitorPage() {
               icon={TrendingUp}
               iconColor="text-purple-600 dark:text-purple-400"
             >
-              <div className="h-64 flex items-center justify-center text-muted-foreground dark:text-muted-foreground">
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
-                  <BarChart3 className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm font-medium">
+                  <BarChart3 className="h-16 w-16 mx-auto mb-4 opacity-50 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground">
                     Threat analytics visualization
                   </p>
-                  <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Real-time threat pattern analysis
                   </p>
                 </div>
@@ -358,16 +358,16 @@ export function ThreatMonitorPage() {
               iconColor="text-indigo-600 dark:text-indigo-400"
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl">
-                  <span className="text-sm font-medium">Active Campaigns</span>
+                <div className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                  <span className="text-sm font-medium text-foreground">Active Campaigns</span>
                   <Badge variant="outline">12</Badge>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl">
-                  <span className="text-sm font-medium">New IOCs Today</span>
+                <div className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                  <span className="text-sm font-medium text-foreground">New IOCs Today</span>
                   <Badge variant="outline">47</Badge>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl">
-                  <span className="text-sm font-medium">Feed Updates</span>
+                <div className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                  <span className="text-sm font-medium text-foreground">Feed Updates</span>
                   <Badge variant="outline">8</Badge>
                 </div>
               </div>
@@ -380,20 +380,20 @@ export function ThreatMonitorPage() {
               iconColor="text-green-600 dark:text-green-400"
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl">
-                  <span className="text-sm font-medium">Detection Engines</span>
+                <div className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                  <span className="text-sm font-medium text-foreground">Detection Engines</span>
                   <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
                     Online
                   </Badge>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl">
-                  <span className="text-sm font-medium">Data Ingestion</span>
+                <div className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                  <span className="text-sm font-medium text-foreground">Data Ingestion</span>
                   <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
                     Active
                   </Badge>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted/30 dark:bg-muted/30 rounded-xl">
-                  <span className="text-sm font-medium">Alert Processing</span>
+                <div className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                  <span className="text-sm font-medium text-foreground">Alert Processing</span>
                   <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
                     Delayed
                   </Badge>

@@ -39,10 +39,10 @@ export const FeedManagementPage: React.FC = () => {
           {/* Page Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-foreground dark:text-foreground">
+              <h1 className="text-3xl md:text-4xl font-bold text-white">
                 Feed Management
               </h1>
-              <p className="text-lg text-muted-foreground dark:text-muted-foreground">
+              <p className="text-lg text-slate-300">
                 Manage threat intelligence feeds and import IOCs from external
                 sources
               </p>
@@ -51,7 +51,7 @@ export const FeedManagementPage: React.FC = () => {
             {canModify && (
               <Button
                 onClick={() => setShowUploadModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Feed
@@ -112,16 +112,16 @@ export const FeedManagementPage: React.FC = () => {
 
           {/* Main Content */}
           <Tabs defaultValue="feeds" className="space-y-6">
-            <TabsList className="bg-muted dark:bg-muted">
+            <TabsList className="bg-slate-700/50 border-slate-600">
               <TabsTrigger
                 value="feeds"
-                className="data-[state=active]:bg-background dark:data-[state=active]:bg-background data-[state=active]:text-foreground dark:data-[state=active]:text-foreground"
+                className="data-[state=active]:bg-slate-800/50 data-[state=active]:text-white text-slate-300"
               >
                 Feed Configuration
               </TabsTrigger>
               <TabsTrigger
                 value="guide"
-                className="data-[state=active]:bg-background dark:data-[state=active]:bg-background data-[state=active]:text-foreground dark:data-[state=active]:text-foreground"
+                className="data-[state=active]:bg-slate-800/50 data-[state=active]:text-white text-slate-300"
               >
                 Import Guide
               </TabsTrigger>
@@ -201,14 +201,14 @@ export const FeedManagementPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="border border-border dark:border-border rounded-lg p-4 bg-card dark:bg-card">
-                        <h4 className="font-medium text-foreground dark:text-foreground mb-2">
+                      <div className="border border-slate-600 rounded-lg p-4 bg-slate-800/50">
+                        <h4 className="font-medium text-white mb-2">
                           STIX Format
                         </h4>
-                        <p className="text-sm text-muted-foreground dark:text-muted-foreground mb-3">
+                        <p className="text-sm text-slate-300 mb-3">
                           Basic STIX 2.0 indicator objects. Limited support.
                         </p>
-                        <div className="bg-muted dark:bg-muted p-3 rounded text-sm font-mono text-foreground dark:text-foreground">
+                        <div className="bg-slate-700/50 p-3 rounded text-sm font-mono text-white">
                           {`{
   "objects": [
     {

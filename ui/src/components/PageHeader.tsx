@@ -62,17 +62,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               <React.Fragment key={index}>
                 <BreadcrumbItem>
                   {index === breadcrumbs.length - 1 ? (
-                    <BreadcrumbPage className="text-gray-600 dark:text-gray-400 text-sm">
+                    <BreadcrumbPage className="text-slate-400 text-sm">
                       {item.label}
                     </BreadcrumbPage>
                   ) : (
-                    <span className="text-gray-600 dark:text-gray-400 text-sm">
+                    <span className="text-slate-400 text-sm">
                       {item.label}
                     </span>
                   )}
                 </BreadcrumbItem>
                 {index < breadcrumbs.length - 1 && (
-                  <BreadcrumbSeparator className="text-gray-400" />
+                  <BreadcrumbSeparator className="text-slate-500" />
                 )}
               </React.Fragment>
             ))}
@@ -83,13 +83,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {Icon && <Icon className="h-8 w-8 text-blue-600" />}
+          {Icon && <Icon className="h-8 w-8 text-purple-400" />}
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            <h1 className="text-3xl font-bold text-white">
               {title}
             </h1>
             {description && (
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-slate-300 mt-1">
                 {description}
               </p>
             )}

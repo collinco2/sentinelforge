@@ -100,7 +100,7 @@ export function StatWidget({
         <CardTitle
           className={cn(
             styles.title,
-            "text-muted-foreground dark:text-muted-foreground",
+            "text-muted-foreground",
           )}
         >
           {title}
@@ -110,10 +110,10 @@ export function StatWidget({
       <CardContent
         className={cn(
           styles.content,
-          "text-card-foreground dark:text-card-foreground",
+          "text-foreground",
         )}
       >
-        <div className={cn(styles.value, "mb-1")}>
+        <div className={cn(styles.value, "mb-1 text-foreground")}>
           {typeof value === "number" ? value.toLocaleString() : value}
         </div>
 
@@ -123,7 +123,7 @@ export function StatWidget({
               <p
                 className={cn(
                   styles.description,
-                  "text-muted-foreground dark:text-muted-foreground",
+                  "text-muted-foreground",
                 )}
               >
                 {description}

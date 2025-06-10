@@ -48,8 +48,8 @@ export function UserRoleSelector() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
         Loading user...
       </div>
     );
@@ -69,7 +69,7 @@ export function UserRoleSelector() {
               {authService.getRoleDisplayName(user.role)}
             </span>
           </Badge>
-          <span className="text-sm text-gray-300">{user.username}</span>
+          <span className="text-sm text-foreground">{user.username}</span>
         </div>
       )}
 
@@ -78,20 +78,20 @@ export function UserRoleSelector() {
         value={user?.user_id.toString() || ""}
         onValueChange={handleRoleChange}
       >
-        <SelectTrigger className="w-[180px] bg-zinc-800 border-zinc-700 text-gray-300">
+        <SelectTrigger className="w-[180px] bg-card border-border text-foreground">
           <SelectValue placeholder="Select role..." />
         </SelectTrigger>
-        <SelectContent className="bg-zinc-800 border-zinc-700">
+        <SelectContent className="bg-card border-border">
           {demoUsers.map((demoUser) => (
             <SelectItem
               key={demoUser.id}
               value={demoUser.id.toString()}
-              className="text-gray-300 focus:bg-zinc-700 focus:text-white"
+              className="text-foreground focus:bg-muted focus:text-foreground"
             >
               <div className="flex items-center gap-2">
                 {getRoleIcon(demoUser.role)}
                 <span>{authService.getRoleDisplayName(demoUser.role)}</span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   ({demoUser.username})
                 </span>
               </div>

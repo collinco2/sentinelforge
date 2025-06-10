@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import { useThemeClass } from "@/hooks/useThemeClass";
 import {
   Home,
   BarChart2,
@@ -40,6 +41,7 @@ interface NavItem {
 export function Sidebar({ className }: SidebarProps) {
   const { hasRole } = useAuth();
   const { isCollapsed, toggle } = useSidebar();
+  const theme = useThemeClass();
 
   // Detect if running in development mode
   const isDevelopment = process.env.NODE_ENV === "development";
@@ -94,7 +96,8 @@ export function Sidebar({ className }: SidebarProps) {
     <TooltipProvider>
       <div
         className={cn(
-          "flex flex-col bg-card border-r border-border transition-all duration-300 h-screen",
+          "flex flex-col transition-all duration-300 h-screen",
+          theme.sidebar,
           isCollapsed ? "w-16" : "w-64",
           className,
         )}
@@ -104,7 +107,7 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="font-semibold text-lg text-foreground">
               <div>SentinelForge</div>
               {isDevelopment && (
-                <div className="text-xs text-amber-600 dark:text-amber-400 font-normal">
+                <div className="text-xs text-amber-500 font-normal">
                   🔧 Development Mode
                 </div>
               )}
@@ -148,11 +151,11 @@ export function Sidebar({ className }: SidebarProps) {
                         to={item.path}
                         className={({ isActive }) =>
                           cn(
-                            "flex items-center justify-center w-full text-sm font-medium rounded-md transition-colors px-2 py-3",
-                            "hover:bg-muted hover:text-foreground",
+                            "flex items-center justify-center w-full text-sm font-medium rounded-lg transition-colors px-2 py-3",
+                            theme.sidebarItem,
                             isActive
-                              ? "bg-muted text-primary font-semibold"
-                              : "text-muted-foreground",
+                              ? cn(theme.sidebarItemActive, "text-accent")
+                              : "",
                           )
                         }
                       >
@@ -168,11 +171,11 @@ export function Sidebar({ className }: SidebarProps) {
                     to={item.path}
                     className={({ isActive }) =>
                       cn(
-                        "flex items-center w-full text-sm font-medium rounded-md transition-colors px-3 py-2",
-                        "hover:bg-muted hover:text-foreground",
+                        "flex items-center w-full text-sm font-medium rounded-lg transition-colors px-3 py-2",
+                        theme.sidebarItem,
                         isActive
-                          ? "bg-muted text-primary font-semibold"
-                          : "text-muted-foreground",
+                          ? cn(theme.sidebarItemActive, "text-accent")
+                          : "",
                       )
                     }
                   >

@@ -24,6 +24,8 @@ import sqlite3
 import hashlib
 import secrets
 import time
+import json
+import datetime
 from enum import Enum
 from functools import wraps
 from typing import List, Optional, Dict, Any
@@ -521,13 +523,109 @@ def get_user_by_credentials(username: str, password: str) -> Optional[User]:
         return None
 
 
+def hash_api_key(api_key: str) -> str:
+    """Hash an API key using SHA-256 with salt."""
+    # Use a consistent salt for API keys (in production, use environment variable)
+    salt = "sentinelforge_api_key_salt_2024"
+    return hashlib.sha256((api_key + salt).encode()).hexdigest()
+
+
+def get_user_by_api_key(api_key: str) -> Optional[User]:
+    """Get user by API key."""
+    if not api_key:
+        return None
+
+    # Hash the provided key
+    key_hash = hash_api_key(api_key)
+
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cursor = conn.cursor()
+
+        # Look up the API key and get user info
+        cursor.execute("""
+            SELECT uak.*, u.username, u.email, u.role, u.is_active as user_active, u.created_at
+            FROM user_api_keys uak
+            JOIN users u ON uak.user_id = u.user_id
+            WHERE uak.key_hash = ? AND uak.is_active = 1
+        """, (key_hash,))
+
+        key_record = cursor.fetchone()
+
+        if not key_record:
+            conn.close()
+            return None
+
+        # Check if user is active
+        if not key_record['user_active']:
+            conn.close()
+            return None
+
+        # Check if key is expired
+        if key_record['expires_at']:
+            try:
+                expires_at = datetime.datetime.fromisoformat(key_record['expires_at'])
+                if datetime.datetime.now() > expires_at:
+                    conn.close()
+                    return None
+            except:
+                pass  # If parsing fails, assume no expiration
+
+        # Update last_used timestamp
+        try:
+            cursor.execute("""
+                UPDATE user_api_keys
+                SET last_used = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (key_record['id'],))
+            conn.commit()
+        except Exception as e:
+            print(f"Warning: Could not update last_used timestamp: {e}")
+
+        conn.close()
+
+        # Create User object
+        user = User(
+            user_id=key_record['user_id'],
+            username=key_record['username'],
+            email=key_record['email'],
+            role=UserRole(key_record['role']),
+            is_active=bool(key_record['user_active']),
+            created_at=key_record['created_at']
+        )
+
+        # Add API key specific attributes
+        user.api_key_id = key_record['id']
+        user.api_key_name = key_record['name']
+        user.access_scope = json.loads(key_record['access_scope']) if key_record['access_scope'] else ['read']
+        user.auth_method = 'api_key'
+
+        return user
+
+    except Exception as e:
+        print(f"Error getting user by API key: {e}")
+        conn.close()
+        return None
+
+
 def get_current_user() -> Optional[User]:
     """Get current user from request context."""
+    # Try API key from header first
+    api_key = request.headers.get("X-API-Key")
+    if api_key:
+        user = get_user_by_api_key(api_key)
+        if user:
+            return user
+
     # Try session token from header
     session_token = request.headers.get("X-Session-Token")
     if session_token:
         user = get_user_by_session(session_token)
         if user:
+            user.auth_method = 'session'
             return user
 
     # Try basic auth for demo purposes
@@ -538,14 +636,20 @@ def get_current_user() -> Optional[User]:
         try:
             credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
             username, password = credentials.split(":", 1)
-            return get_user_by_credentials(username, password)
+            user = get_user_by_credentials(username, password)
+            if user:
+                user.auth_method = 'basic'
+            return user
         except Exception:
             pass
 
     # Default demo user for testing (remove in production)
     demo_user_id = request.headers.get("X-Demo-User-ID")
     if demo_user_id:
-        return get_demo_user(int(demo_user_id))
+        user = get_demo_user(int(demo_user_id))
+        if user:
+            user.auth_method = 'demo'
+        return user
 
     return None
 

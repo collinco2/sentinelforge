@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { useSidebar } from "@/hooks/useSidebar";
-
 interface DashboardLayoutProps {
   children: React.ReactNode;
   title?: string;
@@ -18,7 +17,7 @@ export function DashboardLayout({
   const { isCollapsed, isMobile, close } = useSidebar();
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Sidebar */}
       <div
         className={cn(

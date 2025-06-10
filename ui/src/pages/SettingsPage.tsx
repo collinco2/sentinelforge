@@ -34,7 +34,6 @@ import {
   TabsTrigger,
 } from "../components/ui/tabs";
 import { Shield, AlertCircle, Key, Palette, Bell, Lock } from "lucide-react";
-
 export const SettingsPage: React.FC = () => {
   const { user, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState("api-tokens");
@@ -200,12 +199,12 @@ export const SettingsPage: React.FC = () => {
         </Tabs>
 
         {/* Footer Information */}
-        <div className="pt-8 border-t border-gray-200 dark:border-gray-700">
-          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
-            <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
+        <div className="pt-8 border-t border-slate-600">
+          <div className="bg-slate-800/50 rounded-lg p-4">
+            <h3 className="font-medium text-white mb-2">
               Security Best Practices
             </h3>
-            <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+            <ul className="text-sm text-slate-300 space-y-1">
               <li>• Rotate your authentication tokens regularly</li>
               <li>• Use strong, unique passwords for your account</li>
               <li>• Keep your API keys secure and don't share them</li>

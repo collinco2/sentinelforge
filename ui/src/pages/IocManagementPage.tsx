@@ -178,7 +178,7 @@ export function IocManagementPage() {
                 onOpenChange={setIsCreateModalOpen}
               >
                 <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Button className="bg-purple-600 hover:bg-purple-700 text-white">
                     <Plus className="h-4 w-4 mr-2" />
                     Add IOC
                   </Button>
@@ -466,7 +466,7 @@ export function IocManagementPage() {
                     Severity: {severityFilter}
                     <button
                       onClick={() => setSeverityFilter("all")}
-                      className="ml-1 hover:bg-muted rounded-full p-0.5"
+                      className="ml-1 hover:bg-slate-700 rounded-full p-0.5"
                     >
                       ×
                     </button>

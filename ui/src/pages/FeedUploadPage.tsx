@@ -116,16 +116,16 @@ export const FeedUploadPage: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-slate-300 mb-4">
                 Configure automated threat intelligence feeds from external
                 sources.
               </p>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
                   <span>•</span>
                   <span>Automated feed ingestion</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 text-sm text-slate-400">
                   <span>•</span>
                   <span>Schedule and monitor imports</span>
                 </div>

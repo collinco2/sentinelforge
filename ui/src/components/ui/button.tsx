@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,31 +18,31 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         className={cn(
-          // Base styles with enhanced focus visibility for WCAG 2.1
-          "inline-flex items-center justify-center rounded-md font-medium transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          // Base styles with enhanced focus visibility for WCAG 2.1 and SentinelForge theme
+          "inline-flex items-center justify-center font-medium transition-all duration-200",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
           "disabled:opacity-50 disabled:pointer-events-none ring-offset-background",
           // Enhanced focus for better accessibility
-          "focus:ring-2 focus:ring-ring focus:ring-offset-2",
+          "focus:ring-2 focus:ring-accent focus:ring-offset-2",
           {
-            // Primary - maintains good contrast
-            "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/95":
+            // Primary - SentinelForge theme with glow effect
+            "bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/95 rounded-2xl shadow-glow hover:shadow-glow-lg":
               variant === "default",
 
-            // Destructive - maintains good contrast
-            "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/95":
+            // Destructive - maintains good contrast with rounded corners
+            "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/95 rounded-2xl":
               variant === "destructive",
 
-            // Outline - enhanced with darker border and better contrast
-            "border-2 border-muted-foreground/30 text-foreground bg-background hover:bg-muted hover:border-muted-foreground/50 active:bg-muted/80":
+            // Outline - SentinelForge theme with border styling
+            "border border-border text-foreground bg-transparent hover:bg-muted hover:text-foreground active:bg-muted/80 rounded-2xl":
               variant === "outline",
 
-            // Secondary - enhanced contrast with darker background
-            "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground active:bg-muted/60":
+            // Secondary - SentinelForge panel styling
+            "bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:text-foreground active:bg-secondary/60 rounded-2xl":
               variant === "secondary",
 
-            // Ghost - enhanced with default text color for better visibility
-            "text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80":
+            // Ghost - enhanced with SentinelForge hover styling
+            "text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted/80 rounded-lg":
               variant === "ghost",
 
             // Link - maintains primary color for good contrast

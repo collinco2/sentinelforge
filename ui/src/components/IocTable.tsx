@@ -210,7 +210,7 @@ const PaginationControls = ({
           variant="outline"
           size="sm"
           disabled
-          className="border-zinc-700 bg-zinc-800"
+          className="border-border dark:border-border bg-secondary dark:bg-secondary"
         >
           <ChevronsLeft className="h-4 w-4" />
         </Button>
@@ -218,7 +218,7 @@ const PaginationControls = ({
           variant="outline"
           size="sm"
           disabled
-          className="border-zinc-700 bg-zinc-800"
+          className="border-border dark:border-border bg-secondary dark:bg-secondary"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -229,7 +229,7 @@ const PaginationControls = ({
           variant="outline"
           size="sm"
           disabled
-          className="border-zinc-700 bg-zinc-800"
+          className="border-border dark:border-border bg-secondary dark:bg-secondary"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -237,7 +237,7 @@ const PaginationControls = ({
           variant="outline"
           size="sm"
           disabled
-          className="border-zinc-700 bg-zinc-800"
+          className="border-border dark:border-border bg-secondary dark:bg-secondary"
         >
           <ChevronsRight className="h-4 w-4" />
         </Button>
@@ -253,7 +253,7 @@ const PaginationControls = ({
         onClick={() => onPageChange(0)}
         disabled={currentPage === 0}
         aria-label="First page"
-        className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+        className="border-border dark:border-border bg-secondary dark:bg-secondary hover:bg-muted dark:hover:bg-muted"
       >
         <ChevronsLeft className="h-4 w-4" />
         <span className="sr-only">First Page</span>
@@ -264,7 +264,7 @@ const PaginationControls = ({
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 0}
         aria-label="Previous page"
-        className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+        className="border-border dark:border-border bg-secondary dark:bg-secondary hover:bg-muted dark:hover:bg-muted"
       >
         <ChevronLeft className="h-4 w-4" />
         <span className="sr-only">Previous Page</span>
@@ -278,10 +278,10 @@ const PaginationControls = ({
             variant={pageNum === currentPage ? "default" : "outline"}
             size="sm"
             onClick={() => onPageChange(pageNum)}
-            className={`border-zinc-700 ${
+            className={`border-border dark:border-border ${
               pageNum === currentPage
-                ? "bg-blue-600 text-white"
-                : "bg-zinc-800 hover:bg-zinc-700"
+                ? "bg-primary dark:bg-primary text-primary-foreground dark:text-primary-foreground"
+                : "bg-secondary dark:bg-secondary hover:bg-muted dark:hover:bg-muted"
             }`}
             aria-current={pageNum === currentPage ? "page" : undefined}
             aria-label={`Page ${pageNum + 1}`}
@@ -302,7 +302,7 @@ const PaginationControls = ({
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage >= totalPages - 1}
         aria-label="Next page"
-        className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+        className="border-border dark:border-border bg-secondary dark:bg-secondary hover:bg-muted dark:hover:bg-muted"
       >
         <ChevronRight className="h-4 w-4" />
         <span className="sr-only">Next Page</span>
@@ -313,7 +313,7 @@ const PaginationControls = ({
         onClick={() => onPageChange(totalPages - 1)}
         disabled={currentPage >= totalPages - 1}
         aria-label="Last page"
-        className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
+        className="border-border dark:border-border bg-secondary dark:bg-secondary hover:bg-muted dark:hover:bg-muted"
       >
         <ChevronsRight className="h-4 w-4" />
         <span className="sr-only">Last Page</span>
@@ -609,47 +609,47 @@ export function IocTable({
     });
   };
 
-  // Get severity badge class based on severity level
+  // Get severity badge class based on severity level - using theme colors
   const getSeverityBadgeClass = (severity: IOCData["severity"]) => {
-    const baseClasses = "text-xs px-2 py-1 rounded-full bg-opacity-20";
+    const baseClasses = "text-xs px-2 py-1 rounded-full";
     switch (severity) {
       case "critical":
-        return `${baseClasses} bg-red-600 text-red-500 border border-red-600/20`;
+        return `${baseClasses} bg-critical/20 dark:bg-critical/20 text-critical dark:text-critical border border-critical/30 dark:border-critical/30`;
       case "high":
-        return `${baseClasses} bg-orange-600 text-orange-500 border border-orange-600/20`;
+        return `${baseClasses} bg-high/20 dark:bg-high/20 text-high dark:text-high border border-high/30 dark:border-high/30`;
       case "medium":
-        return `${baseClasses} bg-yellow-600 text-yellow-500 border border-yellow-600/20`;
+        return `${baseClasses} bg-medium/20 dark:bg-medium/20 text-medium dark:text-medium border border-medium/30 dark:border-medium/30`;
       case "low":
-        return `${baseClasses} bg-blue-600 text-blue-400 border border-blue-600/20`;
+        return `${baseClasses} bg-low/20 dark:bg-low/20 text-low dark:text-low border border-low/30 dark:border-low/30`;
       default:
-        return `${baseClasses} bg-gray-600 text-gray-400 border border-gray-600/20`;
+        return `${baseClasses} bg-tag-bg dark:bg-tag-bg text-tag-text dark:text-tag-text border border-border dark:border-border`;
     }
   };
 
-  // Get type badge class based on IOC type
+  // Get type badge class based on IOC type - using theme colors
   const getTypeBadgeClass = (type: IOCData["type"]) => {
     const baseClasses = "px-2 py-1 rounded-full text-xs font-medium";
     switch (type) {
       case "ip":
-        return `${baseClasses} bg-purple-600/20 text-purple-400 border border-purple-600/20`;
+        return `${baseClasses} bg-accent/20 dark:bg-accent/20 text-accent dark:text-accent border border-accent/30 dark:border-accent/30`;
       case "domain":
-        return `${baseClasses} bg-green-600/20 text-green-400 border border-green-600/20`;
+        return `${baseClasses} bg-low/20 dark:bg-low/20 text-low dark:text-low border border-low/30 dark:border-low/30`;
       case "file":
-        return `${baseClasses} bg-blue-600/20 text-blue-400 border border-blue-600/20`;
+        return `${baseClasses} bg-primary/20 dark:bg-primary/20 text-primary dark:text-primary border border-primary/30 dark:border-primary/30`;
       case "url":
-        return `${baseClasses} bg-teal-600/20 text-teal-400 border border-teal-600/20`;
+        return `${baseClasses} bg-chart-primary/20 dark:bg-chart-primary/20 text-chart-primary dark:text-chart-primary border border-chart-primary/30 dark:border-chart-primary/30`;
       case "email":
-        return `${baseClasses} bg-pink-600/20 text-pink-400 border border-pink-600/20`;
+        return `${baseClasses} bg-high/20 dark:bg-high/20 text-high dark:text-high border border-high/30 dark:border-high/30`;
       default:
-        return `${baseClasses} bg-gray-600/20 text-gray-400 border border-gray-600/20`;
+        return `${baseClasses} bg-tag-bg dark:bg-tag-bg text-tag-text dark:text-tag-text border border-border dark:border-border`;
     }
   };
 
-  // Get confidence bar color based on confidence level
+  // Get confidence bar color based on confidence level - using theme colors
   const getConfidenceBarColor = (confidence: number) => {
-    if (confidence > 90) return "bg-red-600";
-    if (confidence >= 70) return "bg-yellow-500";
-    return "bg-green-500";
+    if (confidence > 90) return "bg-critical dark:bg-critical";
+    if (confidence >= 70) return "bg-medium dark:bg-medium";
+    return "bg-low dark:bg-low";
   };
 
   // Add a new function to share an IOC link
