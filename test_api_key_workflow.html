@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelForge API Key Workflow Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { border-color: #4CAF50; background-color: #f8fff8; }
+        .error { border-color: #f44336; background-color: #fff8f8; }
+        .info { border-color: #2196F3; background-color: #f8f9ff; }
+        .warning { border-color: #ff9800; background-color: #fffaf8; }
+        button {
+            background: #6D4AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #5A3FD6; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .status {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 3px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.success { background: #4CAF50; color: white; }
+        .status.error { background: #f44336; color: white; }
+        .status.pending { background: #ff9800; color: white; }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .api-key-display {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        .key-list {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .key-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .key-item:last-child { border-bottom: none; }
+        .key-actions button {
+            padding: 5px 10px;
+            margin: 0 2px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔑 SentinelForge API Key Management Test</h1>
+        <p>This page tests the complete API key management workflow including authentication, creation, listing, rotation, and revocation.</p>
+    </div>
+
+    <!-- Authentication Section -->
+    <div class="container">
+        <h2>1. Authentication</h2>
+        <div id="auth-section" class="test-section info">
+            <div class="form-group">
+                <label>Username:</label>
+                <input type="text" id="username" value="admin" />
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" id="password" value="admin123" />
+            </div>
+            <button onclick="authenticate()">Login</button>
+            <div id="auth-status" class="status pending">Not authenticated</div>
+            <div id="auth-result"></div>
+        </div>
+    </div>
+
+    <!-- API Key Creation Section -->
+    <div class="container">
+        <h2>2. Create API Key</h2>
+        <div id="create-section" class="test-section info">
+            <div class="form-group">
+                <label>Key Name:</label>
+                <input type="text" id="key-name" value="Test API Key" />
+            </div>
+            <div class="form-group">
+                <label>Description:</label>
+                <textarea id="key-description" placeholder="Optional description">Test key for workflow validation</textarea>
+            </div>
+            <div class="form-group">
+                <label>Access Scope:</label>
+                <select id="key-scope" multiple>
+                    <option value="read" selected>Read</option>
+                    <option value="write" selected>Write</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Rate Limit Tier:</label>
+                <select id="rate-limit">
+                    <option value="standard" selected>Standard</option>
+                    <option value="premium">Premium</option>
+                    <option value="enterprise">Enterprise</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Expires In:</label>
+                <select id="expires-in">
+                    <option value="never" selected>Never</option>
+                    <option value="30d">30 days</option>
+                    <option value="90d">90 days</option>
+                    <option value="1y">1 year</option>
+                </select>
+            </div>
+            <button onclick="createApiKey()" disabled id="create-btn">Create API Key</button>
+            <div id="create-result"></div>
+            <div id="new-api-key" class="api-key-display" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- API Key List Section -->
+    <div class="container">
+        <h2>3. List API Keys</h2>
+        <div id="list-section" class="test-section info">
+            <button onclick="listApiKeys()" disabled id="list-btn">Refresh API Keys</button>
+            <div id="list-result"></div>
+            <div id="api-keys-list" class="key-list"></div>
+        </div>
+    </div>
+
+    <!-- Test API Key Usage Section -->
+    <div class="container">
+        <h2>4. Test API Key Usage</h2>
+        <div id="usage-section" class="test-section info">
+            <div class="form-group">
+                <label>API Key to Test:</label>
+                <input type="text" id="test-api-key" placeholder="Enter API key to test" />
+            </div>
+            <button onclick="testApiKeyUsage()" disabled id="test-btn">Test API Key</button>
+            <div id="usage-result"></div>
+        </div>
+    </div>
+
+    <!-- Results Summary -->
+    <div class="container">
+        <h2>5. Test Results Summary</h2>
+        <div id="summary-section" class="test-section info">
+            <div id="test-summary">
+                <p>Run the tests above to see a summary of results.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionToken = null;
+        let createdKeys = [];
+        let testResults = {
+            auth: false,
+            create: false,
+            list: false,
+            usage: false,
+            rotate: false,
+            revoke: false
+        };
+
+        // Authentication function
+        async function authenticate() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    sessionToken = result.session_token;
+                    localStorage.setItem('session_token', sessionToken);
+                    
+                    document.getElementById('auth-status').textContent = 'Authenticated';
+                    document.getElementById('auth-status').className = 'status success';
+                    document.getElementById('auth-result').innerHTML = `
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    `;
+                    document.getElementById('auth-section').className = 'test-section success';
+                    
+                    // Enable other buttons
+                    document.getElementById('create-btn').disabled = false;
+                    document.getElementById('list-btn').disabled = false;
+                    document.getElementById('test-btn').disabled = false;
+                    
+                    testResults.auth = true;
+                    updateSummary();
+                    
+                    // Auto-load existing keys
+                    listApiKeys();
+                } else {
+                    throw new Error(result.error || 'Authentication failed');
+                }
+            } catch (error) {
+                document.getElementById('auth-status').textContent = 'Authentication Failed';
+                document.getElementById('auth-status').className = 'status error';
+                document.getElementById('auth-result').innerHTML = `<pre>Error: ${error.message}</pre>`;
+                document.getElementById('auth-section').className = 'test-section error';
+                testResults.auth = false;
+                updateSummary();
+            }
+        }
+
+        // Create API Key function
+        async function createApiKey() {
+            if (!sessionToken) {
+                alert('Please authenticate first');
+                return;
+            }
+
+            const name = document.getElementById('key-name').value;
+            const description = document.getElementById('key-description').value;
+            const scopeSelect = document.getElementById('key-scope');
+            const accessScope = Array.from(scopeSelect.selectedOptions).map(option => option.value);
+            const rateLimitTier = document.getElementById('rate-limit').value;
+            const expiresIn = document.getElementById('expires-in').value;
+
+            const payload = {
+                name,
+                description,
+                access_scope: accessScope,
+                rate_limit_tier: rateLimitTier,
+                expires_in: expiresIn === 'never' ? null : expiresIn
+            };
+
+            try {
+                const response = await fetch('/api/user/api-keys', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Token': sessionToken
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('create-result').innerHTML = `
+                        <div class="status success">API Key Created Successfully!</div>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    `;
+                    
+                    // Display the new API key
+                    document.getElementById('new-api-key').style.display = 'block';
+                    document.getElementById('new-api-key').innerHTML = `
+                        <strong>⚠️ Save this API key - you won't see it again!</strong><br>
+                        <strong>API Key:</strong> ${result.api_key}<br>
+                        <strong>Key ID:</strong> ${result.key_id}<br>
+                        <strong>Preview:</strong> ${result.key_preview}
+                    `;
+                    
+                    // Store for testing
+                    createdKeys.push(result);
+                    document.getElementById('test-api-key').value = result.api_key;
+                    
+                    document.getElementById('create-section').className = 'test-section success';
+                    testResults.create = true;
+                    updateSummary();
+                    
+                    // Refresh the list
+                    listApiKeys();
+                } else {
+                    throw new Error(result.error || 'Failed to create API key');
+                }
+            } catch (error) {
+                document.getElementById('create-result').innerHTML = `
+                    <div class="status error">Creation Failed</div>
+                    <pre>Error: ${error.message}</pre>
+                `;
+                document.getElementById('create-section').className = 'test-section error';
+                testResults.create = false;
+                updateSummary();
+            }
+        }
+
+        // List API Keys function
+        async function listApiKeys() {
+            if (!sessionToken) {
+                alert('Please authenticate first');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/user/api-keys', {
+                    headers: {
+                        'X-Session-Token': sessionToken
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('list-result').innerHTML = `
+                        <div class="status success">Found ${result.api_keys.length} API keys</div>
+                    `;
+                    
+                    const keysList = document.getElementById('api-keys-list');
+                    keysList.innerHTML = '';
+                    
+                    result.api_keys.forEach(key => {
+                        const keyItem = document.createElement('div');
+                        keyItem.className = 'key-item';
+                        keyItem.innerHTML = `
+                            <div>
+                                <strong>${key.name}</strong><br>
+                                <small>Preview: ${key.key_preview}</small><br>
+                                <small>Scope: ${key.access_scope.join(', ')}</small><br>
+                                <small>Created: ${new Date(key.created_at).toLocaleString()}</small>
+                            </div>
+                            <div class="key-actions">
+                                <button onclick="rotateApiKey('${key.id}', '${key.name}')">Rotate</button>
+                                <button onclick="revokeApiKey('${key.id}', '${key.name}')" style="background: #f44336;">Revoke</button>
+                            </div>
+                        `;
+                        keysList.appendChild(keyItem);
+                    });
+                    
+                    document.getElementById('list-section').className = 'test-section success';
+                    testResults.list = true;
+                    updateSummary();
+                } else {
+                    throw new Error(result.error || 'Failed to list API keys');
+                }
+            } catch (error) {
+                document.getElementById('list-result').innerHTML = `
+                    <div class="status error">List Failed</div>
+                    <pre>Error: ${error.message}</pre>
+                `;
+                document.getElementById('list-section').className = 'test-section error';
+                testResults.list = false;
+                updateSummary();
+            }
+        }
+
+        // Test API Key Usage
+        async function testApiKeyUsage() {
+            const apiKey = document.getElementById('test-api-key').value;
+            if (!apiKey) {
+                alert('Please enter an API key to test');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/user/api-keys', {
+                    headers: {
+                        'X-API-Key': apiKey
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('usage-result').innerHTML = `
+                        <div class="status success">API Key Works! ✅</div>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    `;
+                    document.getElementById('usage-section').className = 'test-section success';
+                    testResults.usage = true;
+                    updateSummary();
+                } else {
+                    throw new Error(result.error || 'API key test failed');
+                }
+            } catch (error) {
+                document.getElementById('usage-result').innerHTML = `
+                    <div class="status error">API Key Test Failed</div>
+                    <pre>Error: ${error.message}</pre>
+                `;
+                document.getElementById('usage-section').className = 'test-section error';
+                testResults.usage = false;
+                updateSummary();
+            }
+        }
+
+        // Rotate API Key
+        async function rotateApiKey(keyId, keyName) {
+            if (!confirm(`Are you sure you want to rotate the API key "${keyName}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/user/api-keys/${keyId}/rotate`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Session-Token': sessionToken
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`API key "${keyName}" rotated successfully!\nNew key: ${result.api_key}`);
+                    testResults.rotate = true;
+                    updateSummary();
+                    listApiKeys(); // Refresh the list
+                } else {
+                    throw new Error(result.error || 'Failed to rotate API key');
+                }
+            } catch (error) {
+                alert(`Failed to rotate API key: ${error.message}`);
+                testResults.rotate = false;
+                updateSummary();
+            }
+        }
+
+        // Revoke API Key
+        async function revokeApiKey(keyId, keyName) {
+            if (!confirm(`Are you sure you want to revoke the API key "${keyName}"? This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/user/api-keys/${keyId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Session-Token': sessionToken
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`API key "${keyName}" revoked successfully!`);
+                    testResults.revoke = true;
+                    updateSummary();
+                    listApiKeys(); // Refresh the list
+                } else {
+                    throw new Error(result.error || 'Failed to revoke API key');
+                }
+            } catch (error) {
+                alert(`Failed to revoke API key: ${error.message}`);
+                testResults.revoke = false;
+                updateSummary();
+            }
+        }
+
+        // Update test summary
+        function updateSummary() {
+            const passed = Object.values(testResults).filter(Boolean).length;
+            const total = Object.keys(testResults).length;
+            
+            document.getElementById('test-summary').innerHTML = `
+                <h3>Test Results: ${passed}/${total} Passed</h3>
+                <ul>
+                    <li>Authentication: ${testResults.auth ? '✅ PASS' : '❌ FAIL'}</li>
+                    <li>Create API Key: ${testResults.create ? '✅ PASS' : '❌ FAIL'}</li>
+                    <li>List API Keys: ${testResults.list ? '✅ PASS' : '❌ FAIL'}</li>
+                    <li>Test API Key Usage: ${testResults.usage ? '✅ PASS' : '❌ FAIL'}</li>
+                    <li>Rotate API Key: ${testResults.rotate ? '✅ PASS' : '⏳ PENDING'}</li>
+                    <li>Revoke API Key: ${testResults.revoke ? '✅ PASS' : '⏳ PENDING'}</li>
+                </ul>
+                ${passed === total ? '<div class="status success">All tests passed! 🎉</div>' : ''}
+            `;
+        }
+
+        // Initialize
+        updateSummary();
+        
+        // Check if already authenticated
+        const storedToken = localStorage.getItem('session_token');
+        if (storedToken) {
+            sessionToken = storedToken;
+            document.getElementById('auth-status').textContent = 'Using stored token';
+            document.getElementById('auth-status').className = 'status success';
+            document.getElementById('create-btn').disabled = false;
+            document.getElementById('list-btn').disabled = false;
+            document.getElementById('test-btn').disabled = false;
+            listApiKeys();
+        }
+    </script>
+</body>
+</html>

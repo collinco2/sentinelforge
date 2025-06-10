@@ -15,7 +15,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription,
   DialogFooter,
 } from "../ui/dialog";
@@ -99,6 +98,19 @@ export const ApiKeyManagement: React.FC = () => {
     fetchApiKeys();
   }, []);
 
+  // Debug effect to check if Dialog component is rendering
+  useEffect(() => {
+    console.log("ApiKeyManagement component mounted");
+    console.log("Dialog component available:", typeof Dialog);
+  }, []);
+
+  // Debug effect to log when dialog should be rendering
+  useEffect(() => {
+    if (showCreateDialog) {
+      console.log("Dialog should be visible now - DialogContent should render");
+    }
+  }, [showCreateDialog]);
+
   // Form validation functions
   const validateStep1 = () => {
     const errors: Record<string, string> = {};
@@ -152,9 +164,11 @@ export const ApiKeyManagement: React.FC = () => {
 
   const fetchApiKeys = async () => {
     try {
+      const sessionToken = localStorage.getItem("session_token");
+
       const response = await fetch("/api/user/api-keys", {
         headers: {
-          "X-Session-Token": localStorage.getItem("session_token") || "",
+          "X-Session-Token": sessionToken || "",
         },
       });
 
@@ -162,7 +176,7 @@ export const ApiKeyManagement: React.FC = () => {
         const data = await response.json();
         setApiKeys(data.api_keys || []);
       } else {
-        console.error("Failed to fetch API keys");
+        console.error("Failed to fetch API keys:", response.status);
         toast.error("Failed to load API keys");
       }
     } catch (error) {
@@ -395,9 +409,11 @@ export const ApiKeyManagement: React.FC = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const handleDialogClose = () => {
-    setShowCreateDialog(false);
-    resetForm();
+  const handleDialogOpenChange = (open: boolean) => {
+    setShowCreateDialog(open);
+    if (!open) {
+      resetForm();
+    }
   };
 
   const getStepTitle = (step: number) => {
@@ -439,437 +455,14 @@ export const ApiKeyManagement: React.FC = () => {
             <Key className="h-5 w-5" />
             API Keys
           </div>
-          <Dialog open={showCreateDialog} onOpenChange={handleDialogClose}>
-            <DialogTrigger asChild>
-              <Button size="sm" data-testid="create-api-key-button">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Key
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="w-full max-w-screen-sm sm:max-w-2xl max-h-[95vh] overflow-y-auto">
-              <DialogHeader className="pb-4">
-                <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                  <Key className="h-5 w-5" />
-                  Create New API Key
-                </DialogTitle>
-                <div className="flex items-center gap-2 mt-3">
-                  {[1, 2, 3].map((step) => (
-                    <div key={step} className="flex items-center">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                          step === currentStep
-                            ? "bg-blue-600 text-white"
-                            : step < currentStep
-                              ? "bg-green-600 text-white"
-                              : "bg-gray-200 text-gray-600"
-                        }`}
-                      >
-                        {step < currentStep ? (
-                          <CheckCircle className="h-4 w-4" />
-                        ) : (
-                          step
-                        )}
-                      </div>
-                      {step < 3 && (
-                        <div
-                          className={`w-12 h-1 mx-2 ${
-                            step < currentStep ? "bg-green-600" : "bg-gray-200"
-                          }`}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm text-gray-600 mt-2">
-                  Step {currentStep} of 3: {getStepTitle(currentStep)}
-                </p>
-              </DialogHeader>
-
-              <div className="space-y-6 mt-6">
-                {/* Step 1: Basic Information */}
-                {currentStep === 1 && (
-                  <div className="space-y-4 sm:space-y-6">
-                    <div className="space-y-3">
-                      <Label htmlFor="key-name" className="text-sm font-medium">
-                        Key Name *
-                      </Label>
-                      <Input
-                        id="key-name"
-                        value={formData.name}
-                        onChange={(e) => {
-                          setFormData((prev) => ({
-                            ...prev,
-                            name: e.target.value,
-                          }));
-                          clearFieldError("name");
-                        }}
-                        placeholder="e.g., Production API Access"
-                        data-testid="api-key-name-input"
-                        className={`min-h-[44px] sm:min-h-[40px] ${formErrors.name ? "border-red-500" : ""}`}
-                        aria-invalid={!!formErrors.name}
-                        aria-describedby={
-                          formErrors.name ? "key-name-error" : "key-name-help"
-                        }
-                      />
-                      {formErrors.name && (
-                        <p
-                          id="key-name-error"
-                          className="text-sm text-red-600 mt-1"
-                        >
-                          {formErrors.name}
-                        </p>
-                      )}
-                      <p id="key-name-help" className="text-xs text-gray-500">
-                        Choose a descriptive name to help identify this key's
-                        purpose
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <Label
-                        htmlFor="key-description"
-                        className="text-sm font-medium"
-                      >
-                        Description (Optional)
-                      </Label>
-                      <Textarea
-                        id="key-description"
-                        value={formData.description}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            description: e.target.value,
-                          }))
-                        }
-                        placeholder="Describe what this API key will be used for..."
-                        rows={3}
-                        className="min-h-[88px] resize-none"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Provide additional context about this key's intended use
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 2: Access & Security */}
-                {currentStep === 2 && (
-                  <div className="space-y-6">
-                    <div className="space-y-4">
-                      <Label className="text-sm font-medium">
-                        Access Permissions *
-                      </Label>
-                      <div
-                        className="space-y-3"
-                        role="group"
-                        aria-describedby={
-                          formErrors.accessScope
-                            ? "access-scope-error"
-                            : "access-scope-help"
-                        }
-                      >
-                        {[
-                          {
-                            id: "read",
-                            label: "Read",
-                            description: "View alerts, IOCs, and feeds",
-                          },
-                          {
-                            id: "write",
-                            label: "Write",
-                            description: "Create and update data",
-                          },
-                          {
-                            id: "delete",
-                            label: "Delete",
-                            description: "Remove alerts and IOCs",
-                          },
-                          {
-                            id: "admin",
-                            label: "Admin",
-                            description: "Manage feeds and system settings",
-                          },
-                        ].map((scope) => (
-                          <div
-                            key={scope.id}
-                            className="flex items-start space-x-3"
-                          >
-                            <Checkbox
-                              id={scope.id}
-                              checked={formData.accessScope.includes(scope.id)}
-                              onCheckedChange={(checked) => {
-                                handleScopeChange(scope.id, checked as boolean);
-                                clearFieldError("accessScope");
-                              }}
-                            />
-                            <div className="space-y-1">
-                              <Label
-                                htmlFor={scope.id}
-                                className="text-sm font-medium"
-                              >
-                                {scope.label}
-                              </Label>
-                              <p className="text-xs text-gray-500">
-                                {scope.description}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      {formErrors.accessScope && (
-                        <p
-                          id="access-scope-error"
-                          className="text-sm text-red-600 mt-1"
-                        >
-                          {formErrors.accessScope}
-                        </p>
-                      )}
-                      <p
-                        id="access-scope-help"
-                        className="text-xs text-gray-500"
-                      >
-                        Select the permissions this API key should have
-                      </p>
-                    </div>
-
-                    <Accordion type="single" collapsible className="w-full">
-                      <AccordionItem value="advanced-security">
-                        <AccordionTrigger className="text-sm font-medium">
-                          <div className="flex items-center gap-2">
-                            <Settings className="h-4 w-4" />
-                            Advanced Security Options
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="space-y-4">
-                          <div className="space-y-3">
-                            <Label className="text-sm font-medium">
-                              Expiration
-                            </Label>
-                            <select
-                              value={formData.expiresIn}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  expiresIn: e.target.value as any,
-                                }))
-                              }
-                              className="w-full p-2 border rounded-md text-sm"
-                            >
-                              <option value="30d">30 days</option>
-                              <option value="90d">90 days</option>
-                              <option value="1y">1 year</option>
-                              <option value="never">Never expires</option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label className="text-sm font-medium">
-                              Rate Limit Tier
-                            </Label>
-                            <select
-                              value={formData.rateLimitTier}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  rateLimitTier: e.target.value as any,
-                                }))
-                              }
-                              className="w-full p-2 border rounded-md text-sm"
-                            >
-                              <option value="basic">Basic (100 req/min)</option>
-                              <option value="standard">
-                                Standard (500 req/min)
-                              </option>
-                              <option value="premium">
-                                Premium (1000 req/min)
-                              </option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label
-                              htmlFor="ip-restrictions"
-                              className="text-sm font-medium"
-                            >
-                              IP Restrictions (Optional)
-                            </Label>
-                            <Textarea
-                              id="ip-restrictions"
-                              value={formData.ipRestrictions}
-                              onChange={(e) => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  ipRestrictions: e.target.value,
-                                }));
-                                clearFieldError("ipRestrictions");
-                              }}
-                              placeholder="192.168.1.0/24&#10;10.0.0.1"
-                              rows={3}
-                              className={
-                                formErrors.ipRestrictions
-                                  ? "border-red-500"
-                                  : ""
-                              }
-                              aria-invalid={!!formErrors.ipRestrictions}
-                              aria-describedby={
-                                formErrors.ipRestrictions
-                                  ? "ip-restrictions-error"
-                                  : "ip-restrictions-help"
-                              }
-                            />
-                            {formErrors.ipRestrictions && (
-                              <p
-                                id="ip-restrictions-error"
-                                className="text-sm text-red-600 mt-1"
-                              >
-                                {formErrors.ipRestrictions}
-                              </p>
-                            )}
-                            <p
-                              id="ip-restrictions-help"
-                              className="text-xs text-gray-500"
-                            >
-                              Enter IP addresses or CIDR blocks, one per line
-                            </p>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </div>
-                )}
-
-                {/* Step 3: Review & Create */}
-                {currentStep === 3 && (
-                  <div className="space-y-6">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                        <div>
-                          <h4 className="font-medium text-blue-900">
-                            Review Your API Key Configuration
-                          </h4>
-                          <p className="text-sm text-blue-700 mt-1">
-                            Please review the settings below before creating
-                            your API key.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-sm font-medium text-gray-700">
-                            Name
-                          </Label>
-                          <p className="text-sm text-gray-900 mt-1">
-                            {formData.name}
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-gray-700">
-                            Expiration
-                          </Label>
-                          <p className="text-sm text-gray-900 mt-1">
-                            {formData.expiresIn === "never"
-                              ? "Never expires"
-                              : formData.expiresIn}
-                          </p>
-                        </div>
-                      </div>
-
-                      {formData.description && (
-                        <div>
-                          <Label className="text-sm font-medium text-gray-700">
-                            Description
-                          </Label>
-                          <p className="text-sm text-gray-900 mt-1">
-                            {formData.description}
-                          </p>
-                        </div>
-                      )}
-
-                      <div>
-                        <Label className="text-sm font-medium text-gray-700">
-                          Access Permissions
-                        </Label>
-                        <div className="flex gap-2 mt-1">
-                          {formData.accessScope.map((scope) => (
-                            <Badge key={scope} variant="outline">
-                              {scope}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <Label className="text-sm font-medium text-gray-700">
-                          Rate Limit
-                        </Label>
-                        <p className="text-sm text-gray-900 mt-1 capitalize">
-                          {formData.rateLimitTier}
-                        </p>
-                      </div>
-
-                      {formData.ipRestrictions && (
-                        <div>
-                          <Label className="text-sm font-medium text-gray-700">
-                            IP Restrictions
-                          </Label>
-                          <pre className="text-sm text-gray-900 mt-1 bg-gray-50 p-2 rounded border">
-                            {formData.ipRestrictions}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Navigation Buttons */}
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-3 pt-6 border-t">
-                  <div className="order-2 sm:order-1">
-                    {currentStep > 1 && (
-                      <Button
-                        variant="outline"
-                        onClick={prevStep}
-                        className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-2" />
-                        Previous
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-2 order-1 sm:order-2">
-                    <Button
-                      variant="outline"
-                      onClick={handleDialogClose}
-                      className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
-                    >
-                      Cancel
-                    </Button>
-                    {currentStep < 3 ? (
-                      <Button
-                        onClick={nextStep}
-                        className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-2" />
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={createApiKey}
-                        disabled={creating}
-                        data-testid="confirm-create-key"
-                        className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
-                      >
-                        {creating ? "Creating..." : "Create API Key"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button
+            size="sm"
+            data-testid="create-api-key-button"
+            onClick={() => setShowCreateDialog(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Key
+          </Button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1153,6 +746,438 @@ export const ApiKeyManagement: React.FC = () => {
               Rotate Key
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create API Key Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-full max-w-screen-sm sm:max-w-2xl max-h-[95vh] overflow-y-auto">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <Key className="h-5 w-5" />
+              Create New API Key
+            </DialogTitle>
+            <div className="flex items-center gap-2 mt-3">
+              {[1, 2, 3].map((step) => (
+                <div key={step} className="flex items-center">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      step === currentStep
+                        ? "bg-blue-600 text-white"
+                        : step < currentStep
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-200 text-gray-600"
+                    }`}
+                  >
+                    {step < currentStep ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      step
+                    )}
+                  </div>
+                  {step < 3 && (
+                    <div
+                      className={`w-12 h-1 mx-2 ${
+                        step < currentStep ? "bg-green-600" : "bg-gray-200"
+                      }`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-600 mt-2">
+              Step {currentStep} of 3: {getStepTitle(currentStep)}
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-6 mt-6">
+            {/* Step 1: Basic Information */}
+            {currentStep === 1 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="key-name" className="text-sm font-medium">
+                    Key Name *
+                  </Label>
+                  <Input
+                    id="key-name"
+                    value={formData.name}
+                    onChange={(e) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }));
+                      clearFieldError("name");
+                    }}
+                    placeholder="e.g., Production API Access"
+                    data-testid="api-key-name-input"
+                    className={`min-h-[44px] sm:min-h-[40px] ${formErrors.name ? "border-red-500" : ""}`}
+                    aria-invalid={!!formErrors.name}
+                    aria-describedby={
+                      formErrors.name ? "key-name-error" : "key-name-help"
+                    }
+                  />
+                  {formErrors.name && (
+                    <p
+                      id="key-name-error"
+                      className="text-sm text-red-600 mt-1"
+                    >
+                      {formErrors.name}
+                    </p>
+                  )}
+                  <p id="key-name-help" className="text-xs text-gray-500">
+                    Choose a descriptive name to help identify this key's
+                    purpose
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Label
+                    htmlFor="key-description"
+                    className="text-sm font-medium"
+                  >
+                    Description (Optional)
+                  </Label>
+                  <Textarea
+                    id="key-description"
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    placeholder="Describe what this API key will be used for..."
+                    rows={3}
+                    className="min-h-[88px] resize-none"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Provide additional context about this key's intended use
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Access & Security */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">
+                    Access Permissions *
+                  </Label>
+                  <div
+                    className="space-y-3"
+                    role="group"
+                    aria-describedby={
+                      formErrors.accessScope
+                        ? "access-scope-error"
+                        : "access-scope-help"
+                    }
+                  >
+                    {[
+                      {
+                        id: "read",
+                        label: "Read",
+                        description: "View alerts, IOCs, and feeds",
+                      },
+                      {
+                        id: "write",
+                        label: "Write",
+                        description: "Create and update data",
+                      },
+                      {
+                        id: "delete",
+                        label: "Delete",
+                        description: "Remove alerts and IOCs",
+                      },
+                      {
+                        id: "admin",
+                        label: "Admin",
+                        description: "Manage feeds and system settings",
+                      },
+                    ].map((scope) => (
+                      <div
+                        key={scope.id}
+                        className="flex items-start space-x-3"
+                      >
+                        <Checkbox
+                          id={scope.id}
+                          checked={formData.accessScope.includes(scope.id)}
+                          onCheckedChange={(checked) => {
+                            handleScopeChange(scope.id, checked as boolean);
+                            clearFieldError("accessScope");
+                          }}
+                        />
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor={scope.id}
+                            className="text-sm font-medium"
+                          >
+                            {scope.label}
+                          </Label>
+                          <p className="text-xs text-gray-500">
+                            {scope.description}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {formErrors.accessScope && (
+                    <p
+                      id="access-scope-error"
+                      className="text-sm text-red-600 mt-1"
+                    >
+                      {formErrors.accessScope}
+                    </p>
+                  )}
+                  <p id="access-scope-help" className="text-xs text-gray-500">
+                    Select the permissions this API key should have
+                  </p>
+                </div>
+
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="advanced-security">
+                    <AccordionTrigger className="text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <Settings className="h-4 w-4" />
+                        Advanced Security Options
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4">
+                      <div className="space-y-3">
+                        <Label
+                          htmlFor="expiration-select"
+                          className="text-sm font-medium"
+                        >
+                          Expiration
+                        </Label>
+                        <select
+                          id="expiration-select"
+                          name="expiresIn"
+                          value={formData.expiresIn}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              expiresIn: e.target.value as any,
+                            }))
+                          }
+                          className="w-full p-2 border rounded-md text-sm"
+                        >
+                          <option value="30d">30 days</option>
+                          <option value="90d">90 days</option>
+                          <option value="1y">1 year</option>
+                          <option value="never">Never expires</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label
+                          htmlFor="rate-limit-select"
+                          className="text-sm font-medium"
+                        >
+                          Rate Limit Tier
+                        </Label>
+                        <select
+                          id="rate-limit-select"
+                          name="rateLimitTier"
+                          value={formData.rateLimitTier}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              rateLimitTier: e.target.value as any,
+                            }))
+                          }
+                          className="w-full p-2 border rounded-md text-sm"
+                        >
+                          <option value="basic">Basic (100 req/min)</option>
+                          <option value="standard">
+                            Standard (500 req/min)
+                          </option>
+                          <option value="premium">
+                            Premium (1000 req/min)
+                          </option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label
+                          htmlFor="ip-restrictions"
+                          className="text-sm font-medium"
+                        >
+                          IP Restrictions (Optional)
+                        </Label>
+                        <Textarea
+                          id="ip-restrictions"
+                          value={formData.ipRestrictions}
+                          onChange={(e) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              ipRestrictions: e.target.value,
+                            }));
+                            clearFieldError("ipRestrictions");
+                          }}
+                          placeholder="192.168.1.0/24&#10;10.0.0.1"
+                          rows={3}
+                          className={
+                            formErrors.ipRestrictions ? "border-red-500" : ""
+                          }
+                          aria-invalid={!!formErrors.ipRestrictions}
+                          aria-describedby={
+                            formErrors.ipRestrictions
+                              ? "ip-restrictions-error"
+                              : "ip-restrictions-help"
+                          }
+                        />
+                        {formErrors.ipRestrictions && (
+                          <p
+                            id="ip-restrictions-error"
+                            className="text-sm text-red-600 mt-1"
+                          >
+                            {formErrors.ipRestrictions}
+                          </p>
+                        )}
+                        <p
+                          id="ip-restrictions-help"
+                          className="text-xs text-gray-500"
+                        >
+                          Enter IP addresses or CIDR blocks, one per line
+                        </p>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </div>
+            )}
+
+            {/* Step 3: Review & Create */}
+            {currentStep === 3 && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-blue-900">
+                        Review Your API Key Configuration
+                      </h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Please review the settings below before creating your
+                        API key.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">
+                        Name
+                      </Label>
+                      <p className="text-sm text-gray-900 mt-1">
+                        {formData.name}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">
+                        Expiration
+                      </Label>
+                      <p className="text-sm text-gray-900 mt-1">
+                        {formData.expiresIn === "never"
+                          ? "Never expires"
+                          : formData.expiresIn}
+                      </p>
+                    </div>
+                  </div>
+
+                  {formData.description && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">
+                        Description
+                      </Label>
+                      <p className="text-sm text-gray-900 mt-1">
+                        {formData.description}
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">
+                      Access Permissions
+                    </Label>
+                    <div className="flex gap-2 mt-1">
+                      {formData.accessScope.map((scope) => (
+                        <Badge key={scope} variant="outline">
+                          {scope}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">
+                      Rate Limit
+                    </Label>
+                    <p className="text-sm text-gray-900 mt-1 capitalize">
+                      {formData.rateLimitTier}
+                    </p>
+                  </div>
+
+                  {formData.ipRestrictions && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">
+                        IP Restrictions
+                      </Label>
+                      <pre className="text-sm text-gray-900 mt-1 bg-gray-50 p-2 rounded border">
+                        {formData.ipRestrictions}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex flex-col sm:flex-row sm:justify-between gap-3 pt-6 border-t">
+              <div className="order-2 sm:order-1">
+                {currentStep > 1 && (
+                  <Button
+                    variant="outline"
+                    onClick={prevStep}
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Previous
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-2 order-1 sm:order-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handleDialogOpenChange(false)}
+                  className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
+                >
+                  Cancel
+                </Button>
+                {currentStep < 3 ? (
+                  <Button
+                    onClick={nextStep}
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={createApiKey}
+                    disabled={creating}
+                    data-testid="confirm-create-key"
+                    className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px]"
+                  >
+                    {creating ? "Creating..." : "Create API Key"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>
