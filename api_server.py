@@ -4335,7 +4335,10 @@ def manage_health_scheduler():
                     return jsonify(
                         {
                             "success": True,
-                            "message": f"Health check scheduler started with {interval_minutes}-minute interval",
+                            "message": (
+                                f"Health check scheduler started with "
+                                f"{interval_minutes}-minute interval"
+                            ),
                             "scheduler": monitor.get_scheduler_status(),
                         }
                     )
@@ -4456,7 +4459,10 @@ def setup_demo_feeds():
             return jsonify(
                 {
                     "error": "Confirmation required",
-                    "message": "Add ?confirm=true or include 'confirm': true in request body to proceed",
+                    "message": (
+                        "Add ?confirm=true or include 'confirm': true "
+                        "in request body to proceed"
+                    ),
                 }
             ), 400
 
