@@ -75,7 +75,8 @@ def infer_ioc_type(ioc_value):
     elif re.match(r"^[a-fA-F0-9]{32,64}$", ioc_value):
         return "hash"
     elif re.match(
-        r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$",
+        r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?"
+        r"(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$",
         ioc_value,
     ):
         return "domain"
@@ -561,8 +562,12 @@ def get_iocs():
         {
             "id": 14,
             "ioc_type": "hash",
-            "ioc_value": "5241acbddc07ce49cca44076264344717b30a303acb825075471e83468c5585",
-            "value": "5241acbddc07ce49cca44076264344717b30a303acb825075471e83468c5585",
+            "ioc_value": (
+                "5241acbddc07ce49cca44076264344717b30a303acb825075471e83468c5585"
+            ),
+            "value": (
+                "5241acbddc07ce49cca44076264344717b30a303acb825075471e83468c5585"
+            ),
             "score": 8.9,
             "category": "critical",
             "first_seen": "2023-06-05 14:22:36",
@@ -792,7 +797,11 @@ def explain_ml(ioc_value):
         # Generate explanation based on IOC type (use the existing mock data)
         if ioc_type == "domain":
             explanation = {
-                "summary": "This domain exhibits characteristics associated with malware distribution infrastructure. The domain age, entropy, and lexical patterns strongly suggest malicious intent.",
+                "summary": (
+                    "This domain exhibits characteristics associated with malware "
+                    "distribution infrastructure. The domain age, entropy, and "
+                    "lexical patterns strongly suggest malicious intent."
+                ),
                 "feature_breakdown": [
                     {"feature": "Domain Age", "value": "3 days", "weight": -0.42},
                     {
