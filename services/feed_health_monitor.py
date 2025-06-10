@@ -89,9 +89,10 @@ class FeedHealthMonitor:
         return logger
 
     def get_db_connection(self) -> Optional[sqlite3.Connection]:
-        """Get database connection with error handling."""
+        """Get database connection with error handling and timeout."""
         try:
-            conn = sqlite3.connect(self.db_path)
+            # Add timeout to prevent hanging
+            conn = sqlite3.connect(self.db_path, timeout=10.0)
             conn.row_factory = sqlite3.Row
             return conn
         except Exception as e:
@@ -191,14 +192,14 @@ class FeedHealthMonitor:
             # Determine request method based on feed type
             method = "HEAD" if feed.get("feed_type") in ["txt", "csv"] else "GET"
 
-            # Make request with timeout
+            # Make request with SHORT timeout to prevent hanging
             if method == "HEAD":
                 response = self.session.head(
-                    url, headers=headers, timeout=30, allow_redirects=True
+                    url, headers=headers, timeout=5, allow_redirects=True
                 )
             else:
                 response = self.session.get(
-                    url, headers=headers, timeout=30, allow_redirects=True, stream=True
+                    url, headers=headers, timeout=5, allow_redirects=True, stream=True
                 )
                 # For GET requests, only read first 1KB to check availability
                 if hasattr(response, "iter_content"):
