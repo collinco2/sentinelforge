@@ -104,14 +104,29 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
 
                 # Copy response body
-                self.wfile.write(response.read())
+                try:
+                    self.wfile.write(response.read())
+                except (BrokenPipeError, ConnectionResetError):
+                    # Client disconnected during response, ignore
+                    pass
 
         except urllib.error.HTTPError as e:
             print(f"API request failed: {e}")
-            self.send_error(e.code, e.reason)
+            try:
+                self.send_error(e.code, e.reason)
+            except (BrokenPipeError, ConnectionResetError):
+                # Client disconnected, ignore
+                pass
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected during proxy request, ignore
+            pass
         except Exception as e:
             print(f"Proxy error: {e}")
-            self.send_error(500, "Internal Server Error")
+            try:
+                self.send_error(500, "Internal Server Error")
+            except (BrokenPipeError, ConnectionResetError):
+                # Client disconnected, ignore
+                pass
 
     def do_HEAD(self):
         # Handle HEAD requests the same way as GET requests
@@ -163,15 +178,19 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
 
     def end_headers(self):
         # Add CORS headers for API requests
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header(
-            "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        )
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Authorization, X-Session-Token",
-        )
-        super().end_headers()
+        try:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, X-Session-Token",
+            )
+            super().end_headers()
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected, ignore
+            pass
 
 
 def main():

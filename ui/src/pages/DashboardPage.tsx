@@ -11,7 +11,11 @@ import {
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { useThemeClass, getStatusBadgeClass, getSeverityBadgeClass } from "../hooks/useThemeClass";
+import {
+  useThemeClass,
+  getStatusBadgeClass,
+  getSeverityBadgeClass,
+} from "../hooks/useThemeClass";
 import {
   HeartPulse,
   Shield,
@@ -24,7 +28,10 @@ import {
   FileText,
   Database,
   Activity,
+  RefreshCw,
 } from "lucide-react";
+import { useHealthCheck } from "../hooks/useHealthCheck";
+import ProgressModal from "../components/health/ProgressModal";
 
 // Data interfaces
 interface FeedHealthSummary {
@@ -59,9 +66,18 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const theme = useThemeClass();
 
-  // State for dashboard data
-  const [feedHealthSummary, setFeedHealthSummary] =
-    useState<FeedHealthSummary | null>(null);
+  // Health check hook for progress modal
+  const {
+    summary: feedHealthSummary,
+    isProgressModalOpen,
+    startHealthCheckWithProgress,
+    handleProgressComplete,
+    handleProgressClose,
+    fetchCachedHealth,
+    isHealthDataStale,
+  } = useHealthCheck();
+
+  // State for other dashboard data
   const [highRiskIOCs, setHighRiskIOCs] = useState<HighRiskIOC[]>([]);
   const [recentUploads, setRecentUploads] = useState<RecentUpload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,17 +90,8 @@ export function DashboardPage() {
       setError(null);
 
       try {
-        // Fetch feed health summary
-        const healthResponse = await fetch("/api/feeds/health", {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("session_token") || ""}`,
-          },
-        });
-
-        if (healthResponse.ok) {
-          const healthData = await healthResponse.json();
-          setFeedHealthSummary(healthData.summary);
-        }
+        // Fetch cached feed health summary
+        await fetchCachedHealth();
 
         // Fetch high-risk IOCs (top 5 most recent with high/critical severity)
         const iocsResponse = await fetch(
@@ -129,41 +136,45 @@ export function DashboardPage() {
     switch (status) {
       case "success":
         return (
-          <Badge className={getStatusBadgeClass("success")}>
-            Success
-          </Badge>
+          <Badge className={getStatusBadgeClass("success")}>Success</Badge>
         );
       case "partial":
         return (
-          <Badge className={getStatusBadgeClass("warning")}>
-            Partial
-          </Badge>
+          <Badge className={getStatusBadgeClass("warning")}>Partial</Badge>
         );
       case "failed":
-        return (
-          <Badge className={getStatusBadgeClass("error")}>
-            Failed
-          </Badge>
-        );
+        return <Badge className={getStatusBadgeClass("error")}>Failed</Badge>;
       default:
-        return <Badge className={getStatusBadgeClass("default")}>{status}</Badge>;
+        return (
+          <Badge className={getStatusBadgeClass("default")}>{status}</Badge>
+        );
     }
   };
 
   const getSeverityBadge = (severity: string) => {
-    const severityLevel = severity.toLowerCase() as "critical" | "high" | "medium" | "low";
+    const severityLevel = severity.toLowerCase() as
+      | "critical"
+      | "high"
+      | "medium"
+      | "low";
 
     switch (severityLevel) {
       case "critical":
-        return <Badge className={getSeverityBadgeClass("critical")}>Critical</Badge>;
+        return (
+          <Badge className={getSeverityBadgeClass("critical")}>Critical</Badge>
+        );
       case "high":
         return <Badge className={getSeverityBadgeClass("high")}>High</Badge>;
       case "medium":
-        return <Badge className={getSeverityBadgeClass("medium")}>Medium</Badge>;
+        return (
+          <Badge className={getSeverityBadgeClass("medium")}>Medium</Badge>
+        );
       case "low":
         return <Badge className={getSeverityBadgeClass("low")}>Low</Badge>;
       default:
-        return <Badge className={getStatusBadgeClass("default")}>{severity}</Badge>;
+        return (
+          <Badge className={getStatusBadgeClass("default")}>{severity}</Badge>
+        );
     }
   };
 
@@ -213,15 +224,41 @@ export function DashboardPage() {
                   <HeartPulse className="h-5 w-5 text-green-600 dark:text-green-400" />
                   Feed Health Snapshot
                 </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate("/feed-health")}
-                  className="flex items-center gap-1"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  View All
-                </Button>
+                <div className="flex items-center gap-2">
+                  {feedHealthSummary && isHealthDataStale && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => startHealthCheckWithProgress()}
+                      className="flex items-center gap-1 text-yellow-600 hover:text-yellow-700"
+                      title="Data is stale - refresh health check"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Refresh
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      startHealthCheckWithProgress(undefined, true)
+                    }
+                    className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                    title="Demo progress modal"
+                  >
+                    <Activity className="h-3 w-3" />
+                    Demo
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/feed-health")}
+                    className="flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    View All
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {feedHealthSummary ? (
@@ -251,7 +288,9 @@ export function DashboardPage() {
                         <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
                         <span className="text-sm text-yellow-800 dark:text-yellow-200">
                           {feedHealthSummary.unhealthy_feeds} feed
-                          {feedHealthSummary.unhealthy_feeds > 1 ? "s" : ""}{" "}
+                          {feedHealthSummary.unhealthy_feeds > 1
+                            ? "s"
+                            : ""}{" "}
                           need attention
                         </span>
                       </div>
@@ -260,7 +299,30 @@ export function DashboardPage() {
                 ) : (
                   <div className="text-center py-4 text-muted-foreground">
                     <HeartPulse className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Feed health data unavailable</p>
+                    <p className="mb-3">Feed health data unavailable</p>
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startHealthCheckWithProgress()}
+                        className="flex items-center gap-2"
+                      >
+                        <Activity className="h-4 w-4" />
+                        Check Feed Health
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          startHealthCheckWithProgress(undefined, true)
+                        }
+                        className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                        title="Demo progress modal"
+                      >
+                        <Activity className="h-3 w-3" />
+                        Demo
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -430,6 +492,13 @@ export function DashboardPage() {
             </Card>
           </div>
         </div>
+
+        {/* Progress Modal for Health Checks */}
+        <ProgressModal
+          isOpen={isProgressModalOpen}
+          onClose={handleProgressClose}
+          onComplete={handleProgressComplete}
+        />
       </PageTransition>
     </DashboardLayout>
   );

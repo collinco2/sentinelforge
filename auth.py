@@ -146,6 +146,20 @@ def init_auth_tables():
                 user_id INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP NOT NULL,
+                last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT 1,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )
+        """)
+
+        # Create sessions table alias for compatibility
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 is_active BOOLEAN DEFAULT 1,
                 FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
@@ -423,13 +437,35 @@ def get_user_by_session(session_id: str) -> Optional[User]:
 
     try:
         cursor = conn.cursor()
+
+        # First, update last_activity for this session
+        cursor.execute(
+            """
+            UPDATE user_sessions
+            SET last_activity = datetime('now')
+            WHERE session_id = ? AND is_active = 1
+        """,
+            (session_id,),
+        )
+
+        # Also update the sessions table for compatibility
+        cursor.execute(
+            """
+            UPDATE sessions
+            SET last_activity = datetime('now')
+            WHERE session_id = ? AND is_active = 1
+        """,
+            (session_id,),
+        )
+
+        # Now get user data
         cursor.execute(
             """
             SELECT u.user_id, u.username, u.email, u.role, u.is_active, u.created_at
             FROM users u
             JOIN user_sessions s ON u.user_id = s.user_id
-            WHERE s.session_id = ? 
-            AND s.is_active = 1 
+            WHERE s.session_id = ?
+            AND s.is_active = 1
             AND s.expires_at > datetime('now')
             AND u.is_active = 1
         """,
@@ -437,6 +473,7 @@ def get_user_by_session(session_id: str) -> Optional[User]:
         )
 
         row = cursor.fetchone()
+        conn.commit()  # Commit the last_activity update
         conn.close()
 
         if row:
@@ -452,7 +489,10 @@ def get_user_by_session(session_id: str) -> Optional[User]:
 
     except Exception as e:
         print(f"Error getting user by session: {e}")
-        conn.close()
+        try:
+            conn.close()
+        except:
+            pass
         return None
 
 
@@ -546,12 +586,15 @@ def get_user_by_api_key(api_key: str) -> Optional[User]:
         cursor = conn.cursor()
 
         # Look up the API key and get user info
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT uak.*, u.username, u.email, u.role, u.is_active as user_active, u.created_at
             FROM user_api_keys uak
             JOIN users u ON uak.user_id = u.user_id
             WHERE uak.key_hash = ? AND uak.is_active = 1
-        """, (key_hash,))
+        """,
+            (key_hash,),
+        )
 
         key_record = cursor.fetchone()
 
@@ -560,14 +603,14 @@ def get_user_by_api_key(api_key: str) -> Optional[User]:
             return None
 
         # Check if user is active
-        if not key_record['user_active']:
+        if not key_record["user_active"]:
             conn.close()
             return None
 
         # Check if key is expired
-        if key_record['expires_at']:
+        if key_record["expires_at"]:
             try:
-                expires_at = datetime.datetime.fromisoformat(key_record['expires_at'])
+                expires_at = datetime.datetime.fromisoformat(key_record["expires_at"])
                 if datetime.datetime.now() > expires_at:
                     conn.close()
                     return None
@@ -576,11 +619,14 @@ def get_user_by_api_key(api_key: str) -> Optional[User]:
 
         # Update last_used timestamp
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE user_api_keys
                 SET last_used = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (key_record['id'],))
+            """,
+                (key_record["id"],),
+            )
             conn.commit()
         except Exception as e:
             print(f"Warning: Could not update last_used timestamp: {e}")
@@ -589,19 +635,23 @@ def get_user_by_api_key(api_key: str) -> Optional[User]:
 
         # Create User object
         user = User(
-            user_id=key_record['user_id'],
-            username=key_record['username'],
-            email=key_record['email'],
-            role=UserRole(key_record['role']),
-            is_active=bool(key_record['user_active']),
-            created_at=key_record['created_at']
+            user_id=key_record["user_id"],
+            username=key_record["username"],
+            email=key_record["email"],
+            role=UserRole(key_record["role"]),
+            is_active=bool(key_record["user_active"]),
+            created_at=key_record["created_at"],
         )
 
         # Add API key specific attributes
-        user.api_key_id = key_record['id']
-        user.api_key_name = key_record['name']
-        user.access_scope = json.loads(key_record['access_scope']) if key_record['access_scope'] else ['read']
-        user.auth_method = 'api_key'
+        user.api_key_id = key_record["id"]
+        user.api_key_name = key_record["name"]
+        user.access_scope = (
+            json.loads(key_record["access_scope"])
+            if key_record["access_scope"]
+            else ["read"]
+        )
+        user.auth_method = "api_key"
 
         return user
 
@@ -625,7 +675,7 @@ def get_current_user() -> Optional[User]:
     if session_token:
         user = get_user_by_session(session_token)
         if user:
-            user.auth_method = 'session'
+            user.auth_method = "session"
             return user
 
     # Try basic auth for demo purposes
@@ -638,7 +688,7 @@ def get_current_user() -> Optional[User]:
             username, password = credentials.split(":", 1)
             user = get_user_by_credentials(username, password)
             if user:
-                user.auth_method = 'basic'
+                user.auth_method = "basic"
             return user
         except Exception:
             pass
@@ -648,7 +698,7 @@ def get_current_user() -> Optional[User]:
     if demo_user_id:
         user = get_demo_user(int(demo_user_id))
         if user:
-            user.auth_method = 'demo'
+            user.auth_method = "demo"
         return user
 
     return None

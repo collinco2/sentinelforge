@@ -3866,7 +3866,9 @@ def check_feeds_health():
             cached_health = monitor.get_cached_health()
             if cached_health and "_last_update" in cached_health:
                 last_update = cached_health["_last_update"]
-                cache_age_seconds = (datetime.now(timezone.utc) - last_update).total_seconds()
+                cache_age_seconds = (
+                    datetime.now(timezone.utc) - last_update
+                ).total_seconds()
 
                 # Use cache if less than 5 minutes old
                 if cache_age_seconds < 300:
@@ -3876,32 +3878,43 @@ def check_feeds_health():
                         if feed_id_key != "_last_update":
                             # Convert datetime back to string for JSON response
                             if isinstance(result.get("last_checked"), datetime):
-                                result["last_checked"] = result["last_checked"].isoformat()
+                                result["last_checked"] = result[
+                                    "last_checked"
+                                ].isoformat()
                             health_results.append(result)
 
                     # Calculate summary
                     total_feeds = len(health_results)
-                    healthy_feeds = len([r for r in health_results if r["status"] == "ok"])
+                    healthy_feeds = len(
+                        [r for r in health_results if r["status"] == "ok"]
+                    )
 
-                    return jsonify({
-                        "success": True,
-                        "summary": {
-                            "total_feeds": total_feeds,
-                            "healthy_feeds": healthy_feeds,
-                            "unhealthy_feeds": total_feeds - healthy_feeds,
-                            "health_percentage": round(
-                                (healthy_feeds / total_feeds * 100) if total_feeds > 0 else 0, 1
-                            ),
-                        },
-                        "feeds": health_results,
-                        "checked_at": last_update.isoformat(),
-                        "checked_by": current_user.username,
-                        "from_cache": True,
-                        "cache_age_seconds": int(cache_age_seconds)
-                    })
+                    return jsonify(
+                        {
+                            "success": True,
+                            "summary": {
+                                "total_feeds": total_feeds,
+                                "healthy_feeds": healthy_feeds,
+                                "unhealthy_feeds": total_feeds - healthy_feeds,
+                                "health_percentage": round(
+                                    (healthy_feeds / total_feeds * 100)
+                                    if total_feeds > 0
+                                    else 0,
+                                    1,
+                                ),
+                            },
+                            "feeds": health_results,
+                            "checked_at": last_update.isoformat(),
+                            "checked_by": current_user.username,
+                            "from_cache": True,
+                            "cache_age_seconds": int(cache_age_seconds),
+                        }
+                    )
 
         # Run fresh health check
-        result = monitor.run_health_check(feed_id=feed_id, checked_by=current_user.user_id)
+        result = monitor.run_health_check(
+            feed_id=feed_id, checked_by=current_user.user_id
+        )
 
         if not result.get("success"):
             return jsonify({"error": result.get("error", "Health check failed")}), 500
@@ -3916,11 +3929,364 @@ def check_feeds_health():
         return jsonify({"error": f"Health check failed: {str(e)}"}), 500
 
 
+@app.route("/api/feeds/health/start", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def start_health_check_with_progress():
+    """Start a health check with progress tracking."""
+    from services.feed_health_monitor import FeedHealthMonitor
+    import uuid
+    import threading
+
+    try:
+        # Parse request parameters
+        data = request.get_json() if request.is_json else {}
+        feed_id = data.get("feed_id") or request.args.get("feed_id", type=int)
+
+        current_user = g.current_user
+        monitor = FeedHealthMonitor()
+
+        # Generate unique session ID
+        session_id = str(uuid.uuid4())
+
+        # Get feeds count for progress tracking
+        if feed_id:
+            total_feeds = 1
+        else:
+            feeds = monitor.get_active_feeds()
+            total_feeds = len(feeds)
+
+        if total_feeds == 0:
+            return jsonify({"error": "No active feeds found"}), 400
+
+        # Create progress session
+        session = monitor.create_progress_session(
+            session_id, total_feeds, current_user.user_id
+        )
+
+        # Start health check in background thread
+        def run_background_check():
+            try:
+                monitor.run_health_check(
+                    feed_id=feed_id,
+                    checked_by=current_user.user_id,
+                    progress_session_id=session_id,
+                )
+            except Exception as e:
+                monitor.update_progress(session_id, status="error", error=str(e))
+
+        thread = threading.Thread(target=run_background_check, daemon=True)
+        thread.start()
+
+        return jsonify(
+            {
+                "success": True,
+                "session_id": session_id,
+                "message": "Health check started",
+                "progress_url": f"/api/feeds/health/progress/{session_id}",
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to start health check: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/health/progress/<session_id>", methods=["GET"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def get_health_check_progress(session_id):
+    """Get real-time progress for a health check session using Server-Sent Events."""
+    from services.feed_health_monitor import FeedHealthMonitor
+    from flask import Response
+    import json
+    import time
+
+    def generate_progress_stream():
+        monitor = FeedHealthMonitor()
+
+        # Send initial connection event
+        yield f"data: {json.dumps({'type': 'connected', 'session_id': session_id})}\n\n"
+
+        last_status = None
+        while True:
+            try:
+                progress = monitor.get_progress(session_id)
+
+                if "error" in progress:
+                    yield f"data: {json.dumps({'type': 'error', 'error': progress['error']})}\n\n"
+                    break
+
+                # Only send updates when status changes
+                current_status = {
+                    "status": progress["status"],
+                    "completed_feeds": progress["completed_feeds"],
+                    "total_feeds": progress["total_feeds"],
+                    "current_feed": progress.get("current_feed"),
+                    "estimated_completion": progress.get("estimated_completion"),
+                }
+
+                if current_status != last_status:
+                    yield f"data: {json.dumps({'type': 'progress', **current_status})}\n\n"
+                    last_status = current_status
+
+                # Send individual feed results
+                if "results" in progress and progress["results"]:
+                    for result in progress["results"]:
+                        yield f"data: {json.dumps({'type': 'feed_result', 'result': result})}\n\n"
+                    # Clear results to avoid resending
+                    monitor.update_progress(session_id, results=[])
+
+                # Send errors
+                if "errors" in progress and progress["errors"]:
+                    for error in progress["errors"]:
+                        yield f"data: {json.dumps({'type': 'error', 'error': error})}\n\n"
+                    # Clear errors to avoid resending
+                    monitor.update_progress(session_id, errors=[])
+
+                # Check if completed or cancelled
+                if progress["status"] in ["completed", "cancelled", "error"]:
+                    yield f"data: {json.dumps({'type': 'finished', 'status': progress['status']})}\n\n"
+                    # Clean up session after a delay
+                    time.sleep(2)
+                    monitor.cleanup_progress_session(session_id)
+                    break
+
+                time.sleep(0.5)  # Poll every 500ms
+
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                break
+
+    return Response(
+        generate_progress_stream(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control",
+        },
+    )
+
+
+@app.route("/api/feeds/health/cancel/<session_id>", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def cancel_health_check(session_id):
+    """Cancel a running health check session."""
+    from services.feed_health_monitor import FeedHealthMonitor
+
+    try:
+        monitor = FeedHealthMonitor()
+        success = monitor.cancel_progress_session(session_id)
+
+        if success:
+            return jsonify({"success": True, "message": "Health check cancelled"})
+        else:
+            return jsonify({"error": "Session not found or already completed"}), 404
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to cancel health check: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/health/demo", methods=["POST"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def demo_health_check_with_progress():
+    """Demo health check with simulated progress for testing the UI."""
+    import uuid
+    import threading
+    import time
+    from datetime import datetime, timezone
+
+    try:
+        current_user = g.current_user
+        session_id = str(uuid.uuid4())
+
+        # Mock feeds for demo
+        demo_feeds = [
+            {
+                "name": "IPsum",
+                "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt",
+            },
+            {
+                "name": "MalwareDomainList",
+                "url": "http://www.malwaredomainlist.com/hostslist/hosts.txt",
+            },
+            {
+                "name": "Abuse.ch URLhaus",
+                "url": "https://urlhaus.abuse.ch/downloads/csv/",
+            },
+            {
+                "name": "PhishTank",
+                "url": "http://data.phishtank.com/data/online-valid.csv",
+            },
+            {
+                "name": "AlienVault OTX",
+                "url": "https://reputation.alienvault.com/reputation.data",
+            },
+        ]
+
+        # Create a simple progress tracker
+        progress_data = {
+            "session_id": session_id,
+            "total_feeds": len(demo_feeds),
+            "completed_feeds": 0,
+            "current_feed": None,
+            "status": "starting",
+            "start_time": datetime.now(timezone.utc),
+            "results": [],
+            "errors": [],
+        }
+
+        # Store in a simple global dict for demo (in production, use proper storage)
+        if not hasattr(app, "demo_sessions"):
+            app.demo_sessions = {}
+        app.demo_sessions[session_id] = progress_data
+
+        def run_demo_health_check():
+            try:
+                app.demo_sessions[session_id]["status"] = "running"
+
+                for i, feed in enumerate(demo_feeds):
+                    # Update current feed
+                    app.demo_sessions[session_id]["current_feed"] = {
+                        "name": feed["name"],
+                        "url": feed["url"],
+                        "index": i + 1,
+                    }
+
+                    # Simulate checking time (1-3 seconds per feed)
+                    time.sleep(2)
+
+                    # Simulate result
+                    status = "ok" if i < 4 else "timeout"  # Last feed fails
+                    result = {
+                        "feed_id": i + 1,
+                        "feed_name": feed["name"],
+                        "url": feed["url"],
+                        "status": status,
+                        "http_code": 200 if status == "ok" else None,
+                        "response_time_ms": 150 + (i * 50),
+                        "error_message": None
+                        if status == "ok"
+                        else "Request timed out",
+                        "last_checked": datetime.now(timezone.utc).isoformat(),
+                        "is_active": True,
+                    }
+
+                    app.demo_sessions[session_id]["results"].append(result)
+                    app.demo_sessions[session_id]["completed_feeds"] = i + 1
+                    app.demo_sessions[session_id]["current_feed"] = None
+
+                app.demo_sessions[session_id]["status"] = "completed"
+
+                # Clean up after 30 seconds
+                time.sleep(30)
+                if session_id in app.demo_sessions:
+                    del app.demo_sessions[session_id]
+
+            except Exception as e:
+                app.demo_sessions[session_id]["status"] = "error"
+                app.demo_sessions[session_id]["errors"].append(str(e))
+
+        # Start background thread
+        thread = threading.Thread(target=run_demo_health_check, daemon=True)
+        thread.start()
+
+        return jsonify(
+            {
+                "success": True,
+                "session_id": session_id,
+                "message": "Demo health check started",
+                "progress_url": f"/api/feeds/health/demo/progress/{session_id}",
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to start demo health check: {str(e)}"}), 500
+
+
+@app.route("/api/feeds/health/demo/progress/<session_id>", methods=["GET"])
+@require_authentication()
+@require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
+def get_demo_health_check_progress(session_id):
+    """Get demo health check progress using Server-Sent Events."""
+    from flask import Response
+    import json
+    import time
+
+    def generate_demo_progress_stream():
+        # Send initial connection event
+        yield f"data: {json.dumps({'type': 'connected', 'session_id': session_id})}\n\n"
+
+        if not hasattr(app, "demo_sessions") or session_id not in app.demo_sessions:
+            yield f"data: {json.dumps({'type': 'error', 'error': 'Session not found'})}\n\n"
+            return
+
+        last_status = None
+        last_results_count = 0
+
+        while True:
+            try:
+                if session_id not in app.demo_sessions:
+                    yield f"data: {json.dumps({'type': 'error', 'error': 'Session expired'})}\n\n"
+                    break
+
+                progress = app.demo_sessions[session_id]
+
+                # Send progress updates
+                current_status = {
+                    "status": progress["status"],
+                    "completed_feeds": progress["completed_feeds"],
+                    "total_feeds": progress["total_feeds"],
+                    "current_feed": progress.get("current_feed"),
+                }
+
+                if current_status != last_status:
+                    yield f"data: {json.dumps({'type': 'progress', **current_status})}\n\n"
+                    last_status = current_status
+
+                # Send new results
+                results = progress.get("results", [])
+                if len(results) > last_results_count:
+                    for result in results[last_results_count:]:
+                        yield f"data: {json.dumps({'type': 'feed_result', 'result': result})}\n\n"
+                    last_results_count = len(results)
+
+                # Send errors
+                errors = progress.get("errors", [])
+                for error in errors:
+                    yield f"data: {json.dumps({'type': 'error', 'error': error})}\n\n"
+
+                # Check if completed
+                if progress["status"] in ["completed", "cancelled", "error"]:
+                    yield f"data: {json.dumps({'type': 'finished', 'status': progress['status']})}\n\n"
+                    break
+
+                time.sleep(0.5)  # Poll every 500ms
+
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                break
+
+    return Response(
+        generate_demo_progress_stream(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control",
+        },
+    )
+
+
 @app.route("/api/feeds/health/trigger", methods=["POST"])
 @require_authentication()
 @require_role([UserRole.ANALYST, UserRole.AUDITOR, UserRole.ADMIN])
 def trigger_health_check():
-    """Trigger a one-time health check for all active feeds."""
+    """Trigger a one-time health check for all active feeds (legacy endpoint)."""
     from services.feed_health_monitor import FeedHealthMonitor
 
     try:
@@ -3932,7 +4298,9 @@ def trigger_health_check():
         monitor = FeedHealthMonitor()
 
         # Run health check
-        result = monitor.run_health_check(feed_id=feed_id, checked_by=current_user.user_id)
+        result = monitor.run_health_check(
+            feed_id=feed_id, checked_by=current_user.user_id
+        )
 
         if not result.get("success"):
             return jsonify({"error": result.get("error", "Health check failed")}), 500
@@ -3960,10 +4328,7 @@ def manage_health_scheduler():
         if request.method == "GET":
             # Get scheduler status
             status = monitor.get_scheduler_status()
-            return jsonify({
-                "success": True,
-                "scheduler": status
-            })
+            return jsonify({"success": True, "scheduler": status})
 
         elif request.method == "POST":
             # Start/stop scheduler
@@ -3974,21 +4339,25 @@ def manage_health_scheduler():
             if action == "start":
                 success = monitor.start_cron_scheduler(interval_minutes)
                 if success:
-                    return jsonify({
-                        "success": True,
-                        "message": f"Health check scheduler started with {interval_minutes}-minute interval",
-                        "scheduler": monitor.get_scheduler_status()
-                    })
+                    return jsonify(
+                        {
+                            "success": True,
+                            "message": f"Health check scheduler started with {interval_minutes}-minute interval",
+                            "scheduler": monitor.get_scheduler_status(),
+                        }
+                    )
                 else:
                     return jsonify({"error": "Failed to start scheduler"}), 500
 
             elif action == "stop":
                 monitor.stop_cron_scheduler()
-                return jsonify({
-                    "success": True,
-                    "message": "Health check scheduler stopped",
-                    "scheduler": monitor.get_scheduler_status()
-                })
+                return jsonify(
+                    {
+                        "success": True,
+                        "message": "Health check scheduler stopped",
+                        "scheduler": monitor.get_scheduler_status(),
+                    }
+                )
 
             else:
                 return jsonify({"error": "Invalid action. Use 'start' or 'stop'"}), 400
@@ -4758,25 +5127,39 @@ if __name__ == "__main__":
     initialize_iocs()  # Initialize IOCS list before starting the server
     initialize_alerts()  # Initialize ALERTS list before starting the server
 
-    # Run startup health check
-    try:
-        from services.feed_health_monitor import run_startup_health_check
-        run_startup_health_check()
-    except Exception as e:
-        print(f"⚠️  Startup health check failed: {e}")
+    # Run startup health check in background (non-blocking)
+    import threading
 
-    # Start health check scheduler
-    try:
-        from services.feed_health_monitor import FeedHealthMonitor
-        monitor = FeedHealthMonitor()
+    def background_health_check():
+        try:
+            from services.feed_health_monitor import run_startup_health_check
 
-        # Start with 1-minute interval for testing
-        if monitor.start_cron_scheduler(interval_minutes=1):
-            print("✅ Health check scheduler started (1-minute interval)")
-        else:
-            print("⚠️  Failed to start health check scheduler")
-    except Exception as e:
-        print(f"⚠️  Health scheduler startup failed: {e}")
+            run_startup_health_check()
+        except Exception as e:
+            print(f"⚠️  Startup health check failed: {e}")
+
+    health_thread = threading.Thread(target=background_health_check, daemon=True)
+    health_thread.start()
+    print("🏥 Health check started in background")
+
+    # Start health check scheduler in background (non-blocking)
+    def background_scheduler():
+        try:
+            from services.feed_health_monitor import FeedHealthMonitor
+
+            monitor = FeedHealthMonitor()
+
+            # Start with 1-minute interval for testing
+            if monitor.start_cron_scheduler(interval_minutes=1):
+                print("✅ Health check scheduler started (1-minute interval)")
+            else:
+                print("⚠️  Failed to start health check scheduler")
+        except Exception as e:
+            print(f"⚠️  Health scheduler startup failed: {e}")
+
+    scheduler_thread = threading.Thread(target=background_scheduler, daemon=True)
+    scheduler_thread.start()
+    print("⏰ Health scheduler started in background")
 
     print("🌐 API Server ready on http://0.0.0.0:5059")
     app.run(host="0.0.0.0", port=port, debug=True)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "../layout/DashboardLayout";
 import { PageHeader, BREADCRUMB_CONFIGS } from "../components/PageHeader";
@@ -14,7 +14,6 @@ import { Alert, AlertDescription } from "../components/ui/alert";
 import {
   HeartPulse,
   ArrowLeft,
-  RefreshCw,
   Clock,
   AlertCircle,
   CheckCircle,
@@ -23,70 +22,35 @@ import {
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { UserRole } from "../services/auth";
-import { toast } from "../lib/toast";
-
-interface FeedHealth {
-  feed_id: number;
-  feed_name: string;
-  url: string;
-  status: string;
-  http_code: number | null;
-  response_time_ms: number | null;
-  error_message: string | null;
-  last_checked: string;
-  is_active: boolean;
-}
-
-interface HealthSummary {
-  total_feeds: number;
-  healthy_feeds: number;
-  health_percentage: number;
-  average_response_time: number;
-}
+import { useHealthCheck } from "../hooks/useHealthCheck";
+import ProgressModal from "../components/health/ProgressModal";
 
 export const FeedHealthPage: React.FC = () => {
   const { hasRole } = useAuth();
   const navigate = useNavigate();
-  const [feedHealth, setFeedHealth] = useState<FeedHealth[]>([]);
-  const [summary, setSummary] = useState<HealthSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    isLoading,
+    error,
+    isProgressModalOpen,
+    startHealthCheckWithProgress,
+    handleProgressComplete,
+    handleProgressClose,
+    fetchCachedHealth,
+    summary,
+    feeds,
+    isHealthDataStale,
+  } = useHealthCheck();
 
   const canViewHealth = hasRole([UserRole.ANALYST, UserRole.ADMIN]);
 
   useEffect(() => {
     if (canViewHealth) {
-      fetchFeedHealth();
+      fetchCachedHealth();
     }
-  }, [canViewHealth]);
-
-  const fetchFeedHealth = async () => {
-    try {
-      const response = await fetch("/api/feeds/health", {
-        headers: {
-          "X-Session-Token": localStorage.getItem("session_token") || "",
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setFeedHealth(data.health_checks || []);
-        setSummary(data.summary || null);
-      } else {
-        toast.error("Failed to fetch feed health data");
-      }
-    } catch (error) {
-      console.error("Error fetching feed health:", error);
-      toast.error("Error loading feed health data");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  }, [canViewHealth, fetchCachedHealth]);
 
   const handleRefresh = () => {
-    setRefreshing(true);
-    fetchFeedHealth();
+    startHealthCheckWithProgress();
   };
 
   const getStatusIcon = (status: string) => {
@@ -181,17 +145,22 @@ export const FeedHealthPage: React.FC = () => {
           breadcrumbs={BREADCRUMB_CONFIGS.FEEDS_HEALTH}
           icon={HeartPulse}
           actions={
-            <Button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-2"
-              data-testid="refresh-health-button"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              {refreshing ? "Refreshing..." : "Refresh"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {isHealthDataStale && (
+                <Badge variant="outline" className="text-yellow-600">
+                  Data may be stale
+                </Badge>
+              )}
+              <Button
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="flex items-center gap-2"
+                data-testid="refresh-health-button"
+              >
+                <Activity className="h-4 w-4" />
+                Check Health
+              </Button>
+            </div>
           }
         />
 
@@ -245,7 +214,17 @@ export const FeedHealthPage: React.FC = () => {
                   <div>
                     <p className="text-sm text-gray-600">Avg Response</p>
                     <p className="text-2xl font-bold">
-                      {formatResponseTime(summary.average_response_time)}
+                      {(() => {
+                        const validTimes = feeds
+                          .filter((f) => f.response_time_ms !== null)
+                          .map((f) => f.response_time_ms as number);
+                        const avgTime =
+                          validTimes.length > 0
+                            ? validTimes.reduce((a, b) => a + b, 0) /
+                              validTimes.length
+                            : 0;
+                        return formatResponseTime(avgTime);
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -260,21 +239,42 @@ export const FeedHealthPage: React.FC = () => {
             <CardTitle>Feed Status Details</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
               </div>
-            ) : feedHealth.length === 0 ? (
+            ) : error ? (
+              <div className="text-center py-8 text-red-500">
+                <XCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Error loading feed health data</p>
+                <p className="text-sm">{error}</p>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  className="mt-4 flex items-center gap-2"
+                >
+                  <Activity className="h-4 w-4" />
+                  Try Again
+                </Button>
+              </div>
+            ) : feeds.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <HeartPulse className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No feed health data available</p>
-                <p className="text-sm">
-                  Configure feeds to see health monitoring
+                <p className="text-sm mb-4">
+                  Run a health check to see feed status
                 </p>
+                <Button
+                  onClick={handleRefresh}
+                  className="flex items-center gap-2"
+                >
+                  <Activity className="h-4 w-4" />
+                  Check Feed Health
+                </Button>
               </div>
             ) : (
               <div className="space-y-4">
-                {feedHealth.map((feed) => (
+                {feeds.map((feed) => (
                   <div
                     key={feed.feed_id}
                     className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -320,6 +320,13 @@ export const FeedHealthPage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Progress Modal for Health Checks */}
+        <ProgressModal
+          isOpen={isProgressModalOpen}
+          onClose={handleProgressClose}
+          onComplete={handleProgressComplete}
+        />
       </div>
     </DashboardLayout>
   );
